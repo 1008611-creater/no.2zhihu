@@ -21,10 +21,10 @@
 | 视觉与动效规范 | 已定稿，见 [docs/design-system.md](docs/design-system.md) |
 | 看山角色引擎 | 已实现（10 状态 / Motion 驱动），见 [docs/character-engine.md](docs/character-engine.md) |
 | 知乎开放平台接入 | 已接通并实测（搜索 / 热榜 / 问题回答 / 直答 / 问题推荐） |
-| GitHub 公开仓库 | ✅ 已推送（131 文件 / 14402 行），<https://github.com/1008611-creater/no.2zhihu> |
-| 代码推送 | ✅ 已完成，`main` = `71cf2ae`，见 [docs/agent-environment.md](docs/agent-environment.md) |
+| GitHub 公开仓库 | ✅ 已推送（Public，main 分支），<https://github.com/1008611-creater/no.2zhihu> |
 | 构建验证 | ✅ 云端 CI 已跑通（类型检查 + 构建全绿），见 [Actions](https://github.com/1008611-creater/no.2zhihu/actions) |
-| 线上 Demo | `https://zhihu.cauai.fun`（已上线，HTTPS 证书有效） |
+| 线上 Demo | ✅ `https://zhihu.cauai.fun`（HTTPS 证书有效，`/api/health` 返回 `credentials: true`） |
+| 主流程实测 | ✅ 真实知乎数据跑通（提问 → 选答主 → 证据 → 作答 → 缺口），单次约 19 秒 |
 
 ## 快速开始
 

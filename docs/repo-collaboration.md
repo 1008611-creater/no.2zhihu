@@ -9,7 +9,7 @@
 |---|---|
 | 代码仓库（公开） | https://github.com/1008611-creater/no.2zhihu |
 | 克隆 | `git clone https://github.com/1008611-creater/no.2zhihu.git` |
-| 线上 Demo | 待部署（见 [runbook.md](runbook.md)） |
+| 线上 Demo | https://zhihu.cauai.fun （自托管，HTTPS 有效） |
 
 ## 二、为什么用「公开仓库 + 分支 + PR」而不是直接推 main
 
@@ -18,15 +18,14 @@
 3. **main 永远可部署。** 截止前最怕的是有人推坏 main 导致线上 Demo 挂掉。分支 + PR 让 main 始终是安全的。
 4. **多人同时改不打架。** 分支隔离后，冲突在合并时集中解决，而不是互相覆盖。
 
-## 二·五、先把代码推上去（做协作的前提）
+## 二·五、代码已在仓库里（协作已就绪）
 
-仓库现在是空的 —— 没有第一个提交，就没有分支、PR、协作可言。
-推送方式见 [roadmap.md](roadmap.md) 第七节，两条路：
+仓库已有 `main` 分支与完整代码，直接 clone 即可开始协作。
+当前默认分支为 `main`，持续有新提交（以仓库首页为准）。
 
-- **路线 A（推荐）**：建一个只对 `no.2zhihu` 有 Contents 写权限的临时令牌，跑一次 `node scripts/push-via-api.mjs`，推完立刻撤销令牌。
-- **路线 B**：用 `git` 命令或 `scripts/push-to-github.ps1` 推送。
-
-推送成功后，仓库才有 `main` 分支，后面第三节的权限配置与第四节的分支保护才能生效。
+> 历史上第一次推送走的是 GitHub API（`scripts/push-commit-via-api.mjs`），
+> 因为 AI 会话的沙箱禁止启动子进程。这只影响「AI 自己推代码」，不影响你本地用 `git`。
+> 详见 [agent-environment.md](agent-environment.md)。
 ## 三、角色与权限
 
 | 角色 | 权限 | 谁 |

@@ -12,8 +12,8 @@
 
 | 步骤 | 结果 | 怎么核对 |
 |---|---|---|
-| 构建验证 | ✅ 云端 CI 全绿（装依赖 → 类型检查 → 构建） | [运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253) |
-| 代码推送 | ✅ 已推送，`main` = `a0c30e2` | <https://github.com/1008611-creater/no.2zhihu> |
+| 构建验证 | ✅ 云端 CI 全绿（装依赖 → 类型检查 → 构建） | [运行记录](https://github.com/1008611-creater/no.2zhihu/actions) |
+| 代码推送 | ✅ 已推送（Public，`main` 持续更新） | <https://github.com/1008611-creater/no.2zhihu> |
 
 为什么不用本机跑：本 AI 会话的沙箱禁止启动子进程（`git` / `npm` 都返回 EPERM），
 所以构建交给云端 CI、推送交给 GitHub HTTP API。原理见 [docs/agent-environment.md](docs/agent-environment.md)。

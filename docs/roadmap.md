@@ -25,7 +25,7 @@
 | 10 | 降级路径 | 全站 | 无凭证/额度耗尽/空结果有真实提示 | ✅ 已完成 |
 | 11 | 构建通过 | GitHub Actions | 类型检查 + `npm run build` 全绿 | ✅ 已完成（云端 CI，[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253)） |
 | 12 | 部署到自己的服务器（Vercel 作备用） | 公网 URL `https://zhihu.cauai.fun` | 评委可直接打开体验 | ✅ 已上线，HTTPS 证书有效；见 [self-hosting.md](self-hosting.md) |
-| 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | ✅ 已完成（`main` = `a0c30e2`，含自托管脚本；云端 CI 全绿） |
+| 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | ✅ 已完成（Public；`main` 持续更新中，最新见仓库首页；云端 CI 全绿） |
 | 14 | 产品说明/计划书 | submission.md | 回答官方 6 个必答问题 | ✅ 已定稿 |
 | 15 | 临时答主检索命中率修复 | `lib/server/persona.ts` | 多变体检索；实测 1–3 条命中，0 条时如实降级 | ✅ 已完成 |
 | 14b | **v1 重构：答主人格主线** | `lib/domain/personas/` + `lib/server/persona.ts` | 选答主 → 多人格作答 → 邀请 → 互相回应 | ✅ 已完成（见下节） |
@@ -57,7 +57,7 @@
 | 16 | 项目 icon + 封面图 | 提交材料完整性 | ✅ 矢量源已完成（`app/icon.svg` + `docs/assets/cover.svg` + `docs/assets/icon-square.svg`）；**PNG 由你跑 `scripts/export-assets.ps1` 一键导出** |
 | 17 | 快照兜底（`.snapshots/`） | 保证 Demo 演示不依赖实时额度 | ⬜ 待办（30 分钟结果缓存已覆盖大部分演示场景） |
 | 18 | 看山状态与分镜的动效细节 | 设计感权重 10% | ✅ 已完成（10 状态 + 指针跟随 + 眨眼调度） |
-| 19 | 团队协作基建 | CONTRIBUTING / PR 模板 / 分支保护 | ✅ 已完成 |
+| 19 | 团队协作基建 | CONTRIBUTING / PR 模板 | 🟡 文档与模板已就绪；**main 分支保护尚未开启**（会阻断其他线程的 API 直推，需队长确认后开启） |
 
 ## 四、P2（有余力）
 
@@ -66,7 +66,7 @@
 | 20 | OAuth 登录（需先拿到 App ID/App Key） | ⬜ 待办 |
 | 21 | Human Mesh 关系图交互增强 | 🟡 基础版已完成 |
 | 22 | 移动端适配打磨 | 🟡 基础版已完成 |
-| 23 | CI（GitHub Actions 跑 build） | ✅ 已完成（push/PR 自动跑，main 受保护的前置条件） |
+| 23 | CI（GitHub Actions 跑 build） | ✅ 已完成（push/PR 自动跑；注意：main 尚未开启分支保护） |
 
 ## 五、已完成工作的核对方式
 
@@ -98,10 +98,9 @@
 
 | 项 | 值 |
 |---|---|
-| 分支 | `main` |
-| 提交 | `a0c30e2`（在 `71cf2ae` 之上追加自托管脚本、自托管文档、封面资源导出、剪贴板兜底） |
-| 文件数 | 134 个 |
-| 云端 CI | ✅ 类型检查 + 构建全绿（[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34836317907)） |
+| 分支 | `main`（默认分支，持续有新提交） |
+| 文件数 | 154+ 个（随迭代增长，以仓库首页为准） |
+| 云端 CI | ✅ 类型检查 + 构建全绿（[运行记录](https://github.com/1008611-creater/no.2zhihu/actions)） |
 
 ### 怎么推的（供复盘）
 
@@ -124,8 +123,10 @@ npm run dev
 ### 推送后立刻做两件事
 
 1. **邀请队友**：仓库 → Settings → Collaborators → 输入 GitHub 用户名 → 给 **Write**（不要给 Admin）。
-2. **保护 main**：仓库 → Settings → Branches → Add branch protection rule → 勾 Require a pull request + Require approvals 1。
-   之后所有人（包括你）都走分支 + PR，`main` 永远是可部署状态。
+   ⚠️ 当前仓库只有队长一个协作者，队友还没加进来 —— 这是「多人一起开发」的前提。
+2. **保护 main（暂缓）**：仓库 → Settings → Branches → Add branch protection rule → 勾 Require a pull request + Require approvals 1。
+   ⚠️ **暂不要开**：在分支保护开启前，其他线程正在用 GitHub API 直接推 `main`；
+   一旦开启，这些推送会被拒。等所有并发线程停手后再开，或先统一改走分支 + PR。
 
 详细的协作分工与凭证传递方式见 [repo-collaboration.md](repo-collaboration.md)。
 ## 八、已知阻塞
@@ -136,7 +137,7 @@ npm run dev
 | ~~AI 会话无法执行命令~~ | **已绕过**。推送改走 GitHub HTTP API（`scripts/push-commit-via-api.mjs`），构建改走云端 CI。详见 [agent-environment.md](agent-environment.md) |
 | ~~无 GitHub 凭证~~ | **已解决**。`gh auth login` 已登录 `1008611-creater`（token scopes: `repo`/`workflow`），推送已完成 |
 | OAuth 凭证未领取 | 官方写明「是否接入由作品需求决定」，属选交项，本次不接入（降级为 P2） |
-| 报名状态未知 | 最高优先，立即确认 |
+| ~~报名状态未知~~ | **已确认**：已报名、已组队 |
 
 ## 九、时间盒建议
 
