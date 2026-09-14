@@ -1,7 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import type { ContributionEvent, MirrorQuestion } from "@/lib/domain/types";
+import type { AnswerDraft, ContributionEvent, MirrorQuestion, Skill } from "@/lib/domain/types";
 
 /**
  * 会话内的镜像问题存储。
@@ -24,6 +24,10 @@ interface Store extends Persisted {
   confirmHandoff: () => void;
   applyHumanEdit: (answerId: string, body: string, author: string) => void;
   addContribution: (e: ContributionEvent) => void;
+  /** 继续邀请：把新答主与他的回答追加进当前镜像问题，不重跑已有分身。 */
+  appendInvite: (skill: Skill, answer: AnswerDraft) => void;
+  /** 一轮互相回应：把回应追加到回答列表（round=1）。 */
+  appendReplies: (replies: AnswerDraft[]) => void;
   ready: boolean;
 }
 
@@ -126,9 +130,41 @@ export function MirrorProvider({ children }: { children: React.ReactNode }) {
     commit((m) => ({ ...m, contributions: [...m.contributions, e] }));
   }, [commit]);
 
+  /**
+   * 继续邀请一位答主。
+   *
+   * 三条纪律：同名不重复加人；同 id 的回答不重复追加；追加后按加入顺序重排，
+   * 让新来的那位永远在最后 —— 用户「再加一个人进来看看」的直觉顺序。
+   */
+  const appendInvite = useCallback((skill: Skill, answer: AnswerDraft) => {
+    commit((m) => {
+      const skills = m.skills.some((s) => s.id === skill.id) ? m.skills : [...m.skills, skill];
+      const answers = m.answers.some((a) => a.id === answer.id) ? m.answers : [...m.answers, answer];
+      return {
+        ...m,
+        skills,
+        answers,
+        contributions: [
+          ...m.contributions,
+          { at: Date.now(), who: skill.name, delta: 5, reason: "受邀加入，回答了这个问题" },
+        ],
+      };
+    });
+  }, [commit]);
+
+  const appendReplies = useCallback((replies: AnswerDraft[]) => {
+    if (replies.length === 0) return;
+    commit((m) => {
+      const seen = new Set(m.answers.map((a) => a.id));
+      const fresh = replies.filter((r) => !seen.has(r.id));
+      if (fresh.length === 0) return m;
+      return { ...m, answers: [...m.answers, ...fresh] };
+    });
+  }, [commit]);
+
   const value = useMemo<Store>(
-    () => ({ ...state, setMirror, markHandoffOpened, confirmHandoff, applyHumanEdit, addContribution, ready }),
-    [state, setMirror, markHandoffOpened, confirmHandoff, applyHumanEdit, addContribution, ready]
+    () => ({ ...state, setMirror, markHandoffOpened, confirmHandoff, applyHumanEdit, addContribution, appendInvite, appendReplies, ready }),
+    [state, setMirror, markHandoffOpened, confirmHandoff, applyHumanEdit, addContribution, appendInvite, appendReplies, ready]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

@@ -1,7 +1,7 @@
 ﻿# 一键推送到 GitHub（公开仓库）。
 #
 # 用法（在项目根目录打开 PowerShell 后粘贴）：
-#   powershell -ExecutionPolicy Bypass -File scripts/push-to-github.ps1
+#   pwsh -ExecutionPolicy Bypass -File scripts/push-to-github.ps1
 #
 # 可选参数：
 #   -RepoUrl  https://github.com/<用户名>/<仓库名>.git   默认用下面的 $RepoUrl

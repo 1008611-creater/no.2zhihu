@@ -132,6 +132,33 @@ export const SKILL_SEEDS: SkillSeed[] = [
   },
 ];
 
+/**
+ * 把视角型种子（补充层）实例化成 Skill。
+ *
+ * 视角型分身不携带 Persona，正文按「稳定视角」生成，标记 supplementary=true。
+ * 它只在用户没有指定答主时补位，或作为「换个角度看」的附加层。
+ */
+export function skillFromSeed(
+  seed: SkillSeed,
+  sources: Skill["sources"] = [],
+  query = "",
+  confidence = 0,
+): Skill {
+  return {
+    id: seed.id,
+    name: seed.name,
+    kind: seed.kind,
+    lens: seed.lens,
+    query,
+    keywords: seed.keywords,
+    tone: seed.tone,
+    accent: seed.accent,
+    sources,
+    confidence,
+    supplementary: true,
+  };
+}
+
 export const SKILL_BY_ID = new Map(SKILL_SEEDS.map((s) => [s.id, s]));
 
 export function skillAccentOf(id: string): Skill["accent"] {

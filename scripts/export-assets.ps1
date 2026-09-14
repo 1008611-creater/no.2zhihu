@@ -1,7 +1,7 @@
-# 把 docs/assets 里的 SVG 渲染成赛事表单需要的 PNG（封面图 + icon）。
+﻿# 把 docs/assets 里的 SVG 渲染成赛事表单需要的 PNG（封面图 + icon）。
 #
 # 用法（在项目根目录打开 PowerShell 后粘贴）：
-#   powershell -ExecutionPolicy Bypass -File scripts/export-assets.ps1
+#   pwsh -ExecutionPolicy Bypass -File scripts/export-assets.ps1
 #
 # 原理：调用本机已安装的 Edge 或 Chrome 的无头模式截图。
 # 零安装、零联网、不引入任何依赖，也不上传任何内容。

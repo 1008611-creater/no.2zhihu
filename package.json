@@ -7,7 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "docs:sync": "node scripts/sync-zhihu-docs.mjs"
+    "docs:sync": "node scripts/sync-zhihu-docs.mjs",
+    "check:ps1": "node scripts/check-ps1-bom.mjs",
+    "push:github": "pwsh -ExecutionPolicy Bypass -File scripts/push-to-github.ps1",
+    "fix:powershell": "pwsh -ExecutionPolicy Bypass -File scripts/fix-powershell-default.ps1"
   },
   "dependencies": {
     "next": "14.2.5",

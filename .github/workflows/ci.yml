@@ -16,6 +16,11 @@ jobs:
         with:
           node-version: '20'
       # 仓库暂无 package-lock.json，所以用 install 而不是 ci
+      # 先跑零依赖的编码检查：.ps1 必须是 UTF-8 with BOM，
+      # 否则在 Windows PowerShell 5.1 下会因按 GBK 解码而报假语法错误。
+      - name: 检查 PowerShell 脚本编码
+        run: node scripts/check-ps1-bom.mjs
+
       - name: 安装依赖
         run: npm install
       - name: 类型检查

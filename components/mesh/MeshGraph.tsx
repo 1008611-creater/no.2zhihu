@@ -23,6 +23,8 @@ const RING: Record<MeshNode["type"], number> = {
   skill: 0.42,
   keyword: 0.62,
   answer: 0.72,
+  // 人格节点比真人靠内一环：它是「AI 这一侧的完整人格」，仍由真人来兜底。
+  persona: 0.86,
   human: 1
 };
 

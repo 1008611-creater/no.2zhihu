@@ -1,4 +1,5 @@
 import { PERSONA_SKILLS, SKILL_SEEDS } from "./skills";
+import { corpusLabel } from "./personas";
 import type { Persona, RoutingDecision, Skill } from "./types";
 
 /**
@@ -205,6 +206,58 @@ export function extractTopic(title: string): string {
     .replace(/(真的是|真的|是不是|该不该|吗|呢|如何|怎么办)$/g, "")
     .trim();
   return (stripped || cleaned).slice(0, 10);
+}
+
+
+/**
+ * 供「选择答主」步骤使用的候选列表。
+ *
+ * 返回全部预置答主的排序结果与可解释分数，前端一次性渲染成人格卡片，
+ * 用户勾选后把 handle 列表回传给 /api/mirror。分数只用于排序与展示，
+ * 不参与任何模型自评。
+ */
+export interface PersonaCandidate {
+  handle: string;
+  displayName: string;
+  headline: string;
+  accent: Persona["accent"];
+  tone: string[];
+  knows: string[];
+  doesNotKnow: string[];
+  catchphrases: string[];
+  wordRange: [number, number];
+  corpusLabel: string;
+  sampleSize: number;
+  real: boolean;
+  score: number;
+  reasons: string[];
+  /** 该问题下这位答主命中率低时为 true，前端可弱化展示 */
+  weakMatch: boolean;
+}
+
+export function personaCandidates(title: string): PersonaCandidate[] {
+  const text = title.trim();
+  return PERSONA_SKILLS.map((skill) => {
+    const p = skill.persona!;
+    const { score, reasons } = scorePersona(p, text);
+    return {
+      handle: p.handle,
+      displayName: p.displayName,
+      headline: p.headline,
+      accent: p.accent,
+      tone: p.voice.tone,
+      knows: p.knows,
+      doesNotKnow: p.doesNotKnow,
+      catchphrases: p.catchphrases,
+      wordRange: p.voice.wordRange,
+      corpusLabel: corpusLabel(p),
+      sampleSize: p.corpus.sampleSize,
+      real: p.corpus.real,
+      score,
+      reasons,
+      weakMatch: score <= 0.25,
+    };
+  }).sort((a, b) => b.score - a.score);
 }
 
 export { SKILL_SEEDS };

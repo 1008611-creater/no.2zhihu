@@ -92,7 +92,7 @@ sudo bash deploy-server.sh --domain zhihu.cauai.fun
 
 ```powershell
 cd E:\codex\heikesong3
-powershell -ExecutionPolicy Bypass -File scripts/export-assets.ps1
+pwsh -ExecutionPolicy Bypass -File scripts/export-assets.ps1
 ```
 
 产物在 `docs/assets/export/`：

@@ -95,7 +95,12 @@ export function findGaps(input: GapInput): Gap[] {
 
   /* ---------- 2. 反面观点缺口 ---------- */
   // 方向一致 + 没有失败叙事 = 共识没被压力测试过。
-  const hasCounter = kinds.has("counter");
+  // v1：主体是答主人格，不再有 counter 型视角。改为「有人格明确持反面立场」
+  // 或「视角型里选了反驳者」两种信号，避免每次都误报「缺少反面意见」。
+  const CONTRARIAN_STANCE = /(高估|劝退|不推荐|反对|警惕|陷阱|智商税|割韭菜|别信|不值得|翻车|代价)/;
+  const hasCounter =
+    kinds.has("counter") ||
+    skills.some((s) => (s.persona?.stance ?? []).some((t) => CONTRARIAN_STANCE.test(t)));
   const hasFailureTale = FAILURE_TALE.test(prose);
   if (!hasCounter || !hasFailureTale) {
     gaps.push(

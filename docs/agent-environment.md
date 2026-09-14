@@ -177,7 +177,57 @@ gh auth token | Set-Content E:\codex\heikesong3\.git-remote-token -Encoding asci
 > 用 VS Code 时看右下角编码，选 `UTF-8 with BOM` 再保存。
 
 ---
-## 七、安全底线（三层都不例外）
+## 七、让 PowerShell 默认走 7.x（已修）
+
+### 结论
+
+你机器上**已经装了 PowerShell 7.6.6**，Windows Terminal 的默认项也已经是它。
+之所以还总是落到 5.1，是因为入口用错了：
+
+> **在 Windows 上，`powershell` 这个命令名永远指向系统自带的 5.1；7.x 的命令名是 `pwsh`。**
+> 这是微软的硬性命名约定，装多少个版本都不会变。
+
+### 一键修复
+
+```powershell
+pwsh -ExecutionPolicy Bypass -File scripts/fix-powershell-default.ps1 -DryRun   # 先预览
+pwsh -ExecutionPolicy Bypass -File scripts/fix-powershell-default.ps1          # 再执行
+```
+
+脚本做三件事（写入前自动备份，可重复执行）：
+
+| # | 动作 | 说明 |
+|---|---|---|
+| 1 | 清掉 5.1 启动配置里的悬空引用 | 原配置指向 `D:\Users\lsb\Documents\PowerShell\profile.common.ps1`，该文件已不存在，每次启动都静默失败 |
+| 2 | 在 5.1 启动配置里加转发 | 交互式敲 `powershell` 时自动进入 7.x；**不影响** `powershell -File x.ps1` 这类外部调用 |
+| 3 | 把 VS Code 默认终端设为 pwsh | 已有 `settings.json` 会被合并，其它配置不动；含注释无法安全合并时会打印待粘贴内容 |
+
+### 刻意不做的事
+
+**不在 5.1 启动配置里自动重启到 7.x。** 原因有两个：
+
+1. 7.x 的启动配置会反向加载 5.1 的启动配置（dot-source），自动重启会形成**无限循环**；
+2. `powershell -File x.ps1` 会被静默改道，改变脚本语义 —— 这类调用应当显式失败，而不是悄悄换成别的解释器。
+
+### 防回归
+
+| 措施 | 位置 |
+|---|---|
+| 本地检查 | `npm run check:ps1` |
+| 云端检查 | CI 第一步执行 `node scripts/check-ps1-bom.mjs`，不合规直接失败 |
+| 编辑器约定 | `.editorconfig` 的 `[*.ps1] charset = utf-8-bom` |
+
+### 常用命令对照
+
+| 想做什么 | 用哪个 |
+|---|---|
+| 打开 PowerShell 7 | `pwsh` |
+| 跑脚本 | `pwsh -File scripts/xxx.ps1` |
+| 推送代码 | `npm run push:github` 或 `pwsh -File scripts/push-to-github.ps1` |
+| 修默认版本 | `npm run fix:powershell` |
+
+---
+## 八、安全底线（三层都不例外）
 
 - 令牌**只**授予 `no.2zhihu` 一个仓库、**只**开 Contents 写权限，有效期设最短。
 - 令牌不写进代码、不写进文档、不写进聊天记录；`.git-remote-token` 已被忽略，用完即删。

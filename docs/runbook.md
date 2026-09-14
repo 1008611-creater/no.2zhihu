@@ -59,7 +59,7 @@ git push -u origin main
 
 ```powershell
 # 用你本地已解包的官方 Skill 包
-powershell -ExecutionPolicy Bypass -File ".official/zhihu-skill-0.7.2/zhihu/scripts/setup.ps1"
+pwsh -ExecutionPolicy Bypass -File ".official/zhihu-skill-0.7.2/zhihu/scripts/setup.ps1"
 # 记录返回的 binary_path，然后写入 Access Secret
 "<binary_path>" auth set --secret-stdin
 "<binary_path>" auth status --verify
