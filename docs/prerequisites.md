@@ -28,7 +28,7 @@
 |---|---|---|---|---|
 | 1 | 公网可访问、可实操的线上 Demo | ✅ 必交 | 待部署 | 自托管 `zhihu.cauai.fun`（见 self-hosting.md） |
 | 2 | 产品说明 / 计划书 | ✅ 必交（初审重点） | 骨架已就绪 | [submission.md](submission.md) |
-| 3 | GitHub / Gitee 代码仓库链接 | 加分 | 仓库已建，待推送 | <https://github.com/1008611-creater/no.2zhihu>（公开） |
+| 3 | GitHub / Gitee 代码仓库链接 | 加分 | ✅ 已推送 | <https://github.com/1008611-creater/no.2zhihu>（公开） |
 | 4 | 演示视频（公开链接） | 加分 | 待录制 | 见 [roadmap.md](roadmap.md) |
 | 5 | 项目 icon 与封面图 | 加分 | 待产出 | 见 [design-system.md](design-system.md) |
 | 6 | 知乎登录回调地址（用 OAuth 时填） | 条件 | 未接入 OAuth 则留空 | — |

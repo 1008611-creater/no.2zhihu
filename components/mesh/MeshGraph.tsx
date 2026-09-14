@@ -23,7 +23,7 @@ const RING: Record<MeshNode["type"], number> = {
   skill: 0.42,
   keyword: 0.62,
   answer: 0.72,
-  // 人格节点比真人靠内一环：它是「AI 这一侧的完整人格」，仍由真人来兜底。
+  // 人格节点：AI 这一侧的完整人格，比真人靠内一环，仍由真人来兜底。
   persona: 0.86,
   human: 1
 };
@@ -73,7 +73,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
         </defs>
 
         <circle cx={cx} cy={cy} r="200" fill="url(#mesh-core)" />
-        {[0.42, 0.62, 0.72, 1].map((r) => (
+        {[0.42, 0.62, 0.72, 0.86, 1].map((r) => (
           <circle key={r} cx={cx} cy={cy} r={r * 196} fill="none" stroke="#1c2032" strokeDasharray="3 7" />
         ))}
 
@@ -97,7 +97,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
 
         {graph.nodes.map((n, i) => {
           const p = pos.get(n.id)!;
-          const r = n.type === "question" ? 16 : n.type === "skill" ? 12 : n.type === "human" ? 9 : 6;
+          const r = n.type === "question" ? 16 : n.type === "skill" ? 12 : n.type === "persona" ? 10 : n.type === "human" ? 9 : 6;
           const active = hover === n.id;
           return (
             <motion.g
@@ -111,7 +111,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
             >
               <circle cx={p.x} cy={p.y} r={r + (active ? 5 : 0)} fill={ACCENT[n.accent] ?? "#4d7cff"} opacity={active ? 1 : 0.88} />
               <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={ACCENT[n.accent] ?? "#4d7cff"} strokeOpacity={active ? 0.6 : 0.22} />
-              {(n.type === "question" || n.type === "skill" || active) && (
+              {(n.type === "question" || n.type === "skill" || n.type === "persona" || active) && (
                 <text
                   x={p.x} y={p.y - r - 8}
                   textAnchor="middle"
@@ -131,6 +131,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
         {[
           { c: "#4d7cff", l: "问题" },
           { c: "#8b5cf6", l: "Skill 分身" },
+          { c: "#a78bfa", l: "答主人格" },
           { c: "#2fbf8f", l: "真人" },
           { c: "#ff8a4c", l: "关键词 / 回答" }
         ].map((k) => (

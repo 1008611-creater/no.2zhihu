@@ -15,12 +15,14 @@ import { FLOW_STATES } from "@/components/kanshan/states";
  * 没有事件就没有动态 —— 不用假数据填充时间线。
  */
 
-type Kind = "route" | "evidence" | "answer" | "gap" | "human" | "handoff";
+type Kind = "route" | "evidence" | "answer" | "debate" | "invite" | "gap" | "human" | "handoff";
 
 const KIND_META: Record<Kind, { label: string; accent: string }> = {
   route: { label: "Human Router", accent: "blue" },
   evidence: { label: "检索证据", accent: "blue" },
   answer: { label: "分身作答", accent: "violet" },
+  debate: { label: "互相回应", accent: "violet" },
+  invite: { label: "受邀加入", accent: "blue" },
   gap: { label: "缺口识别", accent: "orange" },
   human: { label: "真人补充", accent: "green" },
   handoff: { label: "搬运", accent: "green" }
@@ -60,6 +62,18 @@ export default function FeedPage() {
             ? "由知乎直答模型基于 " + a.evidence.length + " 条证据生成回答（" + a.body.length + " 字）"
             : "直答未参与，仅保留 " + a.evidence.length + " 条检索来源"
         });
+      }
+      for (const a of m.answers.filter((x) => (x.round ?? 0) > 0)) {
+        list.push({
+          at: a.createdAt,
+          kind: "debate",
+          who: a.skillName,
+          text: "回应了" + (a.replyToName ?? "另一位答主") + "：" + a.body.slice(0, 42) + (a.body.length > 42 ? "…" : "")
+        });
+      }
+      for (const c of m.contributions) {
+        if (c.reason.indexOf("受邀加入") === -1) continue;
+        list.push({ at: c.at, kind: "invite", who: c.who, text: "被邀请进来，按自己的领域与说话方式回答了这个问题" });
       }
       for (const g of m.gaps) {
         list.push({

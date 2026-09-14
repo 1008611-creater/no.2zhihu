@@ -10,7 +10,16 @@ const STATUS_LABEL: Record<AnswerDraft["status"], string> = {
   "handed-off": "已搬运回知乎"
 };
 
+/**
+ * 回答卡片。
+ *
+ * v1 起要能区分三种回答：首轮作答（round=0）、互相回应（round=1）、真人补充。
+ * 互相回应会明确写出「回应谁」，因为「两位答主互相接话」是这个产品最直观的
+ * 「他们真的是不同的人」的证据。
+ */
 export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?: number }) {
+  const isReply = (answer.round ?? 0) > 0;
+
   return (
     <motion.article
       className="card"
@@ -18,10 +27,13 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.34, delay: index * 0.06 }}
     >
-      <div className={`accent-bar a-${answer.accent}`} />
+      <div className={"accent-bar a-" + answer.accent} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11, flexWrap: "wrap" }}>
         <h3 style={{ marginRight: "auto" }}>{answer.skillName}</h3>
-        <span className={`chip chip-${answer.accent}`}>{STATUS_LABEL[answer.status]}</span>
+        {isReply && answer.replyToName && (
+          <span className="chip chip-orange">回应 {answer.replyToName}</span>
+        )}
+        <span className={"chip chip-" + answer.accent}>{STATUS_LABEL[answer.status]}</span>
         <span className="chip mono">{answer.generatedBy === "zhida" ? "直答模型" : "仅检索"}</span>
       </div>
 
@@ -45,7 +57,7 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
       </div>
 
       <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
-        <Link className="btn btn-sm btn-ghost" href={`/answer/${answer.id}`}>查看详情与追问</Link>
+        <Link className="btn btn-sm btn-ghost" href={"/answer/" + answer.id}>查看详情与追问</Link>
       </div>
     </motion.article>
   );

@@ -7,16 +7,30 @@ import { useMirror } from "@/lib/store/mirror-store";
 import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import SkillCard from "@/components/mirror/SkillCard";
 import AnswerCard from "@/components/mirror/AnswerCard";
+import DebatePanel from "@/components/mirror/DebatePanel";
 import GapCard from "@/components/mirror/GapCard";
 import HandoffPanel from "@/components/mirror/HandoffPanel";
+import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDrawer";
 import { FLOW_STATES } from "@/components/kanshan/states";
 import { buildMesh } from "@/lib/domain/mesh";
+import { personaCandidates } from "@/lib/domain/router";
 import MeshGraph from "@/components/mesh/MeshGraph";
 
+/**
+ * 镜像工作台。
+ *
+ * 与首页共用同一份 localStorage 会话数据。首页负责「提问 + 选答主」，
+ * 工作台负责「读回答 + 继续邀请 + 互相回应 + 搬运」。
+ *
+ * 回答区分两轮：round=0 是各自首轮作答，round=1 是互相回应。
+ * 两轮分开渲染，评委一眼能看出「这几个人在互相接话」。
+ */
 export default function MirrorPage() {
-  const { mirror, ready } = useMirror();
+  const { mirror, ready, appendInvite, appendReplies } = useMirror();
   const [step, setStep] = useState(FLOW_STATES.length);
   const [invited, setInvited] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
 
   useEffect(() => {
     // 进入工作台时把流程条走一遍，让评委看清每一步
@@ -28,6 +42,11 @@ export default function MirrorPage() {
 
   const mesh = useMemo(() => (mirror ? buildMesh(mirror) : null), [mirror]);
 
+  const presentHandles = useMemo(
+    () => (mirror ? mirror.skills.map((s) => s.persona?.handle).filter((h): h is string => !!h) : []),
+    [mirror],
+  );
+
   if (!ready) {
     return <div className="skeleton" style={{ height: 320, marginTop: 40 }} />;
   }
@@ -36,13 +55,21 @@ export default function MirrorPage() {
     return (
       <section style={{ paddingTop: 56 }}>
         <h1>还没有镜像问题</h1>
-        <p className="lede" style={{ marginTop: 14 }}>先去首页输入一个问题，看山会把它拆成多个分身视角。</p>
+        <p className="lede" style={{ marginTop: 14 }}>先去首页输入一个问题，指定你想听谁回答。</p>
         <Link className="btn btn-primary" href="/" style={{ marginTop: 20 }}>回到首页</Link>
       </section>
     );
   }
 
   const filled = mirror.gaps.filter((g) => g.filledBy).length;
+  const firstRound = mirror.answers.filter((a) => (a.round ?? 0) === 0);
+  const replies = mirror.answers.filter((a) => (a.round ?? 0) > 0);
+
+  function handleInvited(outcome: InviteOutcome) {
+    appendInvite(outcome.skill, outcome.answer);
+    setDrawerOpen(false);
+    if (outcome.mode === "distilled" && outcome.note) setInviteNote(outcome.note);
+  }
 
   return (
     <>
@@ -52,8 +79,8 @@ export default function MirrorPage() {
 
         <div className="grid grid-4" style={{ marginTop: 22 }}>
           {[
-            { n: mirror.skills.length, l: "个 Skill 分身" },
-            { n: mirror.answers.length, l: "篇多视角回答" },
+            { n: mirror.skills.length, l: "位答主分身" },
+            { n: mirror.answers.length, l: "篇回答" },
             { n: mirror.gaps.length, l: "个缺口", s: filled > 0 ? `已补 ${filled}` : undefined },
             { n: mirror.skills.reduce((a, s) => a + s.sources.length, 0), l: "条真实知乎来源" }
           ].map((s) => (
@@ -92,8 +119,8 @@ export default function MirrorPage() {
 
       <section className="section">
         <div className="section-head">
-          <h2>Skill 分身阵容</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>每个分身的视角与文风都来自真实公开回答的蒸馏。</p>
+          <h2>答主阵容</h2>
+          <p className="dim" style={{ fontSize: 13.5 }}>领域、立场与说话方式都来自这位答主的公开表达。</p>
         </div>
         <div className="grid grid-3">
           {mirror.skills.map((s, i) => <SkillCard key={s.id} skill={s} index={i} />)}
@@ -102,18 +129,44 @@ export default function MirrorPage() {
 
       <section className="section">
         <div className="section-head">
-          <h2>多视角回答群组</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>正文只允许引用上面的真实来源。</p>
+          <h2>首轮作答</h2>
+          <p className="dim" style={{ fontSize: 13.5 }}>每位答主各写一篇，正文只允许引用他自己的真实来源。</p>
         </div>
         <div className="grid grid-3">
-          {mirror.answers.map((a, i) => <AnswerCard key={a.id} answer={a} index={i} />)}
+          {firstRound.map((a, i) => <AnswerCard key={a.id} answer={a} index={i} />)}
+        </div>
+      </section>
+
+      {replies.length > 0 && (
+        <section className="section">
+          <div className="section-head">
+            <h2>互相回应</h2>
+            <p className="dim" style={{ fontSize: 13.5 }}>一轮，不循环。他们接的是对方已经说过的话。</p>
+          </div>
+          <div className="grid grid-3">
+            {replies.map((a, i) => <AnswerCard key={a.id} answer={a} index={i} />)}
+          </div>
+        </section>
+      )}
+
+      <section className="section">
+        <div style={{ display: "grid", gap: 12 }}>
+          <DebatePanel
+            question={mirror.title}
+            answers={mirror.answers}
+            onReplies={(r) => appendReplies(r)}
+          />
+          {inviteNote && <div className="notice notice-info">{inviteNote}</div>}
+          <button className="btn btn-primary" onClick={() => setDrawerOpen(true)}>
+            + 邀请一个分身回答
+          </button>
         </div>
       </section>
 
       <section className="section">
         <div className="section-head">
           <h2>看山发现的缺口</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>这些地方 AI 答不了，必须由真人补上。</p>
+          <p className="dim" style={{ fontSize: 13.5 }}>这些地方分身答不了，必须由真人补上。</p>
         </div>
         <div style={{ display: "grid", gap: 12 }}>
           {mirror.gaps.map((g, i) => (
@@ -163,6 +216,15 @@ export default function MirrorPage() {
           <MeshGraph graph={mesh} height={380} />
         </section>
       )}
+
+      <InviteDrawer
+        open={drawerOpen}
+        question={mirror.title}
+        candidates={personaCandidates(mirror.title)}
+        presentHandles={presentHandles}
+        onClose={() => setDrawerOpen(false)}
+        onInvited={handleInvited}
+      />
     </>
   );
 }

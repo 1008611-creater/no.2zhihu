@@ -9,21 +9,28 @@ import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import { FLOW_STATES, flowStateAt } from "@/components/kanshan/states";
 import MeshGraph from "@/components/mesh/MeshGraph";
 import AnswerCard from "@/components/mirror/AnswerCard";
+import DebatePanel from "@/components/mirror/DebatePanel";
 import GapCard from "@/components/mirror/GapCard";
 import HandoffPanel from "@/components/mirror/HandoffPanel";
+import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDrawer";
+import PersonaPicker from "@/components/mirror/PersonaPicker";
 import SkillCard from "@/components/mirror/SkillCard";
 import { buildMesh } from "@/lib/domain/mesh";
+import { personaCandidates, type PersonaCandidate } from "@/lib/domain/router";
 import { useMirror } from "@/lib/store/mirror-store";
 
 /**
  * 首页 = 完整闭环的演示面。
  *
- * 评审只需要在这一页走一遍，就能看到产品全部关键动作：
- *   提一个问题 → 看山召集分身 → 取真实证据 → 生成多视角 → 指出共同缺口
- *   → 交给真人 → 搬运回知乎 → Human Mesh 长出新的边。
+ * v1 主叙事（2026-09-14 重构）：不是「抽象视角」，而是「具体知乎答主的分身」。
+ * 提问 → 选答主 → 每位答主按自己的领域/立场/说话方式作答 → 看缺口 →
+ * 继续邀请新答主 → 真人补充 → 搬运回知乎。
  *
- * 实现约定：结果统一落在 MirrorProvider（localStorage 持久化），
- * 所以 /mirror、/square、/mesh、/fill 打开时看到的是同一次会话的同一份数据。
+ * 四步状态机（phase）：
+ *   ask   —— 输入问题
+ *   pick  —— 选答主（默认勾选推荐 3 位，也可以一个都不选让看山推荐）
+ *   run   —— 生成中
+ *   done  —— 结果（mirror 已落库）
  */
 
 const EXAMPLES = [
@@ -33,15 +40,22 @@ const EXAMPLES = [
 ];
 
 const MIN_QUESTION = 4;
+const DEFAULT_PICKS = 3;
+
+type Phase = "ask" | "pick" | "run" | "done";
 
 export default function Home() {
-  const { mirror, setMirror, ready } = useMirror();
+  const { mirror, setMirror, ready, appendInvite, appendReplies } = useMirror();
 
   const [question, setQuestion] = useState("");
+  const [phase, setPhase] = useState<Phase>("ask");
+  const [selected, setSelected] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [inviteNote, setInviteNote] = useState<string | null>(null);
 
   const resultRef = useRef<HTMLDivElement | null>(null);
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
@@ -58,6 +72,12 @@ export default function Home() {
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
+
+  /** 问题 → 候选答主。纯函数，零额度，随输入即时更新。 */
+  const candidates: PersonaCandidate[] = useMemo(
+    () => (question.trim().length >= MIN_QUESTION ? personaCandidates(question) : []),
+    [question],
+  );
 
   /** 把流程条按节奏推进一步，让评委看清看山每一步在做什么。 */
   const playFlow = useCallback(
@@ -77,28 +97,47 @@ export default function Home() {
     [clearTimers],
   );
 
+  /** 第一步：输入问题 → 进入选答主。 */
+  const goPick = useCallback(() => {
+    const q = question.trim();
+    if (q.length < MIN_QUESTION) {
+      setError("问题太短了，请再具体一点。");
+      return;
+    }
+    setError(null);
+    // 默认勾选推荐的前 3 位 —— 用户想直接开始就点确认，想换人就点卡片。
+    const top = personaCandidates(q).slice(0, DEFAULT_PICKS).map((c) => c.handle);
+    setSelected(top);
+    setPhase("pick");
+  }, [question]);
+
+  const toggle = useCallback((handle: string) => {
+    setSelected((cur) =>
+      cur.includes(handle) ? cur.filter((h) => h !== handle) : [...cur, handle],
+    );
+  }, []);
+
+  /** 第二步：确认答主 → 真正调用生成。 */
   const run = useCallback(
-    async (raw: string) => {
-      const q = raw.trim();
-      if (q.length < MIN_QUESTION) {
-        setError("问题太短了，请再具体一点。");
-        return;
-      }
+    async (handles: string[]) => {
+      const q = question.trim();
+      if (q.length < MIN_QUESTION) return;
 
       setError(null);
       setMirror(null);
       setInvited(null);
+      setInviteNote(null);
+      setPhase("run");
       setRunning(true);
       setStep(-1);
 
-      // 立刻开始播流程条：真实请求在后台并行，避免用户对着静止页面等。
       const flowDone = new Promise<void>((resolve) => playFlow(resolve));
 
       try {
         const res = await fetch("/api/mirror", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ question: q, evidencePerSkill: 3 }),
+          body: JSON.stringify({ question: q, handles, evidencePerSkill: 3 }),
         });
         const data = await res.json();
 
@@ -106,21 +145,36 @@ export default function Home() {
           clearTimers();
           setError(data.error ?? "生成失败，请稍后重试。");
           setStep(-1);
+          setPhase("pick");
           return;
         }
 
         setMirror(data.mirror);
         await flowDone;
+        setPhase("done");
         resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
       } catch {
         clearTimers();
         setError("网络连接失败，请检查后重试。");
         setStep(-1);
+        setPhase("pick");
       } finally {
         setRunning(false);
       }
     },
-    [clearTimers, playFlow, setMirror],
+    [clearTimers, playFlow, question, setMirror],
+  );
+
+  /** 继续邀请的回调：把新答主与回答追加进当前镜像问题，不重跑旧的。 */
+  const handleInvited = useCallback(
+    (outcome: InviteOutcome) => {
+      appendInvite(outcome.skill, outcome.answer);
+      setDrawerOpen(false);
+      if (outcome.mode === "distilled" && outcome.note) {
+        setInviteNote(outcome.note);
+      }
+    },
+    [appendInvite],
   );
 
   const mesh = useMemo(() => (mirror ? buildMesh(mirror) : null), [mirror]);
@@ -130,12 +184,17 @@ export default function Home() {
     const sources = mirror.skills.reduce((a, s) => a + s.sources.length, 0);
     const filled = mirror.gaps.filter((g) => g.filledBy).length;
     return [
-      { n: mirror.skills.length, l: "个 Skill 分身" },
+      { n: mirror.skills.length, l: "位答主分身" },
       { n: sources, l: "条真实知乎来源" },
       { n: mirror.gaps.length, l: "个缺口", s: filled > 0 ? `已补 ${filled}` : undefined },
       { n: mirror.answers.filter((a) => a.generatedBy === "zhida").length, l: "篇直答生成" },
     ];
   }, [mirror]);
+
+  const presentHandles = useMemo(
+    () => (mirror ? mirror.skills.map((s) => s.persona?.handle).filter((h): h is string => !!h) : []),
+    [mirror],
+  );
 
   return (
     <div className="home">
@@ -145,21 +204,18 @@ export default function Home() {
           <div>
             <p className="eyebrow">HUMAN MESH · 0 级入口</p>
             <h1>
-              让每个问题
+              让知乎上任何一个答主
               <br />
-              <em>先在另一个知乎里发生。</em>
+              <em>先替你把这个问题答一遍。</em>
             </h1>
             <p className="lede">
-              看山会召集一群由知乎真实回答蒸馏出的分身来回答你的问题，然后指出他们
-              <strong>共同没有回答的那一块</strong>，再把那一块交给真实的人。
+              输入问题，指定你想听谁回答 —— 哪怕他从没答过这个问题。看山会按这位答主的
+              领域、立场和说话方式生成一份分身回答，再指出
+              <strong>这几位都没答上的那一块</strong>，交给真实的人。
             </p>
           </div>
           <div className="hero-char">
-            <Kanshan
-              state={flowStateAt(step)}
-              size={208}
-              followPointer
-            />
+            <Kanshan state={flowStateAt(step)} size={208} followPointer />
             <div className="hero-char-label mono">KANSHAN · HOST</div>
           </div>
         </div>
@@ -168,9 +224,12 @@ export default function Home() {
           <textarea
             className="field"
             value={question}
-            onChange={(e) => setQuestion(e.target.value)}
+            onChange={(e) => {
+              setQuestion(e.target.value);
+              if (phase === "pick" || phase === "done") setPhase("ask");
+            }}
             onKeyDown={(e) => {
-              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") run(question);
+              if ((e.metaKey || e.ctrlKey) && e.key === "Enter") goPick();
             }}
             placeholder="输入一个你真正想问的问题，或粘贴知乎问题链接…"
             rows={3}
@@ -182,10 +241,10 @@ export default function Home() {
             </span>
             <button
               className="btn btn-primary"
-              onClick={() => run(question)}
+              onClick={goPick}
               disabled={running || question.trim().length < MIN_QUESTION}
             >
-              {running ? "看山正在召集…" : "召集分身 →"}
+              {phase === "pick" ? "重新选择答主 →" : "选择答主 →"}
             </button>
           </div>
           <div className="examples">
@@ -204,9 +263,58 @@ export default function Home() {
         )}
       </section>
 
+      {/* ------------------------------ 选择答主 ------------------------------ */}
+      <AnimatePresence>
+        {phase === "pick" && (
+          <motion.section
+            className="section"
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.35 }}
+          >
+            <div className="section-head">
+              <div>
+                <p className="eyebrow">Step 1 · 选答主</p>
+                <h2>你想听谁回答这个问题？</h2>
+              </div>
+              <p className="dim" style={{ fontSize: 13.5, maxWidth: 400 }}>
+                选一位、几位，或者一位都不选。每位答主都有自己的领域、立场和说话方式 ——
+                换一个人，回答就该是另一个人的样子。
+              </p>
+            </div>
+
+            <PersonaPicker candidates={candidates} selected={selected} onToggle={toggle} />
+
+            <div
+              className="card-flat"
+              style={{ marginTop: 18, display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+            >
+              <div style={{ marginRight: "auto" }}>
+                <div style={{ fontWeight: 700, fontSize: 13.5 }}>
+                  {selected.length > 0 ? `已选 ${selected.length} 位答主` : "未指定答主"}
+                </div>
+                <div className="dim" style={{ fontSize: 12.5 }}>
+                  {selected.length > 0
+                    ? "他们会各自取证据、各自作答；单次最多 4 位，控制额度消耗。"
+                    : "看山会按问题类型自动推荐 3 位答主。"}
+                </div>
+              </div>
+              <button
+                className="btn btn-primary"
+                onClick={() => run(selected)}
+                disabled={running}
+              >
+                {running ? "看山正在召集…" : selected.length > 0 ? "让这些答主作答 →" : "让看山推荐并作答 →"}
+              </button>
+            </div>
+          </motion.section>
+        )}
+      </AnimatePresence>
+
       {/* ------------------------------ 主持舞台 ------------------------------ */}
       <AnimatePresence>
-        {(running || mirror) && (
+        {(phase === "run" || (phase === "done" && mirror)) && (
           <motion.section
             className="section"
             initial={{ opacity: 0, y: 18 }}
@@ -267,16 +375,17 @@ export default function Home() {
       </AnimatePresence>
 
       {/* ------------------------------ 结果 ------------------------------ */}
-      {mirror && (
+      {phase === "done" && mirror && (
         <div ref={resultRef}>
           <section className="section">
             <div className="section-head">
               <div>
-                <p className="eyebrow">Skill 分身阵容</p>
-                <h2>每个分身是一个视角，不是换一种语气</h2>
+                <p className="eyebrow">答主阵容</p>
+                <h2>每位都是一个具体的人，不是换一种语气</h2>
               </div>
-              <p className="dim" style={{ fontSize: 13.5, maxWidth: 380 }}>
-                视角、文风与关键词都来自知乎真实公开回答的蒸馏，卡片上的来源可以逐条点开核对。
+              <p className="dim" style={{ fontSize: 13.5, maxWidth: 400 }}>
+                领域、立场、说话方式和「不装懂边界」都来自这位答主的公开表达。
+                正文只允许引用他对应的真实来源。
               </p>
             </div>
             <div className="grid grid-3">
@@ -289,8 +398,8 @@ export default function Home() {
           <section className="section">
             <div className="section-head">
               <div>
-                <p className="eyebrow">多视角回答群组</p>
-                <h2>正文只允许引用上面的真实来源</h2>
+                <p className="eyebrow">分身回答群组</p>
+                <h2>遮住名字，也应该看得出不是同一个人写的</h2>
               </div>
               <Link className="link mono" href="/mirror">
                 打开完整工作台 →
@@ -301,12 +410,26 @@ export default function Home() {
                 <AnswerCard key={a.id} answer={a} index={i} />
               ))}
             </div>
+
+            <div style={{ marginTop: 18, display: "grid", gap: 12 }}>
+              <DebatePanel
+                question={mirror.title}
+                answers={mirror.answers}
+                onReplies={(replies) => {
+                  appendReplies(replies);
+                }}
+              />
+              {inviteNote && <div className="notice notice-info">{inviteNote}</div>}
+              <button className="btn btn-primary" onClick={() => setDrawerOpen(true)}>
+                + 邀请一个分身回答
+              </button>
+            </div>
           </section>
 
           <section className="section" id="gaps">
             <div className="section-head">
               <div>
-                <p className="eyebrow">★ 这一步只有把多个视角放在一起才能做到</p>
+                <p className="eyebrow">★ 这一步只有把多个分身放在一起才能做到</p>
                 <h2>
                   {mirror.gaps.length > 0
                     ? `他们共同没回答的 ${mirror.gaps.length} 块`
@@ -383,7 +506,7 @@ export default function Home() {
       )}
 
       {/* ------------------------------ 未开始时的说明 ------------------------------ */}
-      {!mirror && !running && (
+      {phase === "ask" && !mirror && !running && (
         <section className="section">
           <div className="section-head">
             <div>
@@ -394,15 +517,15 @@ export default function Home() {
                 一条可接管的关系。
               </h2>
             </div>
-            <p className="lede" style={{ maxWidth: 380 }}>
-              查看分身参与过的问题、证据和文风。当虚拟回答遇到真实世界的判断，邀请你接管。
+            <p className="lede" style={{ maxWidth: 400 }}>
+              查看答主分身参与过的问题、证据和文风。当虚拟回答遇到真实世界的判断，邀请你接管。
             </p>
           </div>
           <div className="meshmap">
             <div className="orbit o1" />
             <div className="orbit o2" />
             <div className="node center">你</div>
-            <div className="node n1">Skill</div>
+            <div className="node n1">答主</div>
             <div className="node n2">问题</div>
             <div className="node n3">证据</div>
             <div className="node n4">缺口</div>
@@ -419,6 +542,15 @@ export default function Home() {
           )}
         </section>
       )}
+
+      <InviteDrawer
+        open={drawerOpen}
+        question={mirror?.title ?? question}
+        candidates={mirror ? personaCandidates(mirror.title) : candidates}
+        presentHandles={presentHandles}
+        onClose={() => setDrawerOpen(false)}
+        onInvited={handleInvited}
+      />
 
       <footer className="footer">
         <span>二号知乎 · 知乎黑客松 2026</span>

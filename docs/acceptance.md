@@ -32,7 +32,7 @@
 |---|---|---|---|
 | 15 | TypeScript 全量类型检查 0 错误 | 47 个文件，0 诊断 | ✅ |
 | 16 | 本地构建通过 | `npm run build` | ⬜ 需你执行 |
-| 17 | 公开仓库可访问 | GitHub API 返回 `private: false` | 🟡 仓库已建但为空，待推送 |
+| 17 | 公开仓库可访问 | GitHub API 返回 `private: false` | ✅ 已推送（`main` = `0af1b0f`，云端 CI 全绿） |
 | 18 | 凭证未入库 | `.env.local` 被 gitignore；全仓库密钥命中 0 处 | ✅ |
 | 19 | 站点元信息完整 | icon / apple-icon / manifest / robots / sitemap / OG 图 | ✅ |
 | 20 | 文档内链无死链 | 全部相对链接指向存在的文件 | ✅ |
@@ -45,7 +45,7 @@
 |---|---|---|---|
 | ① 可运行体验链接 | **必交** | `https://zhihu.cauai.fun`（自托管；Vercel 备用） | 🟡 部署脚本已就绪，待执行 |
 | ② 产品说明计划书 | **必交** | [product-plan.md](product-plan.md) / [submission.md](submission.md) | ✅ 已定稿 |
-| ③ 代码仓库链接 | 加分 | https://github.com/1008611-creater/no.2zhihu | 🟡 待推送 |
+| ③ 代码仓库链接 | 加分 | https://github.com/1008611-creater/no.2zhihu | ✅ 已推送，公网可访问 |
 | ④ 项目演示视频 | 加分 | [demo-video-script.md](demo-video-script.md)（脚本就绪，待录制） | 🟡 |
 
 ---

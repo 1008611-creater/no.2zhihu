@@ -130,7 +130,7 @@ pwsh -ExecutionPolicy Bypass -File scripts/export-assets.ps1
 你说过会自己换 key，换完后：
 
 1. 改本地 `E:\codex\heikesong3\.env.local` 里的 `ZHIHU_ACCESS_SECRET`。
-2. 改 Vercel 项目的同名环境变量，然后 **Redeploy**（环境变量改动需要重新部署才生效）。
+2. 改服务器上的 `.env.local` 后重启服务；若用 Vercel 备用，则改同名环境变量并 **Redeploy**。
 3. 旧 key 到 <https://developer.zhihu.com/profile> 删除。
 
 > 提醒：`.env.local` 已被 gitignore，不会进仓库；但如果你曾把 key 贴到别处（聊天、截图、issue），
