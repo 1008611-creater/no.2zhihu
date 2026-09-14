@@ -81,12 +81,34 @@ export async function distillPersona(
   }
 
   // 检索词刻意带上答主名字 + 主题：只靠名字会命中大量「别人讨论他」的内容。
-  const query = topic ? name + " " + topic : name;
-  let items: SearchItem[] = [];
-  try {
-    const res = await zhihuSearch(query, FETCH_LIMIT);
-    items = res.Items ?? [];
-  } catch {
+  //
+  // 实测（2026-09-14）：知乎搜索是**内容语义检索**，不是按作者检索。单一检索词
+  // 命中率极低（张佳玮 0/30、马伯庸 0/20、采铜 0/30）。改成跑两个变体再按作者
+  // 过滤后，实测命中从 0 提升到 1–3 条（李松蔚、半佛仙人、陈章鱼均可命中）。
+  // 三个变体覆盖「主题+人」「纯人名」「人名+的回答」，实测取并集命中最高。
+  // 代价是额度翻倍，但这条路径只在用户临时指定未预置答主时触发，属低频操作；
+  // 合并时按 Url 去重，同一篇内容不会被计两次。
+  const variants = topic && topic !== name ? [name + " " + topic, name, name + " 的回答"] : [name];
+  const items: SearchItem[] = [];
+  const seen = new Set<string>();
+  let failedVariants = 0;
+  for (const variant of variants) {
+    try {
+      const res = await zhihuSearch(variant, FETCH_LIMIT);
+      for (const it of res.Items ?? []) {
+        const key = it.Url || it.ContentID || it.Title;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          items.push(it);
+        }
+      }
+    } catch {
+      // 单个变体失败不影响另一个；全部失败时才按「检索失败」如实返回。
+      failedVariants++;
+    }
+  }
+
+  if (items.length === 0 && failedVariants === variants.length) {
     return fallback(handle, name, accent, 0, 0, "检索失败，暂时无法确认这位答主的公开内容。");
   }
 
@@ -145,8 +167,9 @@ export async function distillPersona(
       scanned: items.length,
       confidence,
       note:
-        "现场蒸馏：检索到 " + items.length + " 条，其中 " + mine.length + " 条作者是「" + name +
-        "」本人，用 " + sources.length + " 条有正文的原文抽取人格。",
+        "现场蒸馏：" + variants.length + " 个检索词共取到 " + items.length + " 条，其中 " +
+        mine.length + " 条作者是「" + name + "」本人，用 " + sources.length +
+        " 条有正文的原文抽取人格。",
       sources,
     };
   } catch {

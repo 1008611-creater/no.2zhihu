@@ -63,7 +63,13 @@ export async function POST(req: Request) {
     const skill = skillFromDistilled(parsed.name, distilled);
 
     // 临时人格不进名册，所以这里直接取证据 + 生成正文。
-    const query = topic + " " + parsed.name;
+    //
+    // 证据检索词刻意用「主题 + 人格领域」而不是「主题 + 人名」：
+    // 知乎搜索是内容语义检索，带上人名会把结果拉向「别人讨论这个人」的内容，
+    // 那些内容对回答这个问题没有价值。这与预置答主路径（buildPersonaQuery）
+    // 口径一致：领域词负责选材，人格负责组织语言。
+    const domain = distilled.persona.knows[0]?.split(/[、与和的]/)[0] ?? "";
+    const query = domain ? topic + " " + domain : topic;
     const sources = await collectEvidence(query, parsed.evidencePerSkill ?? 3);
     const withEvidence = { ...skill, query, sources };
     const answer = await draftAnswer(withEvidence, parsed.question, true);

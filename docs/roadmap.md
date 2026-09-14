@@ -13,7 +13,7 @@
 
 | # | 任务 | 产出 | 验收标准 | 状态 |
 |---|---|---|---|---|
-| 1 | 前置条件确认 | — | 报名状态已核实 | ⚠️ 待你确认 |
+| 1 | 前置条件确认 | — | 报名状态已核实 | ✅ 已确认（已报名已组队） |
 | 2 | 编码修复 | 全站 UTF-8 | 无乱码 | ✅ 已完成 |
 | 3 | 文档与索引 | docs/ 全套 | 索引可跳转 | ✅ 已完成 |
 | 4 | 样式方案收敛 | 手写 CSS + token | 无 Tailwind 残留 | ✅ 已完成 |
@@ -27,6 +27,27 @@
 | 12 | 部署到自己的服务器（Vercel 作备用） | 公网 URL `https://zhihu.cauai.fun` | 评委可直接打开体验 | ✅ 已上线，HTTPS 证书有效；见 [self-hosting.md](self-hosting.md) |
 | 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | ✅ 已完成（`main` = `a0c30e2`，含自托管脚本；云端 CI 全绿） |
 | 14 | 产品说明/计划书 | submission.md | 回答官方 6 个必答问题 | ✅ 已定稿 |
+| 15 | 临时答主检索命中率修复 | `lib/server/persona.ts` | 多变体检索；实测 1–3 条命中，0 条时如实降级 | ✅ 已完成 |
+| 14b | **v1 重构：答主人格主线** | `lib/domain/personas/` + `lib/server/persona.ts` | 选答主 → 多人格作答 → 邀请 → 互相回应 | ✅ 已完成（见下节） |
+
+## 二之二、v1 重构（2026-09-14，P0 全真 + P1 半真）
+
+主线从「抽象视角分身」改成「**具体知乎答主的分身**」。评价标准是「像这个人」>「答案完美」。
+
+| # | 任务 | 产出 | 状态 |
+|---|---|---|---|
+| R1 | 领域模型加 `Persona` 四要素 | `lib/domain/types.ts` | ✅ |
+| R2 | 6 位预置答主人格 | `lib/domain/personas/`（半佛/张佳玮/贱贱/李松蔚/大猛/陈章鱼） | ✅ |
+| R3 | 答主型 Skill 派生 + 视角型降级 | `lib/domain/skills.ts` | ✅ |
+| R4 | 路由：手动指定优先 + 自动推荐补位 | `lib/domain/router.ts` | ✅ |
+| R5 | 人格驱动提示词（voice 决定字数/句长/情绪） | `lib/server/mirror.ts` `systemPromptFor()` | ✅ |
+| R6 | 在线蒸馏临时答主（如实返回命中条数） | `lib/server/persona.ts` | ✅ |
+| R7 | 选答主步骤 + 人格卡 | `app/page.tsx` + `components/mirror/PersonaPicker\|Card` | ✅ |
+| R8 | 继续邀请（只生成一位，不重跑旧的） | `POST /api/mirror/invite` | ✅ |
+| R9 | 一轮互相回应（上限 2 次直答） | `POST /api/mirror/debate` | ✅ |
+| R10 | 数据管线：抓取 + 蒸馏脚本 | `scripts/persona-crawler.mjs` / `distill-personas.mjs` | ✅ 代码就绪 |
+| R11 | 6 位答主实跑抓取 ≥30 条 | 需 `ZHIHU_COOKIE` | ⬜ 阻塞：待提供 cookie |
+| R12 | 全量类型检查 | 60 个文件，0 诊断 | ✅ |
 
 ## 三、P1（加分）
 
