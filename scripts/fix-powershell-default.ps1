@@ -96,6 +96,25 @@ if ($PSVersionTable.PSEdition -eq "Desktop") {
 # --- END fix-powershell-default ---
 '@
 
+# 用标记行精确替换转发块：既保证可重复执行，也不依赖原文格式
+$beginMarker = "# --- BEGIN fix-powershell-default ---"
+$endMarker   = "# --- END fix-powershell-default ---"
+
+function Remove-ForwardBlock([string]$text) {
+  if ($text -notmatch [regex]::Escape($beginMarker)) { return $text }
+  $kept = New-Object System.Collections.Generic.List[string]
+  $skipping = $false
+  foreach ($line in ($text -split "\r?\n")) {
+    if (-not $skipping -and $line.Trim() -eq $beginMarker) { $skipping = $true; continue }
+    if ($skipping) {
+      if ($line.Trim() -eq $endMarker) { $skipping = $false }
+      continue
+    }
+    $kept.Add($line)
+  }
+  return (($kept -join $nl).Trim())
+}
+
 try {
   $original = ""
   if (Test-Path -LiteralPath $ps51Profile) { $original = Get-Content -LiteralPath $ps51Profile -Raw }
@@ -113,14 +132,15 @@ try {
     Note "已移除指向 D: 盘的悬空引用（profile.common.ps1）。"
   }
 
-  if ($cleaned -notmatch "fix-powershell-default") {
-    $newContent = $cleaned.TrimEnd()
-    if ($newContent -ne "") { $newContent += $nl + $nl }
-    $newContent += ($forwardBlock -replace "\r?\n", $nl)
-  } else {
-    $newContent = $cleaned
-    Note "转发块已存在，跳过（脚本可重复执行）。"
+  # 旧版转发块先摘掉，再统一追加最新版 —— 保证重复执行时内容始终是最新的
+  if ($cleaned -match [regex]::Escape($beginMarker)) {
+    $cleaned = Remove-ForwardBlock $cleaned
+    Note "检测到已有转发块，将替换为最新版。"
   }
+
+  $newContent = $cleaned.TrimEnd()
+  if ($newContent -ne "") { $newContent += $nl + $nl }
+  $newContent += ($forwardBlock -replace "\r?\n", $nl)
 
   if ($DryRun) {
     Plan "重写 $ps51Profile"
