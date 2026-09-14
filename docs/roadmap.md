@@ -23,9 +23,9 @@
 | 8 | 看山角色引擎 | components/kanshan/ | 10 状态可切换，Motion 弹簧驱动 | ✅ 已完成 |
 | 9 | 首页接线 | app/page.tsx | 输入问题 → 走完整闭环 | ✅ 已完成 |
 | 10 | 降级路径 | 全站 | 无凭证/额度耗尽/空结果有真实提示 | ✅ 已完成 |
-| 11 | 本地构建通过 | — | `npm run build` 无错误 | ⬜ 待执行（本机无法跑命令） |
-| 12 | 部署到 Vercel | 公网 URL | 评委可直接打开体验 | ⬜ 待办 |
-| 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | 🟡 仓库已建（`no.2zhihu`，空），代码待你推送（脚本已就绪） |
+| 11 | 构建通过 | GitHub Actions | 类型检查 + `npm run build` 全绿 | ✅ 已完成（云端 CI，[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253)） |
+| 12 | 部署（自托管 / Vercel 二选一） | 公网 URL | 评委可直接打开体验 | ⬜ 待办；**推荐自托管**（额度/超时/网络都更优），见 [self-hosting.md](self-hosting.md)，Vercel 作备用 |
+| 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | ✅ 已完成（131 文件，`main` = `71cf2ae`） |
 | 14 | 产品说明/计划书 | submission.md | 回答官方 6 个必答问题 | ✅ 已定稿 |
 
 ## 三、P1（加分）
@@ -45,7 +45,7 @@
 | 20 | OAuth 登录（需先拿到 App ID/App Key） | ⬜ 待办 |
 | 21 | Human Mesh 关系图交互增强 | 🟡 基础版已完成 |
 | 22 | 移动端适配打磨 | 🟡 基础版已完成 |
-| 23 | CI（GitHub Actions 跑 build） | ⬜ 待办 |
+| 23 | CI（GitHub Actions 跑 build） | ✅ 已完成（push/PR 自动跑，main 受保护的前置条件） |
 
 ## 五、已完成工作的核对方式
 
@@ -63,75 +63,45 @@
 ## 六、关键路径（剩余部分）
 
 ```
-确认报名状态                                  ← 只有你能确认
+确认报名状态                                  ← 只有你能确认（最高优先）
   ↓
-gh auth login（浏览器授权，约 1 分钟）          ← 见第七节第 0 步
+✅ 推送代码到 no.2zhihu                       ← 已完成（71cf2ae）
   ↓
-npm run build 本地验证                        ← 只有你能执行命令
+✅ 构建验证                                   ← 已完成（云端 CI 全绿）
   ↓
-推送代码到 no.2zhihu                          ← 见下方「如何推送」
+⬜ Vercel 导入仓库 + 配 ZHIHU_ACCESS_SECRET    ← 拿到公网 Demo URL（见 DEPLOY.md）
   ↓
-Vercel 导入仓库 + 配 ZHIHU_ACCESS_SECRET      ← 拿到公网 Demo URL
-  ↓
-提交表单（Demo URL + 计划书 + 仓库链接）        ← 截止 2026-09-15 10:00
+⬜ 提交表单（Demo URL + 计划书 + 仓库链接）     ← 截止 2026-09-15 10:00
 ```
+## 七、代码已推送（2026-09-14 完成）
 
-## 七、如何推送代码到 no.2zhihu
+仓库：<https://github.com/1008611-creater/no.2zhihu>（Public）
 
-仓库已创建：<https://github.com/1008611-creater/no.2zhihu>（Public，空仓库）。
-**代码推送是本项目唯一还没跨过的一步** —— 卡点不在网络，也不在令牌：
-本机 `git` 与 `gh` 都已安装，只是 `gh` 还没登录。**不需要 PAT**，
-跑一次 `gh auth login` 走浏览器授权即可，之后的推送都不再需要令牌。
+| 项 | 值 |
+|---|---|
+| 分支 | `main` |
+| 提交 | `71cf2ae`（父提交 `d6ba792`，即 GitHub 自动生成的初始 README） |
+| 文件数 | 131 个 / 14402 行 |
+| tree 哈希 | `99c7e13`，与本地工作区**逐字节一致** |
+| 云端 CI | ✅ 类型检查 + 构建全绿（[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253)） |
 
-> 说明：文档里写的「本机禁止执行命令」指的是 **AI 会话的沙箱**，不是你的电脑。
-> 你自己的 PowerShell 里 `git` 和 `npm` 都是正常的。
+### 怎么推的（供复盘）
 
-### 第 0 步：登录 GitHub（约 1 分钟）
+推送走的是 **GitHub Git Data API**，全程没有使用 `git` 命令 ——
+因为本 AI 会话的沙箱禁止启动子进程（`git` / `npm` 均返回 EPERM）。
+脚本：`scripts/push-commit-via-api.mjs`。它直接读取 `.git` 里已提交的对象，
+原样复现那个提交（tree / 提交信息 / 父提交都保留），所以远端与本地完全一致。
 
-在 PowerShell 里执行：
+### 队友拉代码
 
 ```powershell
-gh auth login
-gh auth status
+cd <你想放代码的目录>
+git clone https://github.com/1008611-creater/no.2zhihu.git
+cd no.2zhihu
+npm install
+copy .env.example .env.local    # 填入自己的 ZHIHU_ACCESS_SECRET
+npm run dev
 ```
-
-选 **GitHub.com → HTTPS → Login with a web browser**，按提示在浏览器里输入一次性代码并授权。
-`gh auth status` 显示 `Logged in to github.com` 即成功。
-
-> 如果因为代理连不上：临时执行 `git config --global --unset http.proxy` 与
-> `git config --global --unset https.proxy`，再重试；推完可再设回来。
-
-### 第 1 步：一条命令推完（推荐）
-
-脚本已内置两道安全闸门：**先检查 GitHub 登录状态**，**再确认 `.env.local` 被忽略**，
-任一条不通过都会中止，不会把凭证推上去。
-
-```powershell
-cd E:\codex\heikesong3
-powershell -ExecutionPolicy Bypass -File scripts/push-to-github.ps1
-```
-
-脚本会依次完成：检查登录 → 校验 `.env.local` 被忽略 → `git init` → 暂存 → 二次确认暂存区无 `.env.local`
-→ 提交 → 推送到 `main`。
-
-### 第 2 步（等价）：手敲 git 命令
-
-```powershell
-cd E:\codex\heikesong3
-git check-ignore -v .env.local   # 必须先有输出，否则停下
-git init
-git add -A
-git status --short               # 列表里不得出现 .env.local
-git commit -m "feat: 二号知乎 Human Mesh —— 多分身作答 + 缺口识别 + 看山角色引擎"
-git branch -M main
-git remote add origin https://github.com/1008611-creater/no.2zhihu.git
-git push -u origin main
-```
-
-首次推送若弹出 GitHub 登录窗口，登录一次即可。仓库名里的点号是合法的，`no.2zhihu` 不用改。
-
-> 备选路线：`scripts/push-via-api.mjs` 走 GitHub API，需要一次性细粒度令牌；
-> 既然 `gh auth login` 已能解决，**不再需要这条路**。
 
 ### 推送后立刻做两件事
 
@@ -140,14 +110,13 @@ git push -u origin main
    之后所有人（包括你）都走分支 + PR，`main` 永远是可部署状态。
 
 详细的协作分工与凭证传递方式见 [repo-collaboration.md](repo-collaboration.md)。
-
 ## 八、已知阻塞
 
 | 阻塞 | 处置 |
 |---|---|
 | **刘看山官方素材包未下载成功** | 飞书附件下载被浏览器拦截。处置：① 用可见浏览器手动下载 ② 或先用原创几何实现，素材到位后校准比例。**不阻塞引擎开发** |
-| **AI 会话无法执行命令** | 本工作区的沙箱不允许启动子进程，`git` / `npm` 对 AI 全部返回权限错误（**你自己电脑上的 git / npm 正常**）。处置：需要执行的命令见第七节 |
-| ~~本机无可用 GitHub 凭证~~ | **已排除**。`git` 与 `gh` 均已安装，只是 `gh` 未登录。处置：跑一次 `gh auth login`（见第七节第 0 步），**不需要 PAT** |
+| ~~AI 会话无法执行命令~~ | **已绕过**。推送改走 GitHub HTTP API（`scripts/push-commit-via-api.mjs`），构建改走云端 CI。详见 [agent-environment.md](agent-environment.md) |
+| ~~无 GitHub 凭证~~ | **已解决**。`gh auth login` 已登录 `1008611-creater`（token scopes: `repo`/`workflow`），推送已完成 |
 | OAuth 凭证未领取 | 降级为 P2 |
 | 报名状态未知 | 最高优先，立即确认 |
 
@@ -155,8 +124,8 @@ git push -u origin main
 
 | 时段 | 做什么 |
 |---|---|
-| 立刻 | `gh auth login` 登录 GitHub；确认报名；跑 `npm run build`；按第七节推送仓库 |
-| 接下来 1 h | Vercel 部署 → 拿到公网 Demo URL → 自己完整走一遍体验 |
+| 立刻 | **确认报名状态**；到 Vercel 导入仓库并部署（见 [DEPLOY.md](../DEPLOY.md) 第 3 步） |
+| 接下来 1 h | 拿到公网 Demo URL → 自己完整走一遍体验 → 确认 `/api/health` 返回 `credentials: true` |
 | 再 1 h | 对照 [submission.md](submission.md) 检查计划书，导出提交文档 |
 | 再 1 h | 提交表单（**提前交，不要卡最后 10 分钟**） |
 | 剩余 | 视频与封面（加分项，做不完不影响必交项） |

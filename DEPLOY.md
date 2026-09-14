@@ -1,61 +1,28 @@
-# 发布清单（你只需执行 3 步）
+# 发布清单（你只需执行 1 步：部署到 Vercel）
 
-> 最后更新：2026-09-14 ｜ 代码与文档已就绪，剩下三步必须由你本机执行
-> 原因：本会话沙箱禁止启动子进程，`git` / `npm` 全部返回 EPERM，无法代跑。
-
----
-
-## 第 1 步：本机构建验证（约 2 分钟）
-
-在项目根目录打开 PowerShell：
-
-```powershell
-cd E:\codex\heikesong3
-npm install
-npm run build
-```
-
-预期：出现 `Route (app)` 列表并显示 `Compiled successfully`。
-若报错，把完整报错贴回来，我按报错修。
-
-> 我已经做的：TypeScript 全量 47 文件 **0 诊断**，所有本地 import 可解析，
-> 客户端/服务端边界无泄漏，8 个 API route 全部声明 `runtime = "nodejs"`。
-> 唯一无法代跑的就是 `next build` 本身（它需要 fork 子进程）。
+> 最后更新：2026-09-14 ｜ 代码已推送、云端 CI 已通过
+> **现在只剩一件事：部署到 Vercel 拿公网 Demo 链接**（下方第 3 步）。
 
 ---
 
-## 第 2 步：推送到公开 GitHub 仓库（约 2 分钟）
+## ✅ 已完成：构建验证与代码推送（2026-09-14）
 
-**仓库已经建好了**（`no.2zhihu`，Public，目前是空的），所以这一步不用再建，直接推送。
+这两步**不用你再做了**，已经通过 GitHub 云端完成。
 
-在项目根目录打开 PowerShell 执行**一条命令**：
+| 步骤 | 结果 | 怎么核对 |
+|---|---|---|
+| 构建验证 | ✅ 云端 CI 全绿（装依赖 → 类型检查 → 构建） | [运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253) |
+| 代码推送 | ✅ 131 文件已推送，`main` = `71cf2ae` | <https://github.com/1008611-creater/no.2zhihu> |
 
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/push-to-github.ps1
-```
+为什么不用本机跑：本 AI 会话的沙箱禁止启动子进程（`git` / `npm` 都返回 EPERM），
+所以构建交给云端 CI、推送交给 GitHub HTTP API。原理见 [docs/agent-environment.md](docs/agent-environment.md)。
 
-脚本会自动：安全检查（确认 `.env.local` 被忽略）→ `git init` → 暂存 → 提交 → 推送到 `main`。
+CI 会在**每次 push 和每个 PR** 时自动重跑，之后队友改代码也有安全网。
 
-**如果要推到你刚建的另一个仓库**（你之前打开过 `github.com/new`），加一个参数即可：
-
-```powershell
-powershell -ExecutionPolicy Bypass -File scripts/push-to-github.ps1 -RepoUrl https://github.com/1008611-creater/<仓库名>.git
-```
-
-### 推送前自检（可选但推荐）
-
-```powershell
-git check-ignore -v .env.local
-```
-
-必须**有输出**（表示被忽略）。没有输出就停下 —— `.env.local` 里有真实 Access Secret，进仓库就泄漏了。
-脚本已经内置这道闸门，不通过会直接中止。
-
-**不会被推送的内容**：`.env.local`、`.official/`、`.refs/`、`.skills/`、`.tools/`、`.probe/`、`node_modules/`、`.next/`。
-实际推送约 **126 个文件**。
+> 顺带说明：仓库里有 `.github/workflows/ci.yml`，它不注入真实凭证（`ZHIHU_ACCESS_SECRET` 给空值），
+> 构建阶段走降级路径即可通过，不会把密钥带到 CI 日志里。
 
 ---
-
 ## 第 3 步：部署到 Vercel（约 3 分钟）
 
 1. 用 GitHub 账号登录 <https://vercel.com>。

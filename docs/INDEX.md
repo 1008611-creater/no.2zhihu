@@ -39,6 +39,7 @@
 | 对照 P0 验收项 | [acceptance.md](acceptance.md) |
 | 演示 / 录制 / 答辩 | [demo-script.md](demo-script.md) |
 | 部署到 Vercel、配环境变量 | [deployment.md](deployment.md) |
+| **部署到自己的服务器（推荐）** | [self-hosting.md](self-hosting.md) ｜ 一条命令：`scripts/deploy-server.sh` |
 | 导出封面图 / icon 的 PNG | 跑 `scripts/export-assets.ps1`（产物在 `docs/assets/export/`） |
 | AI 说「命令跑不了」/ 推不上仓库 / 构建验证 | [agent-environment.md](agent-environment.md) ← **执行边界与三层解法** |
 | 录演示视频 / 准备答辩 | [demo-video-script.md](demo-video-script.md) |
@@ -90,7 +91,7 @@ docs/                本目录
 docs/zhihu-api/      知乎开放平台官方接口文档（INDEX.md 为索引，references/ 按需读）
 .github/             PR 模板、Issue 模板、云端 CI（workflows/ci.yml）
 .official/           官方 Skill 与素材（已 gitignore，不入库）
-scripts/             工具脚本（含 push-via-api.mjs：不依赖 git 命令的推送）
+scripts/             工具脚本（push-commit-via-api.mjs：不依赖 git 命令的推送；已实测可用）
 .refs/               参考项目（已 gitignore，不入库）
 .skills/             内置顶级 Skill 工程（7 个，路由见 docs/skill-engineering.md；已 gitignore，用 scripts/fetch-skills.mjs 恢复）
 ```

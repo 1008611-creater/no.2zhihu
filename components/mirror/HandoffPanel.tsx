@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { toZhihuDraft } from "@/lib/domain/handoff";
 import { useMirror } from "@/lib/store/mirror-store";
@@ -18,6 +18,29 @@ export function HandoffPanel() {
   const { mirror, markHandoffOpened, confirmHandoff } = useMirror();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const draftRef = useRef<HTMLTextAreaElement | null>(null);
+
+  /**
+   * 为什么需要兜底：自托管用「IP + HTTP」访问时，浏览器会禁用安全剪贴板 API
+   * （它只在 HTTPS 或 localhost 下可用）。演示的最后一步正是「复制正文」，
+   * 所以这里退回到「选中文本 + execCommand」这条老路径，保证闭环在任何访问方式下都能走完。
+   */
+  const copyText = async (text: string): Promise<boolean> => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const el = draftRef.current;
+      if (!el) return false;
+      try {
+        el.focus();
+        el.select();
+        return document.execCommand("copy");
+      } catch {
+        return false;
+      }
+    }
+  };
 
   if (!mirror) return null;
 
@@ -42,10 +65,7 @@ export function HandoffPanel() {
       const data = await res.json();
       if (!data.ok) throw new Error(data.error ?? "生成深链失败");
 
-      try {
-        await navigator.clipboard.writeText(composed);
-        setCopied(true);
-      } catch { /* 剪贴板不可用时用户可手动复制 */ }
+      if (await copyText(composed)) setCopied(true);
 
       markHandoffOpened(data.editorUrl);
       window.open(data.editorUrl, "_blank", "noopener,noreferrer");
@@ -55,11 +75,11 @@ export function HandoffPanel() {
   };
 
   const copy = async () => {
-    try {
-      await navigator.clipboard.writeText(composed);
+    if (await copyText(composed)) {
+      setError(null);
       setCopied(true);
       setTimeout(() => setCopied(false), 2200);
-    } catch {
+    } else {
       setError("浏览器拒绝了剪贴板访问，请手动选中正文复制。");
     }
   };
@@ -90,7 +110,7 @@ export function HandoffPanel() {
       <div className="grid grid-2" style={{ gap: 14 }}>
         <div>
           <div className="mono dimmer" style={{ marginBottom: 8 }}>待搬运正文（{composed.length} 字）</div>
-          <textarea className="field" rows={9} readOnly value={composed} style={{ fontSize: 13 }} />
+          <textarea ref={draftRef} className="field" rows={9} readOnly value={composed} style={{ fontSize: 13 }} />
         </div>
         <div style={{ display: "grid", gap: 10, alignContent: "start" }}>
           <button className="btn" onClick={copy}>

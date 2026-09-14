@@ -8,7 +8,8 @@
 **Skill 分身**分别作答，标出这组回答**共同缺失的那一块**，再把缺口派给真实的人接管。
 虚拟回答负责把问题问清楚，真人负责给出只有亲身经历才能给出的答案。
 
-**线上 Demo**：待部署（见 [docs/runbook.md](docs/runbook.md) 第四节）
+**代码仓库**：<https://github.com/1008611-creater/no.2zhihu>（Public，已推送）
+**线上 Demo**：待部署（见 [DEPLOY.md](DEPLOY.md) 第 3 步）
 
 ## 状态
 
@@ -20,9 +21,9 @@
 | 视觉与动效规范 | 已定稿，见 [docs/design-system.md](docs/design-system.md) |
 | 看山角色引擎 | 已实现（10 状态 / Motion 驱动），见 [docs/character-engine.md](docs/character-engine.md) |
 | 知乎开放平台接入 | 已接通并实测（搜索 / 热榜 / 问题回答 / 直答 / 问题推荐） |
-| GitHub 公开仓库 | 🟡 仓库已创建（<https://github.com/1008611-creater/no.2zhihu>，Public）但**仍为空**，代码待推送，见 [DEPLOY.md](DEPLOY.md) |
-| 代码推送 | 待执行一次推送（推送不需要命令行，见 [docs/agent-environment.md](docs/agent-environment.md)） |
-| 构建验证 | 已加云端 CI（[.github/workflows/ci.yml](.github/workflows/ci.yml)），推送后自动跑类型检查与构建 |
+| GitHub 公开仓库 | ✅ 已推送（131 文件 / 14402 行），<https://github.com/1008611-creater/no.2zhihu> |
+| 代码推送 | ✅ 已完成，`main` = `71cf2ae`，见 [docs/agent-environment.md](docs/agent-environment.md) |
+| 构建验证 | ✅ 云端 CI 已跑通（类型检查 + 构建全绿），见 [Actions](https://github.com/1008611-creater/no.2zhihu/actions) |
 | 线上 Demo | 待部署到 Vercel |
 
 ## 快速开始
