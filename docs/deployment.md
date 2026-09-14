@@ -1,7 +1,7 @@
 # 部署说明
 
 > 最后更新：2026-09-14 ｜ 目标：拿到评委可直接打开的公网 Demo
-> 平台：Vercel（Next.js 官方支持，免费额度足够）
+> 平台：Vercel（备用路线；**推荐路线见 [self-hosting.md](self-hosting.md)**）
 
 ---
 

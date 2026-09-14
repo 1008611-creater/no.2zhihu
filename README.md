@@ -24,7 +24,7 @@
 | GitHub 公开仓库 | ✅ 已推送（131 文件 / 14402 行），<https://github.com/1008611-creater/no.2zhihu> |
 | 代码推送 | ✅ 已完成，`main` = `71cf2ae`，见 [docs/agent-environment.md](docs/agent-environment.md) |
 | 构建验证 | ✅ 云端 CI 已跑通（类型检查 + 构建全绿），见 [Actions](https://github.com/1008611-creater/no.2zhihu/actions) |
-| 线上 Demo | 待部署到 Vercel |
+| 线上 Demo | `https://zhihu.cauai.fun`（部署脚本已就绪，待执行） |
 
 ## 快速开始
 

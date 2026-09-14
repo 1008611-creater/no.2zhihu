@@ -65,7 +65,13 @@ powershell -ExecutionPolicy Bypass -File ".official/zhihu-skill-0.7.2/zhihu/scri
 "<binary_path>" auth status --verify
 ```
 
-## 四、部署到 Vercel
+## 四、部署（自托管优先）
+
+> 推荐自托管到 `zhihu.cauai.fun`，一条命令：
+> `curl -fsSL https://raw.githubusercontent.com/1008611-creater/no.2zhihu/main/scripts/deploy-server.sh -o deploy-server.sh && sudo bash deploy-server.sh --domain zhihu.cauai.fun`
+> 详见 [self-hosting.md](self-hosting.md)。以下为 Vercel 备用路线。
+
+### 备用：部署到 Vercel
 
 1. 用 GitHub 账号登录 <https://vercel.com>，Import 该仓库。
 2. Framework Preset 会自动识别为 Next.js。

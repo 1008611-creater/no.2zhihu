@@ -66,7 +66,7 @@
 | 动效 | Motion（`motion/react`） | 弹簧驱动；看山角色引擎 |
 | 样式 | 手写 CSS + 设计 token | 深色舞台 + 四色状态系统 |
 | 校验 | Zod | route handler 入参 |
-| 部署 | Vercel（Node runtime） | 公网 HTTPS |
+| 部署 | 自托管（Node runtime） | 公网 HTTPS `zhihu.cauai.fun` |
 
 ### 架构要点
 

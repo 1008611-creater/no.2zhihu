@@ -48,6 +48,8 @@ if [ "$UPDATE_ONLY" -eq 1 ]; then
   log "更新代码并重启"
   [ -d "$APP_DIR/.git" ] || die "$APP_DIR 还不是 git 仓库，请先完整部署一次"
   cd "$APP_DIR"
+  # 与首次部署保持一致：显式声明目录可信，避免 git 因「归属可疑」拒绝操作
+  sudo -u "$RUN_USER" git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
   sudo -u "$RUN_USER" git fetch --all
   sudo -u "$RUN_USER" git reset --hard "origin/$BRANCH"
   sudo -u "$RUN_USER" npm install --no-audit --no-fund

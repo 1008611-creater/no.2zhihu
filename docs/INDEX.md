@@ -38,7 +38,7 @@
 | 交「产品说明计划书」（必交） | [product-plan.md](product-plan.md) |
 | 对照 P0 验收项 | [acceptance.md](acceptance.md) |
 | 演示 / 录制 / 答辩 | [demo-script.md](demo-script.md) |
-| 部署到 Vercel、配环境变量 | [deployment.md](deployment.md) |
+| 部署到 Vercel（备用）、配环境变量 | [deployment.md](deployment.md) |
 | **部署到自己的服务器（推荐）** | [self-hosting.md](self-hosting.md) ｜ 一条命令：`scripts/deploy-server.sh` |
 | 导出封面图 / icon 的 PNG | 跑 `scripts/export-assets.ps1`（产物在 `docs/assets/export/`） |
 | AI 说「命令跑不了」/ 推不上仓库 / 构建验证 | [agent-environment.md](agent-environment.md) ← **执行边界与三层解法** |
@@ -55,14 +55,15 @@
 - 刘看山素材与知乎故事素材**仅比赛期间授权**，见 [../NOTICE.md](../NOTICE.md)。
 - 搜索类接口的条数参数是 `Count` 不是 `Limit`（传错静默回退 10 条）→ 见 [api-audit.md](api-audit.md)。
 - 直答默认**开启**，设 `ZHIHU_USE_ZHIDA=0` 可关（见 [architecture.md](architecture.md)）。
-- **GitHub 推送不需要 PAT**：本机 `git` 与 `gh` 均已安装，只差一次 `gh auth login` 浏览器授权；推送脚本已内置登录检测与 `.env.local` 泄漏闸门 → 见 [roadmap.md](roadmap.md) 第七节。
+- **GitHub 推送已完成**：`gh auth login` 已登录 `1008611-creater`，无需 PAT；推送脚本内置登录检测与 `.env.local` 泄漏闸门 → 见 [roadmap.md](roadmap.md) 第七节。
 - **OAuth 不纳入本次交付**：官方明确「是否接入由作品需求决定」，属选交项；App ID / App Key 在赛事项目创建后才分配到项目详情页，当前「我的项目 = 0」看不到属正常。
+- **公网地址定为自托管**：`https://zhihu.cauai.fun` → 服务器 `114.134.185.16`；DNS 托管在 Cloudflare（`cauai.fun`），`zhihu` 记录待添加 → 见 [self-hosting.md](self-hosting.md)。
 
 ## 四、外部入口
 
 | 用途 | 地址 |
 |---|---|
-| **代码仓库（公开）** | https://github.com/1008611-creater/no.2zhihu （已创建，待推送；本机 `gh` 已安装、未登录，跑一次 `gh auth login` 即可推） |
+| **代码仓库（公开）** | https://github.com/1008611-creater/no.2zhihu （已推送，`main` = `a0c30e2`，云端 CI 全绿） |
 | 赛事主页 | https://www.zhihu.com/hackathon?activity_code=zhihu_hackathon_2026_p2 |
 | 参赛者开发流程文档 | https://pcnsiq9mmnww.feishu.cn/wiki/Pd1UwIIBriW0DBk8qlIczBAVnJc |
 | 开发者手册与提交清单 | https://my.feishu.cn/docx/Mc80dR5XvoPaYDxcTasc04POnjd |

@@ -5,7 +5,7 @@
 
 ## 一、录制前 5 分钟准备
 
-1. 打开 <https://vercel 域名>/api/health，确认 `ok: true`、`credentials: true`。
+1. 打开 <https://zhihu.cauai.fun>/api/health，确认 `ok: true`、`credentials: true`。
 2. 打开首页，**先跑一次**演示问题（把结果缓存 30 分钟，避免现场等待）。
 3. 关掉其他标签页、通知、微信弹窗。
 4. 分辨率 1920×1080，浏览器缩放 100%，隐藏书签栏。

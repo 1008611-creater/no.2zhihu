@@ -6,14 +6,14 @@
 
 | 层 | 选型 | 版本 | 决策理由 |
 |---|---|---|---|
-| 框架 | **Next.js App Router** | 14.2.5 | 一套代码同时交付页面与服务端代理；凭证留在服务端；Vercel 一键部署 |
+| 框架 | **Next.js App Router** | 14.2.5 | 一套代码同时交付页面与服务端代理；凭证留在服务端；可自托管也可 Vercel 一键部署 |
 | 语言 | **TypeScript** | 5.5+ | `strict` 模式，上游响应全部显式建模 |
 | UI 运行时 | **React** | 18.3.1 | Next 14 配套 |
 | 动效 | **Motion**（`motion/react`） | ^11.11 | 弹簧驱动 + 声明式；看山角色引擎与页面动效统一用它 |
 | 样式 | **手写 CSS + 设计 token** | — | 见下方决策 |
 | 校验 | **Zod** | ^3.23 | route handler 入参校验 |
 | 服务端隔离 | **server-only** | ^0.0.1 | 编译期阻止 `lib/zhihu` 被打进客户端 bundle |
-| 部署 | **Vercel** | — | 公网 HTTPS、免运维、支持环境变量 Secret |
+| 部署 | **自托管（推荐）/ Vercel（备用）** | — | 自托管：常驻进程、缓存共享、无 60s 上限，见 [self-hosting.md](self-hosting.md) |
 
 ### 关于样式：为什么不用 Tailwind
 
@@ -137,7 +137,7 @@ TTL 30 分钟。同一问题重复演示**不消耗新额度**——这是 Demo 
 | 构建命令 | `next build` |
 | 环境变量 | `ZHIHU_ACCESS_SECRET`（Production + Preview） |
 | 运行时 | Node.js（**不是 Edge**）——上游 TLS 依赖 Node 栈 |
-| 域名 | `*.vercel.app` 公网 HTTPS |
+| 域名 | `zhihu.cauai.fun` 公网 HTTPS（备用 `*.vercel.app`） |
 | 探针 | `/api/health` 返回 `{ ok, credentials, cache }` |
 
 > ⚠️ 不要部署到 Edge Runtime。审计确认 Windows/部分环境下 Schannel 握手失败，
@@ -148,7 +148,7 @@ TTL 30 分钟。同一问题重复演示**不消耗新额度**——这是 Demo 
 进程内 Map 在 Serverless 多实例下会各自为政。对本次交付：
 
 - **可接受**。Demo 流量小，实例数少；即使缓存未命中，额度上限（热榜 100/天）也只影响重复演示。
-- **兜底**：`/api/mirror` 的结果额外写入 `.snapshots/`（本地）或 Vercel KV（若接入），
+- **兜底**：`/api/mirror` 的结果额外写入 `.snapshots/`（本地），
   演示时优先读快照。这是「Demo 一定跑得起来」的最后一道保险。
 - **不在本次范围**：引入 Redis / KV 做分布式缓存。
 

@@ -1,17 +1,16 @@
-import { SKILL_SEEDS } from "./skills";
-import type { RoutingDecision } from "./types";
+import { PERSONA_SKILLS, SKILL_SEEDS } from "./skills";
+import type { Persona, RoutingDecision, Skill } from "./types";
 
 /**
- * Human Router：决定「这个问题该由哪几个 Skill 分身来答」。
+ * Human Router：决定「这个问题该由哪几个分身来答」。
  *
- * 这是产品里最关键的一步，所以它的决策必须是可解释的：
- * 每个被选中的分身都会给出命中的信号词与得分，前端直接展示。
+ * v1 起有两条路径，必须先分清：
  *
- * 路由规则（纯函数，可测试、可复现）：
- *   1. 对每个分身的 triggers 做信号词匹配，命中一次加权重；
- *   2. 问题里出现数字/年限/机构名等「事实锚点」时，提高亲历者与实操派权重；
- *   3. 出现「评价/争议/该不该」等判断词时，提高反驳者与风险审计权重；
- *   4. 取分数最高的 3–6 个分身，保证至少 3 个、至多 6 个。
+ *   - **manual（手动指定）** —— 用户勾选了答主。这是产品主线：
+ *     「我想看谁回答」。路由只负责校验、去重、以及用户没选满时补位。
+ *   - **auto（自动推荐）** —— 用户没选人。按问题信号词从答主名册里挑 3 位。
+ *
+ * 两条路径都必须可解释：每个被选中的分身都带命中的理由与得分，前端直接展示。
  */
 
 const MIN_SKILLS = 3;
@@ -21,90 +20,165 @@ const FACT_ANCHOR = /(\d{2,}|一年|两年|三年|个月|万|千|亿|％|%|大�
 const JUDGEMENT = /(评价|值得|该不该|是不是|争议|看法|好坏|优劣|骗局|智商税)/;
 const PERSONAL = /(我|自己|亲身|家里|身边|朋友|同事)/;
 
-export function routeQuestion(title: string): RoutingDecision {
-  const text = title.trim();
-  const scores = new Map<string, { score: number; reasons: string[] }>();
-
-  for (const seed of SKILL_SEEDS) {
-    let score = 0.2;
-    const reasons: string[] = [];
-
-    const hits = seed.triggers.filter((t) => text.includes(t));
-    if (hits.length > 0) {
-      score += hits.length * 0.22;
-      reasons.push(`命中信号词「${hits.slice(0, 3).join("、")}」`);
-    }
-
-    if (FACT_ANCHOR.test(text)) {
-      if (seed.id === "lived-experience") { score += 0.18; reasons.push("问题含事实锚点，需要一手经验"); }
-      if (seed.id === "practitioner") { score += 0.15; reasons.push("问题含事实锚点，需要可执行方法"); }
-    }
-
-    if (JUDGEMENT.test(text)) {
-      if (seed.id === "contrarian") { score += 0.24; reasons.push("问题要求判断，需要反方视角"); }
-      if (seed.id === "risk-auditor") { score += 0.16; reasons.push("问题要求判断，需要列出代价"); }
-    }
-
-    if (PERSONAL.test(text) && seed.id === "lived-experience") {
-      score += 0.2; reasons.push("问题以第一人称提出，亲历者最相关");
-    }
-
-    if (seed.kind === "analysis" && /(为什么|本质|原理|机制)/.test(text)) {
-      score += 0.2; reasons.push("问题在追问机制");
-    }
-
-    if (seed.kind === "story" && /(故事|小说|创作|叙事|人物)/.test(text)) {
-      score += 0.25; reasons.push("问题属于叙事/创作类");
-    }
-
-    scores.set(seed.id, { score: Math.min(score, 1), reasons });
-  }
-
-  const ranked = [...scores.entries()]
-    .map(([skillId, v]) => ({ skillId, score: Number(v.score.toFixed(2)), reasons: v.reasons }))
-    .sort((a, b) => b.score - a.score);
-
-  // 阈值筛选 + 覆盖度兜底：问题越长，越需要多视角
-  let picked = ranked.filter((r) => r.score >= 0.34).slice(0, MAX_SKILLS);
-  const wantAtLeast = text.length >= 12 ? 4 : MIN_SKILLS;
-  if (picked.length < wantAtLeast) picked = ranked.slice(0, wantAtLeast);
-  picked = picked.slice(0, MAX_SKILLS);
-
-  const intent = JUDGEMENT.test(text)
+/** 问题意图分类，用于 UI 文案与推荐解释。 */
+export function classifyIntent(text: string): string {
+  return JUDGEMENT.test(text)
     ? "判断型问题"
     : /(怎么做|如何|方法|教程|入门)/.test(text)
       ? "方法型问题"
       : /(为什么|本质|原理|机制)/.test(text)
         ? "解释型问题"
         : "开放讨论型问题";
+}
 
+/**
+ * 答主推荐打分：把「这个人跟这个问题有多相关」算成一个可解释的分数。
+ *
+ * 只用答主自己声明的 knows / stance 做匹配，不引入任何模型自评。
+ * 这保证同一个问题 + 同一份名册，任何时候都推荐同样的人。
+ */
+function scorePersona(persona: Persona, text: string): { score: number; reasons: string[] } {
+  let score = 0.25;
+  const reasons: string[] = [];
+
+  const hits = persona.knows.filter((k) => {
+    // 把「互联网商业模式与资本运作」这类长描述拆成短词再匹配
+    const parts = k.split(/[、与和的及·]/).flatMap((p) => p.split(/[A-Za-z]+/)).filter((p) => p.length >= 2);
+    return parts.some((p) => text.includes(p));
+  });
+  if (hits.length > 0) {
+    score += Math.min(hits.length * 0.18, 0.45);
+    reasons.push(`领域命中「${hits[0].slice(0, 10)}」`);
+  }
+
+  const stanceHits = persona.stance.filter((s) => {
+    const parts = s.split(/[，。；、（）()]/).filter((p) => p.length >= 3);
+    return parts.some((p) => text.includes(p.slice(0, 4)));
+  });
+  if (stanceHits.length > 0) {
+    score += 0.12;
+    reasons.push("立场可能形成有价值的判断");
+  }
+
+  if (PERSONAL.test(text) && persona.voice.sentenceLength === "short") {
+    score += 0.08;
+    reasons.push("问题偏个人处境，这位答主习惯第一人称直给");
+  }
+
+  if (FACT_ANCHOR.test(text) && persona.voice.emotion >= 0.5) {
+    score += 0.06;
+  }
+
+  return { score: Math.min(Number(score.toFixed(2)), 1), reasons };
+}
+
+/** 自动推荐：不指定答主时，从名册里挑 3 位最相关的。 */
+export function recommendPersonas(title: string, count = MIN_SKILLS): Skill[] {
+  const text = title.trim();
+  const ranked = PERSONA_SKILLS.map((skill) => {
+    const { score, reasons } = scorePersona(skill.persona!, text);
+    return { skill, score, reasons };
+  }).sort((a, b) => b.score - a.score);
+
+  return ranked.slice(0, count).map((r) => r.skill);
+}
+
+/**
+ * 主入口：问题 + 用户选中的答主 → 路由决策。
+ *
+ * @param title    问题标题
+ * @param handles  用户勾选的答主 handle；为空则走自动推荐
+ */
+export function routeQuestion(title: string, handles: string[] = []): RoutingDecision {
+  const text = title.trim();
+  const intent = classifyIntent(text);
+
+  const picked = resolveSkills(handles);
+
+  if (picked.length > 0) {
+    const manual = picked.filter((s) => handles.includes(s.persona!.handle));
+    const added = picked.filter((s) => !handles.includes(s.persona!.handle));
+
+    const parts: string[] = [`识别为「${intent}」，你指定了 ${manual.length} 位答主`];
+    if (added.length > 0) {
+      parts.push(`看山补上 ${added.map((s) => s.name).join("、")} 补足讨论`);
+    }
+
+    return {
+      mode: "manual",
+      intent,
+      picks: picked.map((s) => {
+        const isManual = handles.includes(s.persona!.handle);
+        const { score, reasons } = scorePersona(s.persona!, text);
+        return {
+          skillId: s.id,
+          score: isManual ? 1 : score,
+          reason: isManual
+            ? "你指定的答主"
+            : reasons.length > 0
+              ? `补充视角：${reasons.join("；")}`
+              : "补充视角，避免讨论被单一立场垄断",
+        };
+      }),
+      summary: parts.join("；") + "。",
+      queries: picked.map((s) => buildPersonaQuery(s.persona!, text)),
+    };
+  }
+
+  // 自动推荐路径
+  const recommended = recommendPersonas(text, MIN_SKILLS);
   return {
+    mode: "auto",
     intent,
-    picks: picked.map((p) => ({
-      skillId: p.skillId,
-      score: p.score,
-      reason:
-        p.reasons.length > 0
-          ? p.reasons.join("；")
-          : "作为补充视角入选，避免回答被单一叙事垄断",
-    })),
-    summary: `识别为「${intent}」，从 6 个分身中选出 ${picked.length} 个覆盖${picked
-      .map((p) => SKILL_SEEDS.find((s) => s.id === p.skillId)?.name)
-      .filter(Boolean)
-      .join("、")}视角。`,
-    queries: picked.map((p) => {
-      const seed = SKILL_SEEDS.find((s) => s.id === p.skillId)!;
-      return buildQuery(seed.queryTemplate, text);
+    picks: recommended.map((s) => {
+      const { score, reasons } = scorePersona(s.persona!, text);
+      return {
+        skillId: s.id,
+        score,
+        reason: reasons.length > 0 ? reasons.join("；") : "按领域与风格搭配入选",
+      };
     }),
+    summary: `识别为「${intent}」，从 ${PERSONA_SKILLS.length} 位答主里推荐了 ${recommended
+      .map((s) => s.name)
+      .join("、")}。你可以换人，也可以继续邀请。`,
+    queries: recommended.map((s) => buildPersonaQuery(s.persona!, text)),
   };
 }
+
+/** 把 handle 列表解析成 Skill：非法 handle 直接忽略，不猜。 */
+export function resolveSkills(handles: string[]): Skill[] {
+  const seen = new Set<string>();
+  const out: Skill[] = [];
+  for (const h of handles) {
+    const skill = PERSONA_SKILLS.find((s) => s.persona!.handle === h);
+    if (!skill || seen.has(h)) continue;
+    seen.add(h);
+    out.push(skill);
+    if (out.length >= MAX_SKILLS) break;
+  }
+  return out;
+}
+
+/**
+ * 答主型分身的检索词。
+ *
+ * 实测（2026-09-14）：直接拿答主名字去搜，返回的是别人讨论他的内容，
+ * 命中率极低。所以答主型分身**不靠检索名字**找证据，而是用「领域关键词」
+ * 找这位答主可能会谈的相关公开内容，并在卡片上如实标注证据来源。
+ */
+function buildPersonaQuery(persona: Persona, title: string): string {
+  const topic = extractTopic(title);
+  const domain = persona.knows[0]?.split(/[、与和的]/)[0] ?? "";
+  return domain ? `${topic} ${domain}` : topic;
+}
+
+/* ------------------------------ 主题词抽取 ------------------------------ */
 
 /**
  * 从问题标题里抽一个短主题词，用于填查询模板。
  *
  * 这里刻意取短：实测发现把整句问题塞进知乎搜索会让所有分身
- * 返回同一批结果，导致多视角退化成同一个视角。短主题词 + 每个分身
- * 各自的短后缀，才能拿到真正不同的证据。
+ * 返回同一批结果，导致多视角退化成同一个视角。
  */
 const STOP = /^(如何|怎么|为什么|什么|哪些|是不是|该不该|有没有|能不能|要不要|值得|值得吗|请问|大家|今年|现在|最近)$/;
 
@@ -116,7 +190,6 @@ export function extractTopic(title: string): string {
 
   const parts = cleaned.split(" ").filter((p) => p.length > 0 && !STOP.test(p));
   if (parts.length > 1) {
-    // 取前 3 个词，但总长不超过 16 字，避免查询过窄
     const out: string[] = [];
     let len = 0;
     for (const p of parts) {
@@ -127,7 +200,6 @@ export function extractTopic(title: string): string {
     return out.join(" ");
   }
 
-  // 中文长句没有空格：剥掉疑问句式，取前 10 字
   const stripped = cleaned
     .replace(/^(如何|怎么|为什么|什么|哪些|是不是|该不该|有没有|能不能|要不要)/, "")
     .replace(/(真的是|真的|是不是|该不该|吗|呢|如何|怎么办)$/g, "")
@@ -135,6 +207,4 @@ export function extractTopic(title: string): string {
   return (stripped || cleaned).slice(0, 10);
 }
 
-function buildQuery(template: string, title: string): string {
-  return template.replace("{topic}", extractTopic(title));
-}
+export { SKILL_SEEDS };

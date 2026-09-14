@@ -1,13 +1,54 @@
-import type { Skill, SkillKind } from "./types";
+import { PERSONAS } from "./personas";
+import type { Persona, Skill, SkillKind } from "./types";
 
 /**
  * Skill 分身目录。
  *
- * 每个分身代表知乎社区里一种稳定的回答视角，由真实公开回答的
- * 标题 / 作者 / 摘要 / 互动数据蒸馏而来（见 SkillSource）。
- * 分身的查询词用于在知乎搜索 API 上取回真实证据，回答正文由直答
- * 模型基于这些证据生成，不允许脱离证据编造。
+ * v1 起分两类：
+ *
+ *   1. **答主型（kind: "persona"）** —— 主体。每位对应一个真实知乎答主，
+ *      由 Persona 四要素（知道什么 / 怎么看 / 怎么说 / 不知道什么）驱动。
+ *      这是「指定某个人回答这个问题」这个核心体验的载体。
+ *   2. **视角型（supplementary: true）** —— 补充。代表社区里一种稳定的
+ *      回答角度，由真实公开回答的标题 / 作者 / 摘要蒸馏而来。只在用户
+ *      没有指定答主时补位，或者作为「换个角度看」的附加层。
+ *
+ * 两类都只描述「怎么答」，不携带答案本身；正文必须由直答基于真实证据生成。
  */
+
+/* ------------------------------ 答主型 ------------------------------ */
+
+/** 从人格派生出分身。答主型分身的 lens/tone/keywords 全部来自 Persona，保证一致。 */
+export function skillFromPersona(p: Persona): Skill {
+  return {
+    id: `persona:${p.handle}`,
+    name: p.displayName,
+    kind: "persona",
+    lens: p.headline,
+    query: "",
+    keywords: p.knows.slice(0, 4),
+    tone: p.voice.tone,
+    accent: p.accent,
+    sources: p.corpus.sources,
+    confidence: p.corpus.real
+      ? Math.min(0.4 + p.corpus.sampleSize * 0.015, 0.95)
+      : 0.3,
+    persona: p,
+  };
+}
+
+export const PERSONA_SKILLS: Skill[] = PERSONAS.map(skillFromPersona);
+
+export const PERSONA_SKILL_BY_HANDLE = new Map(
+  PERSONA_SKILLS.map((s) => [s.persona!.handle, s]),
+);
+
+/** 分身 id 约定：persona:<handle>。这里做一层容错解析。 */
+export function personaHandleOfSkillId(skillId: string): string | null {
+  return skillId.startsWith("persona:") ? skillId.slice("persona:".length) : null;
+}
+
+/* ------------------------------ 视角型（降级为补充） ------------------------------ */
 
 interface SkillSeed {
   id: string;
@@ -94,5 +135,9 @@ export const SKILL_SEEDS: SkillSeed[] = [
 export const SKILL_BY_ID = new Map(SKILL_SEEDS.map((s) => [s.id, s]));
 
 export function skillAccentOf(id: string): Skill["accent"] {
+  const persona = PERSONA_SKILL_BY_HANDLE.get(id);
+  if (persona) return persona.accent;
   return SKILL_BY_ID.get(id)?.accent ?? "blue";
 }
+
+export type { SkillSeed };

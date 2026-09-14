@@ -43,7 +43,7 @@
 
 | 提交项 | 必需 | 我们的产出 | 状态 |
 |---|---|---|---|
-| ① 可运行体验链接 | **必交** | Vercel 公网 URL | ⬜ 待部署 |
+| ① 可运行体验链接 | **必交** | `https://zhihu.cauai.fun`（自托管；Vercel 备用） | 🟡 部署脚本已就绪，待执行 |
 | ② 产品说明计划书 | **必交** | [product-plan.md](product-plan.md) / [submission.md](submission.md) | ✅ 已定稿 |
 | ③ 代码仓库链接 | 加分 | https://github.com/1008611-creater/no.2zhihu | 🟡 待推送 |
 | ④ 项目演示视频 | 加分 | [demo-video-script.md](demo-video-script.md)（脚本就绪，待录制） | 🟡 |
@@ -86,5 +86,5 @@
 |---|---|---|
 | 知乎上游限流 | 并发取证据时部分分身拿到空来源 | 已改为串行闸门 + 退避重试；降级结果只缓存 60 秒 |
 | 直答额度（100/天） | 演示中途耗尽 | 结果按问题缓存 30 分钟；`ZHIHU_USE_ZHIDA=0` 可强制关闭 |
-| Vercel 冷启动 | 首次请求较慢 | `/api/mirror` 设 `maxDuration = 60`；演示前预热一次 |
+| 首次请求较慢 | 冷启动/构建后首次调用 | `/api/mirror` 设 `maxDuration = 60`；演示前预热一次 |
 | 刘看山素材授权 | 赛后不可商用 | 仓库附 NOTICE.md 明确授权范围 |

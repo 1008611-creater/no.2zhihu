@@ -1,7 +1,8 @@
-# 发布清单（你只需执行 1 步：部署到 Vercel）
+# 发布清单（部署到你自己的服务器 zhihu.cauai.fun）
 
 > 最后更新：2026-09-14 ｜ 代码已推送、云端 CI 已通过
-> **现在只剩一件事：部署到 Vercel 拿公网 Demo 链接**（下方第 3 步）。
+> **现在只剩一件事：把 Demo 部署到你的服务器，拿到 https://zhihu.cauai.fun**（下方第 3 步）。
+> Vercel 作为备用路线保留在第 3 步 B 方案。
 
 ---
 
@@ -12,7 +13,7 @@
 | 步骤 | 结果 | 怎么核对 |
 |---|---|---|
 | 构建验证 | ✅ 云端 CI 全绿（装依赖 → 类型检查 → 构建） | [运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253) |
-| 代码推送 | ✅ 131 文件已推送，`main` = `71cf2ae` | <https://github.com/1008611-creater/no.2zhihu> |
+| 代码推送 | ✅ 已推送，`main` = `a0c30e2` | <https://github.com/1008611-creater/no.2zhihu> |
 
 为什么不用本机跑：本 AI 会话的沙箱禁止启动子进程（`git` / `npm` 都返回 EPERM），
 所以构建交给云端 CI、推送交给 GitHub HTTP API。原理见 [docs/agent-environment.md](docs/agent-environment.md)。
@@ -23,25 +24,64 @@ CI 会在**每次 push 和每个 PR** 时自动重跑，之后队友改代码也
 > 构建阶段走降级路径即可通过，不会把密钥带到 CI 日志里。
 
 ---
-## 第 3 步：部署到 Vercel（约 3 分钟）
+## 第 3 步：部署到你的服务器（约 10 分钟，推荐）
 
-1. 用 GitHub 账号登录 <https://vercel.com>。
-2. **Add New → Project → Import Git Repository**，选 `no.2zhihu`。
-3. Framework Preset 自动识别为 **Next.js**，不要改。
-4. 展开 **Environment Variables**，添加：
+### 3.1 加一条 DNS 解析（约 1 分钟）
 
-| Name | Value | Environments |
-|---|---|---|
-| `ZHIHU_ACCESS_SECRET` | 你的 Access Secret | Production + Preview + Development |
+到 Cloudflare 的 `cauai.fun` → **DNS → Records → Add record**：
 
-5. 点 **Deploy**，等 1–2 分钟。
-6. 打开 `https://<项目名>.vercel.app/api/health`，确认：
+| 字段 | 填什么 |
+|---|---|
+| Type | `A` |
+| Name | `zhihu` |
+| IPv4 address | `114.134.185.16` |
+| Proxy status | **DNS only（灰色云朵）** |
+| TTL | Auto |
+
+灰云能让服务器自己申请 HTTPS 证书，配置最简单。
+
+> 如果你更想让 Cloudflare 挡在前面，就选橙云，并把 SSL 模式设为 **Full**，
+> 部署命令改成 `--no-ssl`。详见 [docs/self-hosting.md](docs/self-hosting.md)。
+
+### 3.2 在服务器上执行一条命令（约 8 分钟）
+
+SSH 登录服务器（root），粘贴执行：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/1008611-creater/no.2zhihu/main/scripts/deploy-server.sh -o deploy-server.sh
+sudo bash deploy-server.sh --domain zhihu.cauai.fun
+```
+
+脚本自动完成 8 步：装基础软件 → 装 Node 20 → 建运行用户 → 拉代码 →
+配环境变量 → 装依赖并构建 → 配开机自启 → 配 nginx 反代（带域名时自动申请证书）。
+
+跑到第 5 步会**交互式地问你要 Access Secret**，直接粘贴回车（输入不回显）。
+密钥只写进服务器上的 `.env.local`（权限 600），不会进仓库。
+
+### 3.3 验证
+
+打开 `https://zhihu.cauai.fun/api/health`，应返回：
 
 ```json
 { "ok": true, "credentials": true, "cache": { "size": 0, "inflight": 0 } }
 ```
 
-`credentials: false` 说明环境变量没配上，回第 4 步检查，改完要 **Redeploy** 才生效。
+`credentials: false` 说明密钥没配上，重跑部署脚本即可（它会保留已配置的密钥）。
+
+---
+
+## 第 3 步 B 方案：部署到 Vercel（备用，约 3 分钟）
+
+如果服务器临时出问题，用 Vercel 兜底：
+
+1. 用 GitHub 账号登录 <https://vercel.com>。
+2. **Add New → Project → Import Git Repository**，选 `no.2zhihu`。
+3. Framework Preset 自动识别为 **Next.js**，不要改。
+4. 展开 **Environment Variables**，添加 `ZHIHU_ACCESS_SECRET`（Production + Preview + Development）。
+5. 点 **Deploy**，等 1–2 分钟。
+6. 打开 `https://<项目名>.vercel.app/api/health`，确认 `credentials: true`。
+
+`credentials: false` 说明环境变量没配上，改完要 **Redeploy** 才生效。
 
 ---
 
@@ -74,7 +114,7 @@ powershell -ExecutionPolicy Bypass -File scripts/export-assets.ps1
 
 | 提交项 | 必需 | 填什么 |
 |---|---|---|
-| ① 可运行体验链接 | **必交** | `https://<项目名>.vercel.app` |
+| ① 可运行体验链接 | **必交** | `https://zhihu.cauai.fun`（自托管）；备用 `https://<项目名>.vercel.app` |
 | ② 产品说明计划书 | **必交** | [docs/product-plan.md](docs/product-plan.md) 导出成 PDF / 飞书文档上传 |
 | ③ 代码仓库链接 | 加分 | `https://github.com/1008611-creater/no.2zhihu` |
 | ④ 项目演示视频 | 加分 | 按 [docs/demo-script.md](docs/demo-script.md) 录制后填公开链接 |

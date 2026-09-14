@@ -24,8 +24,8 @@
 | 9 | 首页接线 | app/page.tsx | 输入问题 → 走完整闭环 | ✅ 已完成 |
 | 10 | 降级路径 | 全站 | 无凭证/额度耗尽/空结果有真实提示 | ✅ 已完成 |
 | 11 | 构建通过 | GitHub Actions | 类型检查 + `npm run build` 全绿 | ✅ 已完成（云端 CI，[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253)） |
-| 12 | 部署（自托管 / Vercel 二选一） | 公网 URL | 评委可直接打开体验 | ⬜ 待办；**推荐自托管**（额度/超时/网络都更优），见 [self-hosting.md](self-hosting.md)，Vercel 作备用 |
-| 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | ✅ 已完成（131 文件，`main` = `71cf2ae`） |
+| 12 | 部署到自己的服务器（Vercel 作备用） | 公网 URL `https://zhihu.cauai.fun` | 评委可直接打开体验 | 🟡 脚本与文档已就绪，待你在服务器执行一次；见 [self-hosting.md](self-hosting.md) |
+| 13 | 推送公开 GitHub 仓库 | 仓库 URL | 公网可访问 | ✅ 已完成（`main` = `a0c30e2`，含自托管脚本；云端 CI 全绿） |
 | 14 | 产品说明/计划书 | submission.md | 回答官方 6 个必答问题 | ✅ 已定稿 |
 
 ## 三、P1（加分）
@@ -63,27 +63,24 @@
 ## 六、关键路径（剩余部分）
 
 ```
-确认报名状态                                  ← 只有你能确认（最高优先）
-  ↓
-✅ 推送代码到 no.2zhihu                       ← 已完成（71cf2ae）
+✅ 推送代码到 no.2zhihu                       ← 已完成（a0c30e2）
   ↓
 ✅ 构建验证                                   ← 已完成（云端 CI 全绿）
   ↓
-⬜ Vercel 导入仓库 + 配 ZHIHU_ACCESS_SECRET    ← 拿到公网 Demo URL（见 DEPLOY.md）
+⬜ Cloudflare 给 zhihu 加 A 记录 → 服务器跑一次部署脚本  ← 拿到 https://zhihu.cauai.fun（见 self-hosting.md）
   ↓
 ⬜ 提交表单（Demo URL + 计划书 + 仓库链接）     ← 截止 2026-09-15 10:00
 ```
-## 七、代码已推送（2026-09-14 完成）
+## 七、代码已推送（2026-09-14 完成，含后续更新）
 
 仓库：<https://github.com/1008611-creater/no.2zhihu>（Public）
 
 | 项 | 值 |
 |---|---|
 | 分支 | `main` |
-| 提交 | `71cf2ae`（父提交 `d6ba792`，即 GitHub 自动生成的初始 README） |
-| 文件数 | 131 个 / 14402 行 |
-| tree 哈希 | `99c7e13`，与本地工作区**逐字节一致** |
-| 云端 CI | ✅ 类型检查 + 构建全绿（[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34835482253)） |
+| 提交 | `a0c30e2`（在 `71cf2ae` 之上追加自托管脚本、自托管文档、封面资源导出、剪贴板兜底） |
+| 文件数 | 134 个 |
+| 云端 CI | ✅ 类型检查 + 构建全绿（[运行记录](https://github.com/1008611-creater/no.2zhihu/actions/runs/34836317907)） |
 
 ### 怎么推的（供复盘）
 
@@ -117,14 +114,14 @@ npm run dev
 | **刘看山官方素材包未下载成功** | 飞书附件下载被浏览器拦截。处置：① 用可见浏览器手动下载 ② 或先用原创几何实现，素材到位后校准比例。**不阻塞引擎开发** |
 | ~~AI 会话无法执行命令~~ | **已绕过**。推送改走 GitHub HTTP API（`scripts/push-commit-via-api.mjs`），构建改走云端 CI。详见 [agent-environment.md](agent-environment.md) |
 | ~~无 GitHub 凭证~~ | **已解决**。`gh auth login` 已登录 `1008611-creater`（token scopes: `repo`/`workflow`），推送已完成 |
-| OAuth 凭证未领取 | 降级为 P2 |
+| OAuth 凭证未领取 | 官方写明「是否接入由作品需求决定」，属选交项，本次不接入（降级为 P2） |
 | 报名状态未知 | 最高优先，立即确认 |
 
 ## 九、时间盒建议
 
 | 时段 | 做什么 |
 |---|---|
-| 立刻 | **确认报名状态**；到 Vercel 导入仓库并部署（见 [DEPLOY.md](../DEPLOY.md) 第 3 步） |
+| 立刻 | 到 Cloudflare 给 `zhihu` 加一条 A 记录指向 `114.134.185.16`（灰云），然后在服务器跑一次部署脚本（见 [self-hosting.md](self-hosting.md)） |
 | 接下来 1 h | 拿到公网 Demo URL → 自己完整走一遍体验 → 确认 `/api/health` 返回 `credentials: true` |
 | 再 1 h | 对照 [submission.md](submission.md) 检查计划书，导出提交文档 |
 | 再 1 h | 提交表单（**提前交，不要卡最后 10 分钟**） |

@@ -1,12 +1,79 @@
 // 「二号知乎」领域模型
-// 核心概念：每个真实问题 → 镜像问题（Mirror）→ 多个 Skill 分身作答 → 缺口识别 → 真人补充 → 搬运回知乎 → Human Mesh 更新
+// 核心概念：每个真实问题 → 镜像问题（Mirror）→ 多个答主分身作答 → 缺口识别 → 真人补充 → 搬运回知乎 → Human Mesh 更新
+//
+// v1 重构（2026-09-14）：主线从「抽象视角分身」改为「具体知乎答主的分身」。
+// 评价标准是「像这个人」>「答案完美」，所以 Persona 与视角型 Skill 并存：
+//   - Persona Skill 是主体，代表一个真实答主；
+//   - 视角型 Skill 降级为 supplementary，只在用户没指定答主时补位。
 
-export type SkillKind = "experience" | "analysis" | "counter" | "method" | "story" | "risk";
+export type Accent = "blue" | "violet" | "green" | "orange";
 
-/** 一个 Skill 分身：由知乎真实公开回答蒸馏出的可解释视角。 */
+export type SkillKind =
+  | "persona"
+  | "experience"
+  | "analysis"
+  | "counter"
+  | "method"
+  | "story"
+  | "risk";
+
+/* ------------------------------ 答主人格 ------------------------------ */
+
+/** 一个知乎答主的语言与认知特征。由真实公开回答蒸馏，或按公开印象手工撰写。 */
+export interface Persona {
+  /** 知乎 url_token，例如 "ban-fo-xian-ren" */
+  handle: string;
+  displayName: string;
+  /** 一句话身份，显示在卡片上 */
+  headline: string;
+  accent: Accent;
+  /** 1. 他知道什么：领域、经历、专业边界 */
+  knows: string[];
+  /** 2. 他怎么看问题：价值判断、常见立场、思考路径 */
+  stance: string[];
+  /** 3. 他怎么说话 */
+  voice: PersonaVoice;
+  /** 4. 他不知道什么：不装懂的范围 */
+  doesNotKnow: string[];
+  /** 语癖 / 口头禅（尽量取自真实原文） */
+  catchphrases: string[];
+  /** 蒸馏依据的元数据 */
+  corpus: PersonaCorpus;
+}
+
+export interface PersonaVoice {
+  sentenceLength: "short" | "medium" | "long" | "mixed";
+  /** 目标字数区间（含），由人格自己决定，不再全站统一 */
+  wordRange: [number, number];
+  /** 语气标签，直接显示 */
+  tone: string[];
+  /** 是否习惯分点/分段 */
+  usesLists: boolean;
+  /** 情绪强度 0-1，越高越外放 */
+  emotion: number;
+  /** 举例方式的一句话描述 */
+  exampleStyle: string;
+  /** 一句话文风摘要，直接注入生成 prompt */
+  summary: string;
+}
+
+export interface PersonaCorpus {
+  /** 实际用于蒸馏的回答条数；0 表示未抓取 */
+  sampleSize: number;
+  /** 抓取时间（ISO）；未抓取为空字符串 */
+  capturedAt: string;
+  /** true = 来自真实抓取蒸馏；false = 预置人格（未抓取） */
+  real: boolean;
+  /** 代表性来源，卡片上可逐条点开 */
+  sources: SkillSource[];
+}
+
+/* ------------------------------ 分身 ------------------------------ */
+
+/** 一个 Skill 分身：答主型由 Persona 驱动，视角型由公开回答蒸馏出的稳定视角驱动。 */
 export interface Skill {
   id: string;
-  /** 分身名，例如「亲历者」 */
+  /** 分身名。答主型 = 答主昵称；视角型 = 视角名 */
   name: string;
   kind: SkillKind;
   /** 一句话视角说明，显示在卡片上 */
@@ -18,11 +85,15 @@ export interface Skill {
   /** 文风标签 */
   tone: string[];
   /** 状态色 key，对应设计系统 */
-  accent: "blue" | "violet" | "green" | "orange";
+  accent: Accent;
   /** 该分身依据的知乎来源（真实回答） */
   sources: SkillSource[];
   /** 可信度：来自多少条真实来源 */
   confidence: number;
+  /** 答主型分身携带的人格；视角型为 undefined */
+  persona?: Persona;
+  /** true = 降级的补充视角，不占主叙事 */
+  supplementary?: boolean;
 }
 
 export interface SkillSource {
@@ -32,13 +103,19 @@ export interface SkillSource {
   excerpt: string;
   voteUp: number;
   editTime: number;
+  /** 该来源的可信度 0-1：由是否取到正文、互动量等决定，不由模型自评 */
+  confidence: number;
 }
+
+/* ------------------------------ 回答 ------------------------------ */
 
 export interface AnswerDraft {
   id: string;
   skillId: string;
   skillName: string;
-  accent: Skill["accent"];
+  accent: Accent;
+  /** 答主型分身的 handle，用于追加邀请与去重 */
+  handle?: string;
   /** 回答正文 */
   body: string;
   /** 该回答用到的知乎证据 */
@@ -51,7 +128,15 @@ export interface AnswerDraft {
   humanAuthor?: string;
   /** 是否由直答模型生成 */
   generatedBy: "zhida" | "retrieval";
+  /** 轮次：0 = 首轮作答，1 = 对他人观点的回应 */
+  round?: number;
+  /** 回应的对象（回答 id），仅 round=1 时有值 */
+  replyTo?: string;
+  /** 回应对象的答主名，用于 UI 文案 */
+  replyToName?: string;
 }
+
+/* ------------------------------ 缺口 ------------------------------ */
 
 export interface Gap {
   id: string;
@@ -80,8 +165,10 @@ export interface HumanCandidate {
   score: number;
   /** 该真人在知乎的相关公开回答数 */
   relatedAnswers: number;
-  accent: Skill["accent"];
+  accent: Accent;
 }
+
+/* ------------------------------ 镜像问题 ------------------------------ */
 
 export interface MirrorQuestion {
   id: string;
@@ -102,6 +189,8 @@ export interface MirrorQuestion {
 }
 
 export interface RoutingDecision {
+  /** manual = 用户指定答主；auto = 系统推荐 */
+  mode: "manual" | "auto";
   /** 命中的问题类型 */
   intent: string;
   /** 选择的 Skill id 及理由 */
@@ -131,13 +220,14 @@ export interface ContributionEvent {
   reason: string;
 }
 
-/** Human Mesh 图 */
+/* ------------------------------ Human Mesh ------------------------------ */
+
 export interface MeshNode {
   id: string;
   label: string;
-  type: "human" | "skill" | "keyword" | "question" | "answer";
+  type: "human" | "skill" | "keyword" | "question" | "answer" | "persona";
   weight: number;
-  accent: Skill["accent"];
+  accent: Accent;
 }
 
 export interface MeshEdge {
