@@ -19,6 +19,7 @@ dev.db*
 .smoke/
 .probe2/
 .probe3/
+.verify/
 .probe*/
 *.tar.gz
 *.zip
