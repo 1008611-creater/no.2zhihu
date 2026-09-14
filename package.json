@@ -10,7 +10,9 @@
     "docs:sync": "node scripts/sync-zhihu-docs.mjs",
     "check:ps1": "node scripts/check-ps1-bom.mjs",
     "push:github": "pwsh -ExecutionPolicy Bypass -File scripts/push-to-github.ps1",
-    "fix:powershell": "pwsh -ExecutionPolicy Bypass -File scripts/fix-powershell-default.ps1"
+    "fix:powershell": "pwsh -ExecutionPolicy Bypass -File scripts/fix-powershell-default.ps1",
+    "personas:crawl": "node scripts/persona-crawler.mjs",
+    "personas:distill": "node scripts/distill-personas.mjs"
   },
   "dependencies": {
     "next": "14.2.5",

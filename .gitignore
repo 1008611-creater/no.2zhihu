@@ -32,3 +32,6 @@ npm-debug.log*
 # 本地临时凭证文件（绝不入库）
 .git-remote-token
 *.token
+
+# 答主原始语料（本地一次性抓取，绝不入库）
+.personas-raw/

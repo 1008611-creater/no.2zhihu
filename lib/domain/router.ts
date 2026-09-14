@@ -38,17 +38,56 @@ export function classifyIntent(text: string): string {
  * 只用答主自己声明的 knows / stance 做匹配，不引入任何模型自评。
  * 这保证同一个问题 + 同一份名册，任何时候都推荐同样的人。
  */
+
+/** 把一条领域描述拆成可比对的中文短词。 */
+function knowsTokens(k: string): string[] {
+  return k
+    .split(/[、与和的及·,，/]/)
+    .flatMap((p) => p.split(/[A-Za-z]+/))
+    .map((p) => p.trim())
+    .filter((p) => p.length >= 2);
+}
+
+/** 二字切片：用来兜住「心理咨询」vs「临床心理学」这类同域不同词。 */
+function bigrams(s: string): string[] {
+  const out: string[] = [];
+  for (let i = 0; i + 1 < s.length; i++) {
+    const g = s.slice(i, i + 2);
+    if (/^[\u4e00-\u9fa5]{2}$/.test(g)) out.push(g);
+  }
+  return out;
+}
+
+/** 强信号：整词直接出现在问题里。 */
+function tokenHit(k: string, text: string): boolean {
+  return knowsTokens(k).some((t) => text.includes(t));
+}
+
+/** 领域相关判据：整词命中，或两个以上二字切片命中。 */
+function keywordMatch(k: string, text: string): boolean {
+  if (tokenHit(k, text)) return true;
+  const grams = knowsTokens(k).flatMap(bigrams);
+  const uniq = Array.from(new Set(grams));
+  const hits = uniq.filter((g) => text.includes(g));
+  return hits.length >= 2;
+}
+
 function scorePersona(persona: Persona, text: string): { score: number; reasons: string[] } {
   let score = 0.25;
   const reasons: string[] = [];
 
-  const hits = persona.knows.filter((k) => {
-    // 把「互联网商业模式与资本运作」这类长描述拆成短词再匹配
-    const parts = k.split(/[、与和的及·]/).flatMap((p) => p.split(/[A-Za-z]+/)).filter((p) => p.length >= 2);
-    return parts.some((p) => text.includes(p));
-  });
+  /**
+   * 领域匹配。
+   *
+   * 只用「整词包含」会漏掉真实的中文表达差异：问「心理咨询」，
+   * 而答主写的是「临床心理学」——两者没有包含关系，但显然相关。
+   * 所以这里两级匹配：整词命中算强信号，二字切片命中算弱信号。
+   * 这一步是纯字符串计算，零模型、零额度、完全可复现。
+   */
+  const hits = persona.knows.filter((k) => keywordMatch(k, text));
   if (hits.length > 0) {
-    score += Math.min(hits.length * 0.18, 0.45);
+    const strong = hits.some((k) => tokenHit(k, text));
+    score += strong ? Math.min(hits.length * 0.18, 0.45) : Math.min(hits.length * 0.09, 0.27);
     reasons.push(`领域命中「${hits[0].slice(0, 10)}」`);
   }
 

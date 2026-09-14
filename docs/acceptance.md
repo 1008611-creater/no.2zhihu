@@ -20,7 +20,7 @@
 | 9 | 编辑后的回答能完成**搬运流程** | 实测导出正文 3309 字，含全部来源归属 | ✅ |
 | 10 | 搬运**不伪造发布** | `/api/handoff` 返回 `canPublishViaApi: false` + 真实编辑器深链 | ✅ |
 | 11 | 移动端和桌面端均可完成演示脚本 | CSS 断点 + 单列布局 | 🟡 需线上复验 |
-| 12 | 线上具备**健康检查** | `/api/health` 返回 `{ok, credentials, cache, at}` | 🟡 需线上复验 |
+| 12 | 线上具备**健康检查** | `/api/health` 返回 `{ok, credentials, cache, at}` | ✅ 实测 `credentials: true` |
 | 13 | 线上具备**缓存**与**错误提示** | TTL 缓存 + 降级文案 | ✅ |
 | 14 | **无凭证降级模式**可用 | 未配 Secret 时返回真实提示，不白屏 | ✅ |
 
@@ -31,8 +31,8 @@
 | # | 验收项 | 判定方式 | 状态 |
 |---|---|---|---|
 | 15 | TypeScript 全量类型检查 0 错误 | 47 个文件，0 诊断 | ✅ |
-| 16 | 本地构建通过 | `npm run build` | ⬜ 需你执行 |
-| 17 | 公开仓库可访问 | GitHub API 返回 `private: false` | ✅ 已推送（`main` = `0af1b0f`，云端 CI 全绿） |
+| 16 | 构建通过 | 服务器 `npm run build`（Node 22 / Ubuntu 22.04） | ✅ 实测 Compiled successfully |
+| 17 | 公开仓库可访问 | GitHub API 返回 `private: false` | ✅ 已推送，云端 CI 全绿 |
 | 18 | 凭证未入库 | `.env.local` 被 gitignore；全仓库密钥命中 0 处 | ✅ |
 | 19 | 站点元信息完整 | icon / apple-icon / manifest / robots / sitemap / OG 图 | ✅ |
 | 20 | 文档内链无死链 | 全部相对链接指向存在的文件 | ✅ |
@@ -43,7 +43,7 @@
 
 | 提交项 | 必需 | 我们的产出 | 状态 |
 |---|---|---|---|
-| ① 可运行体验链接 | **必交** | `https://zhihu.cauai.fun`（自托管；Vercel 备用） | 🟡 部署脚本已就绪，待执行 |
+| ① 可运行体验链接 | **必交** | `https://zhihu.cauai.fun`（自托管；Vercel 备用） | ✅ 已上线，HTTPS 证书有效 |
 | ② 产品说明计划书 | **必交** | [product-plan.md](product-plan.md) / [submission.md](submission.md) | ✅ 已定稿 |
 | ③ 代码仓库链接 | 加分 | https://github.com/1008611-creater/no.2zhihu | ✅ 已推送，公网可访问 |
 | ④ 项目演示视频 | 加分 | [demo-video-script.md](demo-video-script.md)（脚本就绪，待录制） | 🟡 |

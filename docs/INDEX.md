@@ -59,7 +59,7 @@
 - 直答默认**开启**，设 `ZHIHU_USE_ZHIDA=0` 可关（见 [architecture.md](architecture.md)）。
 - **GitHub 推送已完成**：`gh auth login` 已登录 `1008611-creater`，无需 PAT；推送脚本内置登录检测与 `.env.local` 泄漏闸门 → 见 [roadmap.md](roadmap.md) 第七节。
 - **OAuth 不纳入本次交付**：官方明确「是否接入由作品需求决定」，属选交项；App ID / App Key 在赛事项目创建后才分配到项目详情页，当前「我的项目 = 0」看不到属正常。
-- **公网地址定为自托管**：`https://zhihu.cauai.fun` → 服务器 `114.134.185.16`；DNS 托管在 Cloudflare（`cauai.fun`），`zhihu` 记录待添加 → 见 [self-hosting.md](self-hosting.md)。
+- **公网地址定为自托管**：`https://zhihu.cauai.fun` → 服务器 `114.134.185.16`；DNS 托管在 Cloudflare（`cauai.fun`），`zhihu` 记录已添加（灰云，指向 114.134.185.16），站点已上线 → 见 [self-hosting.md](self-hosting.md)。
 
 ## 四、外部入口
 
