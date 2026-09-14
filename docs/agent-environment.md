@@ -192,20 +192,34 @@ gh auth token | Set-Content E:\codex\heikesong3\.git-remote-token -Encoding asci
 | 项 | 状态 |
 |---|---|
 | 敲 `pwsh` | ✅ 直接是 7.6.6 |
-| Windows Terminal 新标签页 | ✅ 默认就是 PowerShell 7 |
+| Windows Terminal 新标签页 | ✅ 默认就是 PowerShell 7（`defaultProfile` = PowerShell Core） |
 | VS Code 新终端 | ✅ 已改为 pwsh（`settings.json` 已写入） |
-| 5.1 启动配置的悬空引用与转发 | ⚠️ **尚未生效** —— 见下一节，脚本已修好，需重跑一次 |
+| 交互式敲 `powershell` | ✅ 已自动进入 7 —— `Documents\WindowsPowerShell\profile.ps1`（all-hosts）里早有重定向逻辑 |
+| 5.1 专属启动配置的悬空引用与转发 | ⚠️ 尚未清理 —— 脚本有 bug，已修，见下 |
 
-### 为什么第一次没成功（根因）
+**结论：日常使用其实已经不需要做任何事。** 下面这一节记录的是「把遗留配置也一并收拾干净」的过程。
 
-脚本第 1 步（改 5.1 启动配置）上一轮**静默失败**了，第 2 步（VS Code）却成功 —— 所以看起来「跑过了」。
-根因有两个，都已修掉：
+### 为什么脚本两次都没成功（根因）
 
-1. **路径定位太脆**：只信 `[Environment]::GetFolderPath("MyDocuments")`。一旦它返回非预期位置，脚本就会去改一个并不存在的路径。
-   现在改成**候选路径探测**：先看 `USERPROFILE\Documents\WindowsPowerShell\...`，再退回其它候选，取第一个真实存在的，并把解析到的路径**打印出来**。
-2. **错误被吞掉**：`$ErrorActionPreference = "Continue"` 让写入异常只变成一行红字，脚本继续往下跑、最后仍报「完成」。
-   现在每一步都显式 try/catch，失败计入计数器，收尾时以**非零退出码**结束。
+第 1 步（改 5.1 启动配置）连续两轮静默失败，第 2 步（VS Code）却成功 —— 所以看起来「跑过了」。
+两轮各有一个 bug，都已修掉：
 
+**第一轮：路径被吃掉反斜杠。**
+脚本里 `"WindowsPowerShell\Microsoft.PowerShell_profile.ps1"` 在文件生成时反斜杠被消掉，
+变成 `WindowsPowerShellMicrosoft...`，于是脚本去找一个根本不存在的路径。
+现在改成**候选路径探测**：先看 `USERPROFILE\Documents\WindowsPowerShell\...`，再退回其它候选，
+取第一个真实存在的，并把解析到的路径**打印出来**。
+
+**第二轮：重复执行保护误判。**
+原判据是 `if ($cleaned -notmatch "fix-powershell-default")` —— 只要文件里出现这个词就认为「转发块已存在，跳过」。
+可问题是，被清理掉的旧内容里那行注释**本身就含这个词**，于是判据永远为假，脚本一行都没写。
+现在改为按 `# --- BEGIN/END fix-powershell-default ---` **标记行精确替换**：
+先摘掉旧块，再统一追加最新版 —— 既保证可重复执行，也保证重复执行后内容始终是最新的。
+
+另外，`$ErrorActionPreference = "Continue"` 让写入异常只变成一行红字、脚本继续跑完并打印「完成」。
+现在每一步都显式 try/catch，失败计入计数器，收尾以**非零退出码**结束。
+
+### 一键修复（重跑这一条即可）
 ### 一键修复（重跑这一条即可）
 
 ```powershell
