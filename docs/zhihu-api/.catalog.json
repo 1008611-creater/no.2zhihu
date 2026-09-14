@@ -1,0 +1,217 @@
+[
+  {
+    "group": "开始使用",
+    "pages": [
+      {
+        "key": "authorization",
+        "title": "鉴权",
+        "chars": 873
+      },
+      {
+        "key": "zhihu_cli",
+        "title": "Zhihu CLI",
+        "chars": 2839
+      },
+      {
+        "key": "quota",
+        "title": "额度查询 API",
+        "chars": 1834
+      }
+    ]
+  },
+  {
+    "group": "知乎搜索",
+    "pages": [
+      {
+        "key": "zhihu_search",
+        "title": "知乎搜索 API",
+        "chars": 3223
+      },
+      {
+        "key": "zhihu_search_skill",
+        "title": "知乎搜索 Skill",
+        "chars": 1849
+      },
+      {
+        "key": "zhihu_search_mcp",
+        "title": "知乎搜索 MCP",
+        "chars": 2977
+      }
+    ]
+  },
+  {
+    "group": "全网搜索",
+    "pages": [
+      {
+        "key": "global_search",
+        "title": "全网搜索 API",
+        "chars": 9075
+      },
+      {
+        "key": "global_search_skill",
+        "title": "全网搜索 Skill",
+        "chars": 1917
+      },
+      {
+        "key": "global_search_mcp",
+        "title": "全网搜索 MCP",
+        "chars": 3438
+      }
+    ]
+  },
+  {
+    "group": "直答",
+    "pages": [
+      {
+        "key": "zhida",
+        "title": "直答 API",
+        "chars": 2628
+      },
+      {
+        "key": "zhida_skill",
+        "title": "直答 Skill",
+        "chars": 2011
+      },
+      {
+        "key": "zhida_mcp",
+        "title": "直答 MCP",
+        "chars": 2989
+      }
+    ]
+  },
+  {
+    "group": "热榜",
+    "pages": [
+      {
+        "key": "hot_list",
+        "title": "知乎热榜 API",
+        "chars": 1783
+      },
+      {
+        "key": "hot_list_skill",
+        "title": "知乎热榜 Skill",
+        "chars": 1007
+      },
+      {
+        "key": "hot_list_mcp",
+        "title": "知乎热榜 MCP",
+        "chars": 3343
+      }
+    ]
+  },
+  {
+    "group": "问题发现",
+    "pages": [
+      {
+        "key": "question_recommendations",
+        "title": "问题推荐 API",
+        "chars": 1142
+      },
+      {
+        "key": "question_answers",
+        "title": "问题回答 API",
+        "chars": 1702
+      }
+    ]
+  },
+  {
+    "group": "创作能力",
+    "pages": [
+      {
+        "key": "user_content_detail",
+        "title": "我的创作全文 API",
+        "chars": 1688
+      },
+      {
+        "key": "user_content_comments",
+        "title": "我的创作评论 API",
+        "chars": 2279
+      },
+      {
+        "key": "creator_account_stats",
+        "title": "账号创作数据 API",
+        "chars": 6805
+      },
+      {
+        "key": "creator_content_stats",
+        "title": "单篇创作数据 API",
+        "chars": 4254
+      }
+    ]
+  },
+  {
+    "group": "知识库",
+    "pages": [
+      {
+        "key": "knowledge_bases",
+        "title": "知识库列表 API",
+        "chars": 1765
+      },
+      {
+        "key": "knowledge_base_items",
+        "title": "知识库内容列表 API",
+        "chars": 2220
+      },
+      {
+        "key": "knowledge_file_upload",
+        "title": "知识库文件上传 API",
+        "chars": 2357
+      },
+      {
+        "key": "knowledge_search",
+        "title": "知识库检索 API",
+        "chars": 2416
+      }
+    ]
+  },
+  {
+    "group": "小工具",
+    "pages": [
+      {
+        "key": "pdf_parse",
+        "title": "PDF 解析 API",
+        "chars": 6179
+      },
+      {
+        "key": "ppt_generation",
+        "title": "PPT 生成 API",
+        "chars": 4497
+      }
+    ]
+  },
+  {
+    "group": "知乎用户数据",
+    "pages": [
+      {
+        "key": "zhihu_oauth_integrated",
+        "title": "接入知乎 OAuth",
+        "chars": 2313
+      },
+      {
+        "key": "user_contents",
+        "title": "用户的内容 API",
+        "chars": 2806
+      },
+      {
+        "key": "user_followees",
+        "title": "用户的关注 API",
+        "chars": 2416
+      },
+      {
+        "key": "user_collections",
+        "title": "用户的收藏 API",
+        "chars": 3019
+      },
+      {
+        "key": "user_favlists",
+        "title": "用户收藏夹列表 API",
+        "chars": 1707
+      },
+      {
+        "key": "favlist_contents",
+        "title": "收藏夹内容 API",
+        "chars": 3456
+      }
+    ]
+  }
+]

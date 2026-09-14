@@ -1,0 +1,16 @@
+# 统一换行符，避免 Windows / macOS 协作时整文件 diff
+* text=auto eol=lf
+
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.gif  binary
+*.ico  binary
+*.mp4  binary
+*.zip  binary
+*.woff binary
+*.woff2 binary
+
+package-lock.json linguist-generated=true
+docs/** linguist-documentation

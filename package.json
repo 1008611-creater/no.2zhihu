@@ -1,0 +1,32 @@
+{
+  "name": "no.2zhihu",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "docs:sync": "node scripts/sync-zhihu-docs.mjs"
+  },
+  "dependencies": {
+    "next": "14.2.5",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "motion": "^11.11.17",
+    "zod": "^3.23.8",
+    "server-only": "^0.0.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4",
+    "@types/node": "^20.14.12",
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0"
+  },
+  "description": "二号知乎 · Human Mesh —— 让每个问题，先在另一个知乎里发生。知乎黑客松 2026 参赛作品。",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/1008611-creater/no.2zhihu.git"
+  }
+}

@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-label="二号知乎 Human Mesh 项目封面">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#07080f"/><stop offset="1" stop-color="#0b0d17"/>
+    </linearGradient>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#4d7cff"/><stop offset="0.5" stop-color="#8b5cf6"/><stop offset="1" stop-color="#2fbf8f"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#4d7cff" stop-opacity="0.20"/><stop offset="1" stop-color="#4d7cff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="fade" cx="0.5" cy="0.28" r="0.72">
+      <stop offset="0" stop-color="#fff" stop-opacity="0.5"/><stop offset="1" stop-color="#fff" stop-opacity="0"/>
+    </radialGradient>
+    <mask id="gridFade"><rect width="1600" height="900" fill="url(#fade)"/></mask>
+    <pattern id="grid" width="56" height="56" patternUnits="userSpaceOnUse">
+      <path d="M56 0H0V56" fill="none" stroke="#262b3d" stroke-width="1"/>
+    </pattern>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#4d7cff"/><stop offset="0.55" stop-color="#8b5cf6"/><stop offset="1" stop-color="#2fbf8f"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect width="1600" height="900" fill="url(#grid)" mask="url(#gridFade)"/>
+  <ellipse cx="1180" cy="360" rx="430" ry="380" fill="url(#glow)"/>
+
+  <!-- 顶部：品牌与赛道 -->
+  <text x="96" y="106" font-family="DM Mono, ui-monospace, monospace" font-size="19" letter-spacing="6" fill="#93b0ff">HUMAN MESH · 二号知乎</text>
+  <rect x="96" y="132" width="132" height="4" fill="url(#brand)"/>
+  <text x="1504" y="106" text-anchor="end" font-family="DM Mono, ui-monospace, monospace" font-size="18" letter-spacing="4" fill="#7c86a8">知乎黑客松 2026 · 知识炼金场</text>
+
+  <!-- 主标题：文字即图形 -->
+  <text x="96" y="300" font-family="Manrope, PingFang SC, Microsoft YaHei, sans-serif" font-size="100" font-weight="800" letter-spacing="-3" fill="#f2f4fb">让每个问题</text>
+  <text x="96" y="416" font-family="Manrope, PingFang SC, Microsoft YaHei, sans-serif" font-size="100" font-weight="800" letter-spacing="-3" fill="#c0a4ff">先在另一个知乎</text>
+  <text x="96" y="532" font-family="Manrope, PingFang SC, Microsoft YaHei, sans-serif" font-size="100" font-weight="800" letter-spacing="-3" fill="#f2f4fb">里发生。</text>
+
+  <text x="96" y="604" font-family="Manrope, PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#a9b1c9">看山召集多个由真实知乎回答蒸馏出的分身作答，</text>
+  <text x="96" y="640" font-family="Manrope, PingFang SC, Microsoft YaHei, sans-serif" font-size="24" fill="#a9b1c9">再指出它们<tspan fill="#ff8a4c" font-weight="700">共同没有回答的那一块</tspan>，交给真实的人。</text>
+
+  <!-- 底部：问题 → 分身 → 缺口 → 真人 主线 -->
+  <g font-family="Manrope, PingFang SC, Microsoft YaHei, sans-serif">
+    <!-- 01 问题 -->
+    <rect x="96" y="700" width="322" height="112" rx="14" fill="#101426" stroke="#232a42" stroke-width="1.5"/>
+    <rect x="96" y="700" width="322" height="5" rx="2.5" fill="#93b0ff"/>
+    <text x="122" y="748" font-family="DM Mono, ui-monospace, monospace" font-size="15" letter-spacing="2" fill="#93b0ff">01</text>
+    <text x="122" y="784" font-size="30" font-weight="800" fill="#f2f4fb">问题</text>
+    <text x="222" y="784" font-size="16" fill="#8b93ad">一个真实的决策问题</text>
+
+    <!-- 02 分身 -->
+    <rect x="458" y="700" width="322" height="112" rx="14" fill="#101426" stroke="#232a42" stroke-width="1.5"/>
+    <rect x="458" y="700" width="322" height="5" rx="2.5" fill="#8b5cf6"/>
+    <text x="484" y="748" font-family="DM Mono, ui-monospace, monospace" font-size="15" letter-spacing="2" fill="#8b5cf6">02</text>
+    <text x="484" y="784" font-size="30" font-weight="800" fill="#f2f4fb">分身</text>
+    <text x="584" y="784" font-size="16" fill="#8b93ad">多视角并行作答</text>
+
+    <!-- 03 缺口 -->
+    <rect x="820" y="700" width="322" height="112" rx="14" fill="#101426" stroke="#232a42" stroke-width="1.5"/>
+    <rect x="820" y="700" width="322" height="5" rx="2.5" fill="#ff8a4c"/>
+    <text x="846" y="748" font-family="DM Mono, ui-monospace, monospace" font-size="15" letter-spacing="2" fill="#ff8a4c">03</text>
+    <text x="846" y="784" font-size="30" font-weight="800" fill="#f2f4fb">缺口</text>
+    <text x="946" y="784" font-size="16" fill="#8b93ad">找出共同的盲区</text>
+
+    <!-- 04 真人 -->
+    <rect x="1182" y="700" width="322" height="112" rx="14" fill="#101426" stroke="#232a42" stroke-width="1.5"/>
+    <rect x="1182" y="700" width="322" height="5" rx="2.5" fill="#2fbf8f"/>
+    <text x="1208" y="748" font-family="DM Mono, ui-monospace, monospace" font-size="15" letter-spacing="2" fill="#2fbf8f">04</text>
+    <text x="1208" y="784" font-size="30" font-weight="800" fill="#f2f4fb">真人</text>
+    <text x="1308" y="784" font-size="16" fill="#8b93ad">补上那一块</text>
+
+    <!-- 箭头 -->
+    <g fill="none" stroke="#4a5270" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M430 747 L442 756 L430 765"/>
+      <path d="M792 747 L804 756 L792 765"/>
+      <path d="M1154 747 L1166 756 L1154 765"/>
+    </g>
+  </g>
+
+  <text x="96" y="858" font-family="DM Mono, ui-monospace, monospace" font-size="15" fill="#5d6684">Next.js 14 · TypeScript · Motion · 知乎开放平台（真实接口，无假数据）</text>
+
+  <!-- 右侧：原创几何看山（与 app/icon.svg 同源，禁止使用参考项目素材） -->
+  <g transform="translate(1160 340) scale(0.8)">
+    <circle r="250" fill="none" stroke="url(#ring)" stroke-width="3" opacity="0.55"/>
+    <circle r="212" fill="none" stroke="#262b3d" stroke-width="1.5" stroke-dasharray="5 9" opacity="0.9"/>
+
+    <!-- 耳 -->
+    <path d="M-104 -108 L-140 -206 L-40 -160 Z" fill="#e9edfa"/>
+    <path d="M104 -108 L140 -206 L40 -160 Z" fill="#e9edfa"/>
+    <path d="M-101 -124 L-122 -184 L-58 -156 Z" fill="#c0a4ff" opacity="0.75"/>
+    <path d="M101 -124 L122 -184 L58 -156 Z" fill="#c0a4ff" opacity="0.75"/>
+
+    <!-- 头 -->
+    <ellipse cx="0" cy="-34" rx="152" ry="140" fill="#f4f6fd"/>
+    <!-- 吻部 -->
+    <ellipse cx="0" cy="42" rx="72" ry="54" fill="#e6ebfa"/>
+    <!-- 眼 -->
+    <ellipse cx="-60" cy="-44" rx="21" ry="25" fill="#0b0d17"/>
+    <ellipse cx="60" cy="-44" rx="21" ry="25" fill="#0b0d17"/>
+    <circle cx="-53" cy="-52" r="7" fill="#93b0ff"/>
+    <circle cx="67" cy="-52" r="7" fill="#93b0ff"/>
+    <!-- 鼻 -->
+    <path d="M0 26 L22 46 L0 66 L-22 46 Z" fill="#0b0d17"/>
+    <!-- 腮 -->
+    <ellipse cx="-104" cy="18" rx="26" ry="15" fill="#ff8a4c" opacity="0.30"/>
+    <ellipse cx="104" cy="18" rx="26" ry="15" fill="#ff8a4c" opacity="0.30"/>
+    <!-- 身体 -->
+    <ellipse cx="0" cy="196" rx="150" ry="112" fill="#eef1fb"/>
+    <!-- 尾 -->
+    <path d="M120 196 q96 -22 74 -104 q-46 66 -104 66 Z" fill="#e9edfa"/>
+    <!-- 爪 -->
+    <ellipse cx="-66" cy="292" rx="36" ry="21" fill="#dfe5f7"/>
+    <ellipse cx="66" cy="292" rx="36" ry="21" fill="#dfe5f7"/>
+  </g>
+
+  <text x="1504" y="858" text-anchor="end" font-family="DM Mono, ui-monospace, monospace" font-size="14" letter-spacing="2" fill="#4a5270">看山形象仅在知乎黑客松授权范围内使用</text>
+</svg>

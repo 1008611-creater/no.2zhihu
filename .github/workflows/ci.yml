@@ -1,0 +1,27 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      # 仓库暂无 package-lock.json，所以用 install 而不是 ci
+      - name: 安装依赖
+        run: npm install
+      - name: 类型检查
+        run: npx tsc --noEmit
+      - name: 构建
+        run: npm run build
+        env:
+          # 构建阶段不需要真实凭证；给空值让代码走降级路径，避免 CI 依赖密钥
+          ZHIHU_ACCESS_SECRET: ""

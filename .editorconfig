@@ -1,0 +1,18 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# Windows PowerShell 5.1 会按系统 ANSI 代码页（简体中文下为 GBK）读取无 BOM 的脚本，
+# 中文注释与字符串会被撕碎，进而导致「字符串缺少终止符」这类假语法错误。
+# 因此 .ps1 必须保存为「UTF-8 with BOM」。
+[*.ps1]
+charset = utf-8-bom
+
+[*.md]
+trim_trailing_whitespace = false
