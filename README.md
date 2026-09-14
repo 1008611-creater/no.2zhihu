@@ -48,3 +48,4 @@ npm run dev                  # http://localhost:3000
 - 刘看山形象与知乎故事素材仅在比赛授权范围内使用。
 - 参考项目 `.refs/grok-icon-study` 仅用于学习动效架构；其几何与素材归 xAI 所有，本仓库不使用其任何素材。
 - 第三方权利与授权边界详见 [NOTICE.md](NOTICE.md)。
+- 源代码以 [MIT](LICENSE) 授权；刘看山形象与知乎内容不在该授权范围内，详见 [NOTICE.md](NOTICE.md)。
