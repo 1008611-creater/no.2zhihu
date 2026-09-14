@@ -18,6 +18,7 @@ import type { SearchItem } from "@/lib/zhihu/types";
  */
 
 export type PersonaConfidence = "high" | "medium" | "low";
+export type PersonaFailure = "config" | "search_failed" | "no_match" | "no_valid_content" | "model_failed" | "invalid_format";
 
 export interface DistilledPersona {
   persona: Persona;
@@ -26,6 +27,8 @@ export interface DistilledPersona {
   /** 检索到的总条数（用于解释为什么命中少） */
   scanned: number;
   confidence: PersonaConfidence;
+  validSamples?: number;
+  failureReason?: PersonaFailure;
   /** 面向用户的如实说明，直接显示 */
   note: string;
   /** 命中到的原文来源，卡片可逐条点开 */
@@ -77,7 +80,7 @@ export async function distillPersona(
   const accent: Accent = "blue";
 
   if (!hasCredentials()) {
-    return fallback(handle, name, accent, 0, 0, "服务端未配置知乎开放平台凭证，无法现场蒸馏人格。");
+    return fallback(handle, name, accent, 0, 0, "服务端未配置知乎开放平台凭证，无法现场蒸馏人格。", [], "config");
   }
 
   // 检索词刻意带上答主名字 + 主题：只靠名字会命中大量「别人讨论他」的内容。
@@ -109,23 +112,23 @@ export async function distillPersona(
   }
 
   if (items.length === 0 && failedVariants === variants.length) {
-    return fallback(handle, name, accent, 0, 0, "检索失败，暂时无法确认这位答主的公开内容。");
+    return fallback(handle, name, accent, 0, 0, "检索失败，暂时无法确认这位答主的公开内容。请稍后重试。", [], "search_failed");
   }
 
   const mine = items.filter((i) => authoredBy(i, handle, name));
   const sources = mine
-    .filter((i) => (i.ContentText ?? "").trim().length >= MIN_EXCERPT)
+    .filter((i) => (i.ContentText ?? "").trim().length >= MIN_EXCERPT && /^https?:\/\//i.test(i.Url ?? ""))
     .slice(0, 5)
     .map(toSource);
 
-  const confidence: PersonaConfidence = mine.length >= 4 ? "high" : mine.length >= 1 ? "medium" : "low";
+  const confidence: PersonaConfidence = sources.length >= 4 ? "high" : sources.length >= 2 ? "medium" : "low";
 
   if (sources.length === 0) {
-    const why =
+    const why = mine.length > 0 ? "命中 " + mine.length + " 条同名作者内容，但正文过短或缺少可核对的来源链接" :
       items.length === 0
         ? "检索没有返回任何结果"
         : "检索到 " + items.length + " 条内容，但没有一条作者是「" + name + "」本人";
-    return fallback(handle, name, accent, 0, items.length, why + "。人格为低置信度。");
+    return fallback(handle, name, accent, mine.length, items.length, why + "。可换一位答主或稍后重试。", [], mine.length ? "no_valid_content" : "no_match");
   }
 
   // 用直答把命中的原文抽成四要素。失败则退回低置信度人格，仍然标注真实命中条数。
@@ -139,8 +142,17 @@ export async function distillPersona(
           .join("\n\n"),
       },
     ]);
-    const parsed = parseDistill(raw);
-    if (!parsed) throw new Error("unparsable");
+    let parsed = parseDistill(raw);
+    if (!parsed) {
+      // 仅修复格式一次，不重新检索；沿用客户端的消息缓存与并发合并。
+      const repaired = await zhidaText([
+        { role: "system", content: DISTILL_PROMPT + "\n修复下面的输出为指定 JSON；缺失信息留空，禁止补写人物事实。" },
+        { role: "user", content: raw.slice(0, 4000) },
+      ]);
+      parsed = parseDistill(repaired);
+      if (!parsed) return fallback(handle, name, accent, mine.length, items.length,
+        "人格返回格式无法解析，修复一次后仍未成功。来源已保留，可稍后重试。", sources, "invalid_format");
+    }
 
     return {
       persona: {
@@ -161,11 +173,12 @@ export async function distillPersona(
         },
         doesNotKnow: parsed.doesNotKnow,
         catchphrases: parsed.catchphrases,
-        corpus: { sampleSize: sources.length, capturedAt: new Date().toISOString(), real: true, sources },
+        corpus: { sampleSize: sources.length, capturedAt: new Date().toISOString(), real: true, sources, status: "extracted" },
       },
       matched: mine.length,
       scanned: items.length,
       confidence,
+      validSamples: sources.length,
       note:
         "现场蒸馏：" + variants.length + " 个检索词共取到 " + items.length + " 条，其中 " +
         mine.length + " 条作者是「" + name + "」本人，用 " + sources.length +
@@ -181,6 +194,7 @@ export async function distillPersona(
       items.length,
       "命中 " + mine.length + " 条本人内容，但直答暂时不可用，未能抽取完整人格，当前为低置信度。",
       sources,
+      "model_failed",
     );
   }
 }
@@ -194,6 +208,7 @@ function fallback(
   scanned: number,
   note: string,
   sources: SkillSource[] = [],
+  failureReason?: PersonaFailure,
 ): DistilledPersona {
   return {
     persona: {
@@ -215,11 +230,13 @@ function fallback(
       },
       doesNotKnow: ["所有无法从公开内容确认的细节"],
       catchphrases: [],
-      corpus: { sampleSize: matched, capturedAt: new Date().toISOString(), real: false, sources },
+      corpus: { sampleSize: sources.length, capturedAt: new Date().toISOString(), real: false, sources, status: "unavailable", note },
     },
     matched,
     scanned,
     confidence: "low",
+    validSamples: sources.length,
+    failureReason,
     note,
     sources,
   };

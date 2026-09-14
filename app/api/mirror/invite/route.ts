@@ -78,6 +78,8 @@ export async function POST(req: Request) {
       ok: true,
       mode: "distilled",
       confidence: distilled.confidence,
+      validSamples: distilled.validSamples,
+      failureReason: distilled.failureReason,
       matched: distilled.matched,
       scanned: distilled.scanned,
       note: distilled.note,

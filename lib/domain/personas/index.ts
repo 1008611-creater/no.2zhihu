@@ -35,6 +35,6 @@ export function personaByHandle(handle: string): Persona | undefined {
 /** 卡片上显示蒸馏依据：真实抓取 vs 预置人格，必须如实区分。 */
 export function corpusLabel(p: Persona): string {
   return p.corpus.real
-    ? `基于 ${p.corpus.sampleSize} 条真实回答蒸馏`
-    : "预置人格 · 未抓取全量回答";
+    ? `基于公开片段提取 · ${p.corpus.sampleSize} 条有效样本`
+    : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "人格提取未完成" : "预置风格设定 · 尚未经本人语料验证";
 }

@@ -37,6 +37,7 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
         <span className="chip mono">{answer.generatedBy === "zhida" ? "直答模型" : "仅检索"}</span>
       </div>
 
+      <p className="dim" style={{ marginBottom: 10 }}>AI 分身回答，不代表答主本人参与或认可。</p>
       <p style={{ fontSize: 14.5, color: "var(--text-100)", whiteSpace: "pre-wrap" }}>{answer.body}</p>
 
       {answer.humanAuthor && (
