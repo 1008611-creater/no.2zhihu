@@ -20,6 +20,7 @@ const STATUS_LABEL: Record<AnswerDraft["status"], string> = {
  */
 export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?: number }) {
   const isReply = (answer.round ?? 0) > 0;
+  const unsupported = answer.claimCheck?.unsupported ?? [];
 
   return (
     <motion.article
@@ -40,6 +41,20 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
 
       <p className="dim" style={{ marginBottom: 10 }}>AI 分身回答，不代表答主本人参与或认可。</p>
       <p style={{ fontSize: 14.5, color: "var(--text-100)", whiteSpace: "pre-wrap" }}>{answer.body}</p>
+
+      {/* 无据断言：提示词禁不了的事，靠确定性核对兜住，并如实标出来而不是悄悄删。
+          这既是 AGENTS.md §1.2「不编造知乎数据」的落地，也是本产品叙事的直接证据。 */}
+      {unsupported.length > 0 && (
+        <div className="notice notice-warn" style={{ marginTop: 12 }}>
+          <strong>⚠️ 有 {unsupported.length} 处说法没有对应的知乎证据</strong>
+          <div className="mono" style={{ marginTop: 6 }}>
+            {unsupported.join(" · ")}
+          </div>
+          <div style={{ marginTop: 6 }}>
+            AI 分身可能会编数字或出处。这几处请以真人核对为准 —— 这也正是需要真人补位的地方。
+          </div>
+        </div>
+      )}
 
       {answer.humanAuthor && (
         <div className="mono" style={{ color: "var(--green-soft)", marginTop: 10 }}>
