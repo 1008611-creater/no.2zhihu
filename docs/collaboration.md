@@ -240,3 +240,5 @@ cd /opt/no2zhihu/.next && grep -rl '<文案>' server static
   改用 `git cherry-pick <sha>` 逐个重放。
 - **本机 bash 的 coreutils 不可用**（`ls`/`cat`/`grep`/`find`/`tail`/`date` 全 command not found），
   只有 `git`/`node`/`python`/`ssh`/`scp` 可用。需要管道或复杂命令时走 node 或 python。
+
+<!-- flow-check 行为验证：本行由临时测试 PR 添加，验证后即关闭 -->
