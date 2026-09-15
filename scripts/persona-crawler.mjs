@@ -6,18 +6,24 @@
  * lib/domain/personas/<handle>.ts 里的人格四要素。
  *
  * 实现思路来自 zhihubackup 的 backup.py + RSSHub 的 x-zse-96 实现：
- *   1. 打 /api/v3/moments/{username}/activities?desktop=true 分页拉动态；
- *   2. 只保留 author.url_token === username 的回答（过滤掉转发与别人内容）；
+ *   1. 打 /api/v4/members/{username}/answers 分页拉**这位答主本人**的回答；
+ *   2. 逐条过滤：作者校验 + 正文长度，太短的丢弃；
  *   3. 请求头带 cookie + x-api-version + x-zse-93 + x-zse-96 签名。
+ *
+ * 2026-09-15 修正：原实现打的是 /api/v3/moments/{username}/activities（动态流），
+ *   而该接口返回的是**分页信封** { data, paging } 而不是裸数组 —— 旧代码按数组
+ *   处理，于是第一页就静默 break，一条都抓不到（实测张佳玮 0 条，2 秒结束）。
+ *   改用 members/answers 后不仅拿到正文，还省掉了「从动态流里筛本人回答」这一步。
  *
  * ⚠️ 合规说明（必读）
  *   知乎官方制作指南明确禁止批量爬取、滥用用户数据。本脚本仅供参赛团队
  *   本地一次性取样使用：原始语料写入 .personas-raw/（已 gitignore），
  *   不入公开仓库；蒸馏产物只保留特征与少量短引用，不存大段原文。
  *
- * 用法：
- *   $env:ZHIHU_COOKIE = "d_c0=...; z_c0=..."
- *   node scripts/persona-crawler.mjs                 # 抓名册里的 6 位
+ * 用法（cookie 先用 .tools/zhihu-session.cjs 拿一次，之后长期有效）：
+ *   node .tools/zhihu-session.cjs                    # 一次登录，导出 .personas-raw/.cookie.txt
+ *   $env:ZHIHU_COOKIE = (Get-Content .personas-raw/.cookie.txt -Raw).Trim()
+ *   node scripts/persona-crawler.mjs                 # 抓名册里的默认几位
  *   node scripts/persona-crawler.mjs ban-fo-xian-ren # 只抓某一位
  */
 
@@ -92,20 +98,35 @@ function stripHtml(html) {
     .trim();
 }
 
+/**
+ * 拉一页这位答主本人的回答。
+ *
+ * 走 members/answers 而不是 moments/activities：
+ *   · moments/activities 是**动态流**，混着转发、文章、想法，还得自己按 author 过滤；
+ *   · 它返回的是分页信封 { data, paging }，不是裸数组 —— 旧实现按数组处理，
+ *     于是第一页就静默 break，一条都抓不到。
+ *   · members/answers 直接给本人的回答（带 content 正文），并有 paging.totals 总数。
+ *
+ * 这里统一把信封拆成裸数组再返回，调用方不必知道上游的信封结构。
+ */
 async function fetchPage(username, offset) {
+  const include = encodeURIComponent(
+    "data[*].content,voteup_count,comment_count,created_time,updated_time," +
+      "question.title,question.id,author.name,author.url_token",
+  );
   const path =
-    "/api/v3/moments/" +
+    "/api/v4/members/" +
     encodeURIComponent(username) +
-    "/activities?limit=" + PAGE_LIMIT +
+    "/answers?limit=" + PAGE_LIMIT +
     "&offset=" + offset +
-    "&desktop=true&ws_qiangzhisafe=0";
+    "&sort_by=created&include=" + include;
 
   const res = await fetch("https://www.zhihu.com" + path, {
     headers: {
       accept: "application/json, text/plain, */*",
       "accept-language": "zh-CN,zh;q=0.9",
       cookie: COOKIE,
-      referer: "https://www.zhihu.com/people/" + username + "/activities",
+      referer: "https://www.zhihu.com/people/" + username + "/answers",
       "user-agent": UA,
       ...signedHeaders(path),
     },
@@ -113,21 +134,30 @@ async function fetchPage(username, offset) {
 
   if (res.status === 401 || res.status === 403) {
     throw new Error(
-      "HTTP " + res.status + "：登录态无效或已过期，请重新复制 ZHIHU_COOKIE（需含 d_c0 与 z_c0）。",
+      "HTTP " + res.status + "：登录态无效或已过期。重跑 .tools/zhihu-session.cjs 登录一次即可。",
     );
   }
   if (!res.ok) throw new Error("HTTP " + res.status);
-  return res.json();
+
+  const json = await res.json();
+  if (json && json.need_force_login) {
+    throw new Error("上游要求重新登录（need_force_login）。重跑 .tools/zhihu-session.cjs。");
+  }
+  return Array.isArray(json && json.data) ? json.data : [];
 }
 
-/** 只保留这位答主本人写的回答，其他人 / 转发 / 想法一律丢弃。 */
-function pickAnswers(data, username) {
+/**
+ * 把上游条目整理成统一的回答结构。
+ *
+ * members/answers 已经只返回本人回答，这里**仍保留作者校验做双保险** ——
+ * 一旦上游改了行为，宁可少抓几条，也不能把别人的内容当成他的语料。
+ */
+function pickAnswers(items, username) {
   const out = [];
-  for (const item of data ?? []) {
-    const t = item?.target;
-    if (!t || t.type !== "answer") continue;
+  for (const t of items ?? []) {
+    if (!t) continue;
     const token = t.author?.url_token;
-    if (token !== username) continue;
+    if (token && token !== username) continue;
     const content = stripHtml(t.content);
     if (content.length < 80) continue; // 太短的没有蒸馏价值
     out.push({
@@ -157,28 +187,28 @@ async function crawlOne(username) {
   let offset = 0;
 
   for (let page = 0; page < MAX_PAGES; page++) {
-    let data;
+    let items;
     try {
-      data = await fetchPage(username, offset);
+      items = await fetchPage(username, offset);
     } catch (e) {
       console.error("  [" + username + "] 第 " + (page + 1) + " 页失败：" + e.message);
       break;
     }
-    if (!Array.isArray(data) || data.length === 0) break;
+    if (items.length === 0) break;
 
-    const answers = pickAnswers(data, username);
+    const answers = pickAnswers(items, username);
     for (const a of answers) {
       if (seen.has(a.id)) continue;
       seen.add(a.id);
       collected.push(a);
     }
     console.log(
-      "  [" + username + "] 第 " + (page + 1) + " 页：拉到 " + data.length +
-      " 条动态，其中本人回答 " + answers.length + " 条，累计 " + collected.length,
+      "  [" + username + "] 第 " + (page + 1) + " 页：拉到 " + items.length +
+      " 条回答，其中可用 " + answers.length + " 条，累计 " + collected.length,
     );
 
     if (collected.length >= TARGET) break;
-    if (data.length < PAGE_LIMIT) break;
+    if (items.length < PAGE_LIMIT) break;
 
     offset += PAGE_LIMIT;
     await sleep(1200 + Math.random() * 800); // 限速，避免触发风控
