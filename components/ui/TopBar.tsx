@@ -5,24 +5,30 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import ScrollProgress from "./ScrollProgress";
+import { useSession } from "@/lib/hooks/useSession";
 
 const NAV = [
   { href: "/", label: "首页" },
   { href: "/square", label: "虚拟广场" },
   { href: "/mirror", label: "分身发现" },
-  { href: "/personas", label: "答主名册" },
-  { href: "/mesh", label: "Human Mesh" }
+  { href: "/mesh", label: "我的 Mesh" }
 ];
 
 /**
  * 顶栏。
  *
  * 为什么加移动端抽屉：评审很可能用手机打开。旧的 nav 只是 flex-wrap，
- * 七个导航项在 720px 以下会挤成两行并把品牌挤变形。现在窄屏收成抽屉，
- * 保证「品牌 + 入口」在小屏上依然是一行干净的版式。
+ * 多个导航项在 720px 以下会挤成两行并把品牌挤变形。现在窄屏收成抽屉，
+ * 保证「品牌 + 入口 + 账号」在小屏上依然是一行干净的版式。
+ *
+ * 账号区三态（见 lib/hooks/useSession.ts）：
+ *   已登录 → 头像 + @昵称 + 退出
+ *   已开通未登录 → 「知乎登录」
+ *   未开通 → 什么都不显示，避免给一个必然报错的按钮
  */
 export function TopBar() {
   const path = usePathname();
+  const { user, available, loading: sessionLoading, login, logout } = useSession();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -63,17 +69,17 @@ export function TopBar() {
 
   return (
     <header className="topbar">
+      <ScrollProgress />
       <div className="topbar-inner">
-        <Link href="/" className="brand" aria-label="二号知乎 · 回到首页">
+        <Link href="/" className="brand" aria-label="影子知乎 · 回到首页">
           <span className="brand-mark" aria-hidden>
             {/* 主 logo 与 favicon / apple-icon 用同一形象资源（public/logo.png），
                 保证「标签页图标 = 顶栏品牌」视觉一致。 */}
             <img src="/logo.png" alt="" width={32} height={32} decoding="async" />
           </span>
-          <span>
-            <span className="brand-name">二号知乎</span>
-            <br />
-            <span className="brand-sub">Human Mesh · 知乎黑客松</span>
+          <span className="brand-text">
+            <span className="brand-name">影子知乎</span>
+            <span className="brand-sub">Agent 可调用的人类知识网络</span>
           </span>
         </Link>
 
@@ -85,6 +91,28 @@ export function TopBar() {
             </Link>
           ))}
         </nav>
+
+        {!sessionLoading && (
+          <div className="account">
+            {user ? (
+              <>
+                <span className="account-avatar" aria-hidden>
+                  {user.avatarUrl ? (
+                    // 知乎头像域名不固定，用原生 img 规避 next/image 白名单。
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={user.avatarUrl} alt="" width={28} height={28} />
+                  ) : (
+                    user.name.slice(0, 1)
+                  )}
+                </span>
+                <span className="account-name">@{user.name}</span>
+                <button onClick={logout} aria-label="退出登录">退出</button>
+              </>
+            ) : available ? (
+              <button onClick={login}>知乎登录</button>
+            ) : null}
+          </div>
+        )}
 
         <button
           ref={toggleRef}
@@ -135,17 +163,22 @@ export function TopBar() {
                   {n.label}
                 </Link>
               ))}
+              {!sessionLoading && (
+                user ? (
+                  <button className="btn btn-ghost" onClick={logout}>退出 @{user.name}</button>
+                ) : available ? (
+                  <button className="btn btn-ghost" onClick={login}>知乎登录</button>
+                ) : null
+              )}
             </motion.nav>
           </>
         )}
       </AnimatePresence>
-
-      <ScrollProgress />
     </header>
   );
 }
 
-/** 子路由也算激活（例如 /personas/xxx 时「答主名册」保持高亮）。 */
+/** 子路由也算激活（例如 /personas/xxx 时「分身发现」保持高亮）。 */
 function isActive(path: string, href: string): boolean {
   if (href === "/") return path === "/";
   return path === href || path.startsWith(href + "/");

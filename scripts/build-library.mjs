@@ -2,11 +2,9 @@
 /**
  * 广场镜像问题库 —— 把「已完成的镜像讨论组」预生成成一份静态 JSON。
  *
- * ⚠️ 当前状态：脚本已完成，但**消费端尚未接入**（2026-09-15 记录）。
- *   产物 `public/square-library.json` 目前没有任何代码读取；
- *   `components/square/FeedStream.tsx` 现在仍走「讨论组话题直接列出」的静态路径。
- *   也就是说，跑这个脚本会真实消耗知乎额度并生成 JSON，但广场外观不会变化。
- *   接入前请先确认是否真的需要预生成（见下方「何时该用」）。
+ * 消费端：components/square/FeedStream.tsx（首页与 /square 共用）。
+ *   它 fetch `/square-library.json`，把条目还原成可载入工作台的镜像问题。
+ *   改本文件的 slim() 必须同步改那边的 hydrate()，否则广场会出现空条目。
  *
  * 何时该用：演示现场如果想把广场做成「一大批已经做完的讨论组」而不是
  *   「一堆等着你去做的问题」——预生成后广场可秒开、无限翻页、不再耗额度。
@@ -94,7 +92,16 @@ const TOPICS = [
   "在县城做公务员，一辈子就到头了吗？",
 ];
 
-/** 广场条目里保留的字段 —— 多余的（如完整证据原文）会让 JSON 膨胀到几 MB。 */
+/**
+ * 广场条目里保留的字段 —— 多余的（如完整证据原文）会让 JSON 膨胀到几 MB。
+ *
+ * ⚠️ 字段名必须与 lib/domain/types.ts 的真实类型对齐，不能凭印象写：
+ *   - Gap 用的是 `label` / `reason` / `needProfile`，不是 question/why。
+ *     写错字段名不会报错，只会静默产出只剩 id 的空缺口（2026-09-15 踩过）。
+ *   - AnswerDraft 必填 `accent` / `evidence` / `createdAt` / `status`，
+ *     这些在还原时要么补回、要么由 hydrate() 补默认值。
+ * 消费端在 components/square/FeedStream.tsx 的 hydrate()，改这里必须同步改那边。
+ */
 function slim(mirror) {
   return {
     id: mirror.id,
@@ -104,16 +111,35 @@ function slim(mirror) {
     skills: mirror.skills.map((s) => ({
       id: s.id,
       name: s.name,
+      kind: s.kind,
+      lens: s.lens,
+      accent: s.accent,
       persona: s.persona ? { handle: s.persona.handle, displayName: s.persona.displayName } : undefined,
     })),
     answers: mirror.answers.map((a) => ({
       id: a.id,
       skillId: a.skillId,
       skillName: a.skillName,
+      accent: a.accent,
+      handle: a.handle,
       body: a.body,
       generatedBy: a.generatedBy,
+      status: a.status,
+      createdAt: a.createdAt,
+      round: a.round,
+      replyToName: a.replyToName,
+      /** 证据只留条数与来源标题，正文留在仓外 —— 它是最大的一块体积。 */
+      evidenceCount: Array.isArray(a.evidence) ? a.evidence.length : 0,
+      evidenceTitles: (a.evidence ?? []).slice(0, 3).map((e) => e.title),
     })),
-    gaps: mirror.gaps.map((g) => ({ id: g.id, question: g.question, why: g.why })),
+    gaps: mirror.gaps.map((g) => ({
+      id: g.id,
+      kind: g.kind,
+      label: g.label,
+      reason: g.reason,
+      needProfile: g.needProfile,
+      severity: g.severity,
+    })),
   };
 }
 

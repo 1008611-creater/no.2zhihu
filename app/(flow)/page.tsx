@@ -24,8 +24,12 @@ import { useMirror } from "@/lib/store/mirror-store";
  * 2026-09-15 收敛（评委反馈）：
  *   · 首页不再铺开全部结果 —— 答主阵容、回答群组、缺口、Mesh 都与 /mirror 重复，
  *     现在统一由 /mirror（首页的子级页面）承载，生成完成后直接跳过去。
- *   · 空闲态不再是一块说明文字，而是**广场信息流**：此刻知乎在热什么、
- *     本场已经生成过什么，点任意一条就能变成新的镜像问题。
+ *   · 空闲态不再是一块说明文字，而是**广场信息流**：主体是已经做完的
+ *     镜像讨论组，后面跟知乎热榜，点任意一条就能变成新的镜像问题。
+ *
+ * 文案约定（req 10）：大字后面不加解释性小字，大字末尾不加句号。
+ *   HeroTitle 与各 section 标题统一走 `className="no-tail"`，
+ *   配套的 `.no-tail + .lede / .no-tail + .dim { display: none }` 兜住残留小字。
  *
  * 三步状态机（phase）：
  *   ask   —— 输入问题（下方是广场信息流）
@@ -197,12 +201,8 @@ export default function Home() {
       <section className="hero">
         <div className="hero-grid">
           <div>
-            <p className="eyebrow">HUMAN MESH · 0 级入口</p>
+            <p className="eyebrow">SHADOW ZHIHU · 0 级入口</p>
             <HeroTitle />
-            <p className="lede">
-              输入问题，指定你想听谁回答 —— 哪怕他从没答过这个问题。看山会按这位答主的
-              领域、立场和说话方式生成一份分身回答。
-            </p>
           </div>
           <div className="hero-char">
             <Kanshan state={flowStateAt(step)} size={208} followPointer />
@@ -259,7 +259,7 @@ export default function Home() {
             <div className="section-head">
               <div>
                 <p className="eyebrow">Step 1 · 选答主</p>
-                <h2>你想听谁回答这个问题？</h2>
+                <h2 className="no-tail">你想听谁回答这个问题</h2>
               </div>
             </div>
 
@@ -307,10 +307,6 @@ export default function Home() {
                 <h3 style={{ marginBottom: 12 }}>
                   正在为「{question.trim()}」召集答主分身
                 </h3>
-                <p className="lede" style={{ marginTop: 0 }}>
-                  他们会各自检索自己领域的真实公开回答，再按自己的说话方式写一段。
-                  完成后自动打开回答页面。
-                </p>
                 <div style={{ display: "grid", gap: 8, marginTop: 14 }}>
                   {selected.length > 0 ? (
                     selected.map((h) => <div key={h} className="skeleton" style={{ height: 38 }} />)
@@ -332,12 +328,8 @@ export default function Home() {
           <div className="section-head">
             <div>
               <p className="eyebrow">Virtual square · 虚拟广场</p>
-              <h2>此刻在讨论什么</h2>
+              <h2 className="no-tail">这座虚拟知乎里已经讨论过的事</h2>
             </div>
-            <p className="dim" style={{ fontSize: 13.5, maxWidth: 400 }}>
-              知乎真实热榜、人工讨论组、本场已生成的镜像问题，混在同一条流里。
-              点任意一条，它就会变成一个新的镜像问题。
-            </p>
           </div>
           {ready && <FeedStream hotLimit={20} />}
           {!ready && <div className="skeleton" style={{ height: 260 }} />}
@@ -356,7 +348,7 @@ export default function Home() {
       {inviteNote && <div className="notice notice-info" style={{ marginTop: 14 }}>{inviteNote}</div>}
 
       <footer className="footer">
-        <span>二号知乎 · 知乎黑客松 2026</span>
+        <span>影子知乎 · Agent 可调用的人类知识网络</span>
         <span className="dimmer">内容来源与作者信息始终保留</span>
       </footer>
     </div>

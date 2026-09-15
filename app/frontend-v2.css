@@ -33,9 +33,18 @@ body::before {
   mask-image: linear-gradient(#000, transparent 90%);
 }
 body { font-size: clamp(.9375rem, .88rem + .2vw, 1rem); }
-h3 { font-size: clamp(1rem, .95rem + .2vw, 1.125rem); }
-h1 { text-wrap: balance; }
+
+/* 排版只有一个声音：无衬线（Space Grotesk + 系统中文字），等宽只留给数字与路径。
+   为什么在这里重声明：globals.css 里有一套旧的 h1/h2/h3 字号与 DM Mono 眉标，
+   两套 CSS 同时 import 时会有两个「设计语言」互相打架 —— 表现就是「字体不统一」。 */
+h1, h2, h3 { font-family: var(--font-display), "PingFang SC", "HarmonyOS Sans", "Microsoft YaHei", system-ui, sans-serif; }
+h1 { font-weight: 700; line-height: 1.08; letter-spacing: -.035em; text-wrap: balance; }
+h2 { font-weight: 700; letter-spacing: -.028em; }
+h3 { font-size: clamp(1rem, .95rem + .2vw, 1.125rem); font-weight: 600; letter-spacing: -.012em; }
 h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: currentColor; }
+/* 大字后面不加句号、不跟解释小字 —— 大字自己要把话说完整。
+   `.no-tail` 挂在 heading 上；紧跟其后的 `.lede`/`.dim` 属重复说明，直接收起来。 */
+.no-tail + .lede, .no-tail + .dim { display: none; }
 .text-character { display: inline-block; }
 
 /* 关系图在窄屏会退化成「标签互相压住」的一团。缩字号解决不了 ——
@@ -66,10 +75,38 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
 }
 .hero { padding-block: clamp(36px, 6vw, 80px); }
 .hero h1 { font-size: clamp(2rem, 3.8vw, 3.8rem); letter-spacing: -.045em; }
+/* 大字后面没有解释小字了，所以标题自己撑开呼吸感。 */
+.hero h1.no-tail { margin-bottom: 0; }
 .eyebrow, .brand-sub, .stat-n { font-family: var(--font-mono), monospace; }
 .eyebrow { font-size: clamp(.6875rem, .65rem + .16vw, .8125rem); }
 .stat-n { font-size: clamp(1.625rem, 2.5vw, 2.5rem); font-variant-numeric: tabular-nums; }
 .stat-l, .chip { font-size: clamp(.75rem, .7rem + .15vw, .875rem); }
+
+/* 输入控件与按钮统一到同一套边框与焦点环；旧文件里的蓝紫描边已失效。 */
+.field {
+  background: var(--ink-900);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--foreground);
+  padding: 14px 15px;
+  font: inherit;
+  resize: vertical;
+  width: 100%;
+}
+.field::placeholder { color: var(--text-700); }
+.field:focus {
+  outline: none;
+  border-color: var(--action);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--action) 24%, transparent);
+}
+.btn {
+  border-radius: calc(var(--radius) / 2.2);
+  font-weight: 600;
+  padding-inline: 18px;
+}
+.btn-ghost { border: 1px solid var(--border); background: transparent; color: var(--text-300); }
+.btn-ghost:hover:not(:disabled) { border-color: #62626c; color: var(--foreground); }
+
 .card { background: var(--surface-raised); border-color: var(--border); box-shadow: none; }
 .card-flat { background: var(--ink-900); }
 .btn, button.chip, .nav a { min-height: 44px; }
@@ -98,7 +135,9 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
   }
 }
 
-/* ---------------- 虚拟广场信息流 ---------------- */
+/* ---------------- 虚拟广场信息流 ----------------
+   已完成讨论组是广场的主语：一条里同时看到「谁答的」和「几篇回答」，
+   点一下就能载入工作台。 */
 .feed-stream { display: grid; gap: 10px; }
 .feed-row { display: flex; gap: 14px; align-items: flex-start; padding: 15px 17px; }
 .feed-row > .chip { flex: none; margin-top: 1px; white-space: nowrap; }
@@ -111,6 +150,32 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
 @media (max-width: 640px) {
   .feed-row { flex-direction: column; gap: 8px; }
 }
+
+/* ---------------- 我的 Mesh ----------------
+   身份区是这张网的第一句话，登录态必须一眼可辨。 */
+.stat { background: var(--ink-900); border-color: var(--border); }
+.stat-n { color: var(--foreground); }
+
+.avatar {
+  width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex: none;
+  border: 1px solid var(--border); background: var(--ink-700);
+  display: grid; place-items: center;
+}
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.avatar-fallback { font-weight: 700; font-size: 17px; color: var(--text-300); }
+
+/* 顶栏账号区：已登录显示头像，未登录显示一个安静的登录入口。 */
+.account { display: flex; align-items: center; gap: 9px; }
+.account-avatar {
+  width: 28px; height: 28px; border-radius: 50%; overflow: hidden; flex: none;
+  border: 1px solid var(--border); background: var(--ink-700);
+  display: grid; place-items: center; font-size: 12px; font-weight: 700; color: var(--text-300);
+}
+.account-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.account-name { font-size: 13px; font-weight: 600; color: var(--text-300); max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.account button, .account a { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-size: 12.5px; color: var(--text-500); }
+.account button:hover, .account a:hover { color: var(--foreground); }
+@media (max-width: 860px) { .account-name { display: none; } }
 
 /* ---------------- 选答主卡片（简化版） ----------------
    只保留「这是谁 + 他聊什么」。名字必须是一屏里最显眼的元素。 */

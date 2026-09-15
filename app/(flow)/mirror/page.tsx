@@ -100,7 +100,7 @@ export default function MirrorPage() {
 
       <section className="section">
         <p className="eyebrow">Mirror workspace · 本场结果</p>
-        <h1 style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "24ch" }}>{mirror.title}</h1>
+        <h1 className="no-tail" style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "24ch" }}>{mirror.title}</h1>
 
         <div className="grid grid-4" style={{ marginTop: 22 }}>
           {[
@@ -144,8 +144,7 @@ export default function MirrorPage() {
 
       <section className="section" id="answers">
         <div className="section-head">
-          <h2>首轮作答</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>每位答主各写一篇，正文只使用他自己对应的真实公开来源。</p>
+          <h2 className="no-tail">首轮作答</h2>
         </div>
         <div className="grid grid-3">
           {firstRound.map((a, i) => <AnswerCard key={a.id} answer={a} index={i} />)}
@@ -155,8 +154,7 @@ export default function MirrorPage() {
       {replies.length > 0 && (
         <section className="section">
           <div className="section-head">
-            <h2>互相回应</h2>
-            <p className="dim" style={{ fontSize: 13.5 }}>一轮，不循环。他们接的是对方已经说过的话。</p>
+            <h2 className="no-tail">互相回应</h2>
           </div>
           <div className="grid grid-3">
             {replies.map((a, i) => <AnswerCard key={a.id} answer={a} index={i} />)}
@@ -180,8 +178,7 @@ export default function MirrorPage() {
 
       <section className="section">
         <div className="section-head">
-          <h2>看山发现的缺口</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>这些地方分身答不了，必须由真人补上。</p>
+          <h2 className="no-tail">看山发现的缺口</h2>
         </div>
         <div style={{ display: "grid", gap: 12 }}>
           {mirror.gaps.map((g, i) => (
@@ -206,7 +203,7 @@ export default function MirrorPage() {
         >
           <div className="card" style={{ borderColor: "rgba(77,124,255,0.4)" }}>
             <p className="eyebrow">Human invite</p>
-            <h2>真人邀请已生成</h2>
+            <h2 className="no-tail">真人邀请已生成</h2>
             <p className="lede" style={{ marginTop: 12 }}>
               这个缺口 AI 补不了。进入补充页，用「最小填空」或「完整编辑」把这一段补完，
               看山会把这一段接到 Human Mesh 上。
@@ -230,8 +227,8 @@ export default function MirrorPage() {
       {mesh && (
         <section className="section">
           <div className="section-head">
-            <h2>Human Mesh 实时更新</h2>
-            <Link className="link mono" href="/mesh">查看完整关系图 →</Link>
+            <h2 className="no-tail">这场生成出来的关系</h2>
+            <Link className="link mono" href="/mesh">去我的 Mesh 搬运分身回答 →</Link>
           </div>
           <MeshGraph graph={mesh} height={380} />
         </section>
@@ -253,27 +250,38 @@ export default function MirrorPage() {
  * 分身发现 —— 这个 Tab 的核心。
  *
  * 旧版一进来就是「本场会话的工作台数据」，没生成过镜像问题时甚至只剩一句提示，
- * 完全看不到这座虚拟知乎里到底住着谁。现在把「人」提到最前面：
- * 答主名册 + 公共人物分身，点任意一位直接带他进入提问流程。
+ * 完全看不到这座虚拟知乎里到底住着谁。现在把「人」提到最前面。
+ *
+ * 2026-09-15 合并（req 14）：原先独立的「答主名册」Tab 与本区块高度重复，
+ * 两边都在列同一批答主。现在名册并入这里 —— 一个 Tab 讲清「这里住着谁」，
+ * 导航栏少一项，也不再有两份会各自过期的名单。
  */
 function DiscoverSection() {
+  const realCorpus = PERSONAS.filter((p) => p.corpus?.real).length;
+
   return (
     <section style={{ paddingTop: 32 }}>
-      <Link className="link mono" href="/" style={{ fontSize: 12 }}>
-        ← 返回首页
-      </Link>
-      <p className="eyebrow" style={{ marginTop: 14 }}>Discover · 分身发现</p>
-      <h1 style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "26ch" }}>
-        这里住着 {PERSONAS.length} 位知乎答主，
+      <p className="eyebrow">Discover · 分身发现</p>
+      <h1 className="no-tail" style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "26ch" }}>
+        这里住着 {PERSONAS.length} 位知乎答主
         <br />
-        和 {PUBLIC_FIGURES.length} 位公共人物的思维分身。
+        和 {PUBLIC_FIGURES.length} 位公共人物的分身
       </h1>
-      <p className="lede" style={{ marginTop: 14, maxWidth: "62ch" }}>
-        每一位都不是「换一种语气的同一个模型」：他知道什么、怎么看问题、怎么说话、
-        明确不装懂什么，这四件事都不一样。点一位，直接带着他去提问。
-      </p>
 
       <div className="grid grid-3" style={{ marginTop: 24 }}>
+        {[
+          { n: PERSONAS.length, l: "位答主分身" },
+          { n: realCorpus, l: "位基于真实语料" },
+          { n: PUBLIC_FIGURES.length, l: "位公共人物" },
+        ].map((s) => (
+          <div key={s.l} className="stat">
+            <div className="stat-n">{s.n}</div>
+            <div className="stat-l">{s.l}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="grid grid-3" style={{ marginTop: 20 }}>
         {PERSONAS.map((p, i) => (
           <motion.div
             key={p.handle}
@@ -317,7 +325,28 @@ function DiscoverSection() {
 
       <div className="section-head" style={{ marginTop: 34 }}>
         <div>
-          <h2>公共人物 · 思维分身</h2>
+          <h2 className="no-tail">每个人格都拆成这四件事</h2>
+        </div>
+      </div>
+      <div className="grid grid-4">
+        {[
+          { k: "knows", l: "知道什么", d: "领域与事实边界" },
+          { k: "stance", l: "怎么看问题", d: "立场与判断倾向" },
+          { k: "voice", l: "怎么说话", d: "句式、节奏与口头禅" },
+          { k: "doesNotKnow", l: "不装懂什么", d: "明确拒答与交还给真人" },
+        ].map((c) => (
+          <div key={c.k} className="card-flat">
+            <div style={{ fontWeight: 700, fontSize: 14 }}>{c.l}</div>
+            <div className="dim" style={{ fontSize: 12.5, marginTop: 5 }}>
+              {c.d}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="section-head" style={{ marginTop: 34 }}>
+        <div>
+          <h2 className="no-tail">公共人物 · 思维分身</h2>
         </div>
         <span className="mono dimmer" style={{ marginLeft: "auto" }}>
           {PUBLIC_FIGURE_LABEL}

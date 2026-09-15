@@ -46,12 +46,12 @@ function preloadKanshan() {
 
 export const metadata: Metadata = {
   metadataBase: new URL('https://zhihu.cauai.fun'),
-  title: '二号知乎 · Human Mesh',
-  description: '让每个问题，先在另一个知乎里发生。看山召集 Skill 分身作答，再把缺口交给真实的人。',
+  title: '影子知乎 · Agent 可调用的人类知识网络',
+  description: 'Agent 可调用的人类知识网络。你说一个问题，招来真实答主的分身先答一遍，再把缺口交给真人。',
 };
 
 export const viewport: Viewport = {
-  themeColor: '#07080f',
+  themeColor: '#0a0a0b',
   width: 'device-width',
   initialScale: 1,
 };
