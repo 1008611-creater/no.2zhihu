@@ -15,6 +15,7 @@ import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDraw
 import { FLOW_STATES } from "@/components/kanshan/states";
 import { buildMesh } from "@/lib/domain/mesh";
 import { personaCandidates } from "@/lib/domain/router";
+import { splitSources } from "@/lib/domain/evidence";
 import MeshGraph from "@/components/mesh/MeshGraph";
 import { SHIFT } from "@/lib/motion/tokens";
 
@@ -110,12 +111,21 @@ export default function MirrorPage() {
         <p className="eyebrow">Mirror workspace · 本场结果</p>
         <h1 className="no-tail" style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "24ch" }}>{mirror.title}</h1>
 
+        {/**
+         * 「N 条真实知乎来源」只数**可核对**的（作者名与链接齐全），与回答页、
+         * 右栏广播同一口径 —— 见 lib/domain/evidence.ts 的 splitSources。
+         * 过去这里写的是 skills.reduce(sources.length)，把署名/链接缺失的条目也数进去，
+         * 于是顶栏可能比回答页真正列得出的多（实测全库 195 条里有 5 条未取回署名）。
+         */}
         <div className="grid grid-4" style={{ marginTop: 22 }}>
           {[
             { n: mirror.skills.length, l: "位答主分身" },
             { n: mirror.answers.length, l: "篇回答" },
             { n: mirror.gaps.length, l: "个缺口", s: filled > 0 ? `已补 ${filled}` : undefined },
-            { n: mirror.skills.reduce((a, s) => a + s.sources.length, 0), l: "条真实知乎来源" }
+            {
+              n: mirror.answers.reduce((a, x) => a + splitSources(x.evidence).displayable.length, 0),
+              l: "条真实知乎来源",
+            },
           ].map((s) => (
             <div key={s.l} className="stat">
               <div className="stat-n">{s.n}</div>
