@@ -30,6 +30,15 @@ interface SessionState {
    * UI 必须如实标注，不把「降级放行」说成「安全登录」。
    */
   stateVerified: boolean;
+  /**
+   * 这个登录态**现在还能不能用**。
+   *
+   * user 有值只代表 cookie 没过期（7 天），而 access_token 只活在服务端
+   * 进程内存里 —— 服务重启（或 token 满 1 小时）之后就取不到数据了。
+   * 此时必须按「登录已过期」呈现并引导重新登录，
+   * 否则用户会点进一个只会报 401 的界面。
+   */
+  tokenValid: boolean;
   loading: boolean;
 }
 
@@ -38,6 +47,7 @@ export function useSession() {
     user: null,
     available: false,
     stateVerified: false,
+    tokenValid: false,
     loading: true,
   });
 
@@ -49,10 +59,17 @@ export function useSession() {
         user: data?.user ?? null,
         available: Boolean(data?.available),
         stateVerified: Boolean(data?.stateVerified),
+        tokenValid: Boolean(data?.tokenValid),
         loading: false,
       });
     } catch {
-      setState({ user: null, available: false, stateVerified: false, loading: false });
+      setState({
+        user: null,
+        available: false,
+        stateVerified: false,
+        tokenValid: false,
+        loading: false,
+      });
     }
   }, []);
 
@@ -66,7 +83,7 @@ export function useSession() {
     } catch {
       /* 本地状态照样清掉，服务端失败不该让按钮卡住 */
     }
-    setState((s) => ({ ...s, user: null, stateVerified: false }));
+    setState((s) => ({ ...s, user: null, stateVerified: false, tokenValid: false }));
   }, []);
 
   /** 跳去知乎授权页。用整页跳转而不是 fetch —— 授权页不受 CORS 约束。 */

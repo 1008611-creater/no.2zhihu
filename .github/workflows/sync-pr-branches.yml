@@ -1,0 +1,73 @@
+name: 同步在途 PR 分支
+
+# 为什么需要它
+#   main 开了分支保护 strict: true（分支必须与 main 同步才能合），
+#   于是每合并 1 个 PR，其余所有在途 PR 全部失效、必须各自 rebase。
+#   队列长度 N 时，每合 1 个产生 N-1 次返工 —— 这是审计/上线线程跟不上开发速度的根因。
+#   这个 workflow 把「N 次本地 rebase」换成「点一下」。
+#
+# 为什么是手动触发而不是 push 自动触发
+#   自动在每次 push 后强推别人正在开发的分支，会和开发者本地的 push 打架
+#   （本仓库已经丢过一次 25 个文件的未提交改动）。同步这个动作应该由
+#   审计/上线线程在准备合并前主动发起，而不是在别人写代码时突然改他的分支。
+#
+# 用法
+#   Actions → 同步在途 PR 分支 → Run workflow
+#   dry_run 勾上则只列出将要同步的 PR，不实际推送。
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 只列出将要同步的 PR，不实际推送
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# 同一时间只跑一个，避免两次同步互相打架
+concurrency:
+  group: sync-pr-branches
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 队列快照
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "在途 PR："
+          gh pr list --state open --limit 50 \
+            --json number,title,mergeable,headRefName \
+            --jq '.[] | "  #\(.number)  \(.mergeable)  \(.headRefName)  \(.title)"'
+
+      - name: 逐个同步到最新 main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -uo pipefail
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "dry-run：以下 PR 会被同步（本次不推送）"
+            gh pr list --state open --limit 50 --json number,headRefName \
+              --jq '.[] | "  #\(.number)  \(.headRefName)"'
+            exit 0
+          fi
+
+          failed=0
+          for n in $(gh pr list --state open --limit 50 --json number --jq '.[].number'); do
+            echo "── 同步 #$n"
+            # --rebase 保持线性历史；有冲突时 gh 会报错，需要人工解（这是预期的）
+            if ! gh pr update-branch "$n" --rebase; then
+              echo "   !! #$n 同步失败 —— 多半是真冲突，需要人工解决后再同步"
+              failed=$((failed + 1))
+            fi
+          done
+
+          echo
+          echo "同步结束：失败 $failed 个（失败 = 真冲突，不是脚本问题）"
+          echo "同步后请重新确认 PR 的 CI 与 node scripts/verify-merge.mjs 结果。"

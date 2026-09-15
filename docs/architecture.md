@@ -77,7 +77,7 @@ v1 主线是「**具体知乎答主的分身**」。分身分两类，评价标�
 
 **问题**：四要素里的 `voice` 全是**形容词**——「毒舌」「口语」「节奏快」「短句为主」。
 形容词无法落地：任何人格都能认领同一批形容词，模型读完后仍然按通用文风输出，
-于是 16 位答主的回答拉不开差距，整体像 GPT 直答。
+于是 15 位答主的回答拉不开差距，整体像 GPT 直答。
 
 **方案**：在 `voice` 下新增四个**可执行 / 可核对**的字段（`lib/domain/types.ts` 的 `PersonaVoice`）：
 
@@ -88,7 +88,7 @@ v1 主线是「**具体知乎答主的分身**」。分身分两类，评价标�
 | `avoid` | `string[]` | 反面例句：绝不写出来的具体句子 | 给出**具体句子**而非「不要公式化」这种口号 |
 | `exemplars` | `string[]` | 语感范例（构造，**不是**抓取到的原话） | 提供 few-shot 锚点；不改变 `corpus.real` 语义，不冒充真实引文 |
 
-16 位答主全部补齐，每位 `avoid` 4 条、`exemplars` 3 条。
+15 位答主全部补齐，每位 `avoid` 4 条、`exemplars` 3 条。
 
 **三处重复钉住**（模型「读了但没照做」是常态，单处注入不够）：
 
@@ -122,16 +122,37 @@ scripts/distill-personas.mjs    把原始回答喂给直答，抽四要素 → l
 
 > 合规边界：官方制作指南禁止批量爬取。抓取脚本与原始语料仅本地一次性使用、不入公开仓库；见 [acceptance.md](acceptance.md) §六 风险表。
 
-## 二、目录结构（目标态）
+## 二、目录结构
+
+> 下面这份是**现状**（2026-09-15 逐文件核对过），不是「目标态」。
+> 早先这里写的是设计当初的规划，代码长过去之后没人回头看，
+> 结果文档比代码旧了两轮 —— 而本文开头写着「代码与本文冲突时以本文为准」，
+> 一个过期的唯一事实源会把后来的人带偏。改动代码若动了目录，请顺手改这里。
 
 ```
 app/
   layout.tsx                    根布局 + 元信息
   globals.css                   设计 token + 基础样式（唯一全局样式文件）
-  page.tsx                      首页：提问入口 + 看山 + 流程
-  mesh/page.tsx                 Human Mesh 视图
+  template.tsx                  路由切换的进场包裹（动效）
+  (flow)/                       提问主线
+    layout.tsx
+    page.tsx                    首页：提问入口 + 看山 + 流程
+    mirror/page.tsx             镜像工作台：读答案（/mirror 只服务这一个意图）
+    fill/page.tsx               真人补充
+    answer/[id]/page.tsx        单条回答详情
+  (explore)/                    发现主线（layout 里含面包屑 JourneyNav）
+    personas/page.tsx           答主名册
+    personas/[handle]/page.tsx  单个答主档案（语言指纹 / 语感范例 / 他不会写的句子）
+    square/page.tsx             虚拟广场（无限画布）
+    me/page.tsx                 我的（含 Mesh 标签页）
+    mesh/page.tsx               旧入口，meta-refresh 重定向到 /me?tab=mesh
   api/
     health/route.ts             健康检查（部署探针）
+    auth/
+      login/route.ts            发起知乎授权（307 → openapi.zhihu.com/authorize）
+      callback/route.ts         回调换 token、写会话；落地必须写 /me?tab=mesh
+      session/route.ts          当前登录态（含 tokenValid：cookie 未过期 ≠ 还能取数）
+      user-data/route.ts        代理取用户数据；未登录 401
     zhihu/
       hot/route.ts              热榜（缓存 10 分钟）
       search/route.ts           知乎搜索 / 全网搜索
@@ -144,32 +165,51 @@ app/
       route.ts                  ★ 核心：问题 → 路由 → 证据 → 回答 → 缺口
       invite/route.ts           继续邀请一位答主（只生成这一位，不重跑旧的）
       debate/route.ts           一轮互相回应（识别冲突 → 双方各回一段，上限 2 次直答）
+    handoff/route.ts            搬运到 Mesh
 components/
   kanshan/                      看山角色引擎（见 character-engine.md）
     Kanshan.tsx                 对外组件（SVG + Motion 弹簧）
     KanshanStage.tsx            按流程阶段驱动看山 + 旁白
     states.ts                   状态表 / 眼神表 / 停留区间 / 姿态表
-  mirror/                       镜像工作台组件（Skill / Answer / Gap / Handoff）
-  mesh/                         Human Mesh 关系图
-  ui/                           通用组件（TopBar / QuotaBadge）
+  mirror/                       镜像工作台组件（Skill / Answer / Gap / Handoff / 人格选择器）
+  mesh/                         Human Mesh 关系图 + 搬运面板 + 知乎数据面板
+  me/                           「我的」页（IdentityCard / MyMeshPanel / MyPersonasPanel）
+  personas/                     PersonaDirectory：答主名册
+  square/                       SquareField（数据接入）→ SquareCanvas（桌面）/ SquareStrip（≤640px）
+  providers/                    MotionProvider
+  ui/                           通用组件（TopBar / JourneyNav / LogoMark / RouteTransition /
+                                CountUp / ScrollProgress / ScrollReveal / HeroTitle / QuotaBadge）
 lib/
   zhihu/                        服务端知乎客户端（server-only）
     client.ts                   fetch + 鉴权 + 超时 + 错误归一
     cache.ts                    进程内 TTL + 请求去重
+    oauth.ts                    授权 URL / 换 token / publicOrigin()（反代下勿用 req.url）
+    session.ts                  签名 cookie 会话 + 进程内 token 暂存
+    user-api.ts                 用户数据 API（双 header）
     types.ts                    上游响应类型
     errors.ts                   错误分类与用户文案
   server/                       编排层（唯一同时接触知乎 IO 与领域规则）
     mirror.ts                   ★ 核心：问题 → 路由 → 证据 → 回答 → 缺口 + 邀请 + 互相回应
     persona.ts                  在线蒸馏：临时指定一位没预置的答主，如实返回命中条数
-  domain/                       纯业务逻辑（无 IO）
-    types.ts                    领域模型（含 Persona 四要素）
-    personas/                   答主人格名册（6 位真实答主，一人一文件 + index.ts）
+    publicFigures.ts            公共人物研究
+  domain/                       纯业务逻辑（无 IO、无 process.env）
+    types.ts                    领域模型（含 Persona 四要素与 PersonaVoice）
+    personas/                   答主人格名册（15 位真实答主，一人一文件 + index.ts；
+                                另有 splitter.ts 是「分身分离」机制，不是答主）
     skills.ts                   答主型主体（由 personas 派生）+ 视角型补充层
     router.ts                   Human Router：手动指定优先，自动推荐补位
     gap.ts                      ★ 缺口识别
     handoff.ts                  搬运文案与深链规则
     mesh.ts                     Human Mesh 关系推导
-  motion/                       动效工具（clamp 等）
+    topics.ts                   话题归类
+    publicFigures.ts            公共人物数据
+    square-layout.ts            虚拟广场的确定性布局（FNV-1a，零随机可复现）
+    voice.ts                    语言指纹 → 可数指标（段数 / 每段句数 / 篇幅 / 招牌标点）
+    relevance.ts                证据相关性硬过滤
+  store/                        mirror-store（跨页状态）
+  hooks/                        useSession 等
+  motion/                       动效 token 与弹簧（tokens.ts / spring.ts / useInviteUrl.ts）
+  brand/                        logo 矢量路径
 docs/                           规格文档
 ```
 
