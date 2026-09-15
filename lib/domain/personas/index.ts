@@ -68,3 +68,42 @@ export function corpusLabel(p: Persona): string {
   if (p.corpus.status === "unavailable" || p.corpus.capturedAt) return "语料待补充";
   return "依据公开资料撰写";
 }
+
+/**
+ * 语言指纹的必备字段。
+ *
+ * 2026-09-15 新增：评委反复指出「文风还是像 GPT 直答」。诊断结论是
+ * 原来只有 tone / sentenceLength 这类**形容词**，模型没法把形容词落地 ——
+ * 「语气温和」这句话六个人都能认领，所以六个人写出来是一个腔调。
+ * 新加的这四样是**可执行、可核对**的：开头句式能照抄，标点习惯能数，
+ * 反面例句是明确的禁区，语感范例给了节奏目标。
+ *
+ * 这里做的是**运行时报错**而不是静默降级：如果哪天新增答主漏填了这些字段，
+ * 生成出来的回答会悄悄退回 AI 腔，而这种退化在页面上看不出来。
+ * 与其让它悄悄发生，不如在开发环境直接抛错。
+ */
+export const VOICE_FINGERPRINT_FIELDS = ["opening", "punctuation", "avoid", "exemplars"] as const;
+
+/** 返回该答主缺失的指纹字段名；空数组表示齐全。 */
+export function missingVoiceFingerprint(p: Persona): string[] {
+  return VOICE_FINGERPRINT_FIELDS.filter((k) => {
+    const v = p.voice[k];
+    if (v === undefined || v === null) return true;
+    if (Array.isArray(v)) return v.length === 0;
+    return String(v).trim().length === 0;
+  });
+}
+
+// 模块加载时自检一次：开发环境缺字段直接抛错，生产环境只在控制台警告
+// （生产不能因为一个人格资产没写完就整站 500）。
+if (process.env.NODE_ENV !== "production") {
+  const incomplete = PERSONAS.map((p) => ({ p, miss: missingVoiceFingerprint(p) })).filter(
+    (x) => x.miss.length > 0,
+  );
+  if (incomplete.length > 0) {
+    throw new Error(
+      "答主语言指纹不完整（会导致生成文风退回 AI 腔）：\n" +
+        incomplete.map((x) => `· ${x.p.displayName}：缺少 ${x.miss.join("、")}`).join("\n"),
+    );
+  }
+}

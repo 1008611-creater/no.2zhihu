@@ -20,8 +20,16 @@ interface Persisted {
 
 interface Store extends Persisted {
   setMirror: (m: MirrorQuestion | null) => void;
-  markHandoffOpened: (editorUrl: string) => void;
-  confirmHandoff: () => void;
+  /**
+   * 按 mirror id 标记搬运状态。
+   *
+   * 为什么需要带 id 的版本：搬运面板已经从「作答工作台」搬到了「我的 Mesh」，
+   * 而 Mesh 上是一份**跨全部历史问题**的清单 —— 用户可以搬第 3 个问题而不是
+   * 当前 mirror 指向的那一场。原来只作用于 `state.mirror` 的写法在这种场景下
+   * 会把状态记到错的那一场上。
+   */
+  markHandoffOpenedFor: (mirrorId: string, editorUrl: string) => void;
+  confirmHandoffFor: (mirrorId: string) => void;
   applyHumanEdit: (answerId: string, body: string, author: string) => void;
   addContribution: (e: ContributionEvent) => void;
   /** 继续邀请：把新答主与他的回答追加进当前镜像问题，不重跑已有分身。 */
@@ -85,6 +93,45 @@ export function MirrorProvider({ children }: { children: React.ReactNode }) {
   const markHandoffOpened = useCallback((editorUrl: string) => {
     commit((m) => ({ ...m, handoff: { ...m.handoff, status: "opened", editorUrl } }));
   }, [commit]);
+
+  /**
+   * 按 id 定位到 history 里的任意一场，而不是只改 `state.mirror`。
+   * 「我的 Mesh」上的搬运清单是跨问题，必须能精确落到用户点的那一场。
+   */
+  const commitById = useCallback((mirrorId: string, fn: (m: MirrorQuestion) => MirrorQuestion) => {
+    setState((cur) => {
+      const target = cur.history.find((m) => m.id === mirrorId) ?? (cur.mirror?.id === mirrorId ? cur.mirror : null);
+      if (!target) return cur;
+      const next = fn(target);
+      const nextState: Persisted = {
+        mirror: cur.mirror?.id === mirrorId ? next : cur.mirror,
+        history: [next, ...cur.history.filter((x) => x.id !== mirrorId)].slice(0, MAX_HISTORY),
+      };
+      persist(nextState);
+      return nextState;
+    });
+  }, []);
+
+  const markHandoffOpenedFor = useCallback((mirrorId: string, editorUrl: string) => {
+    commitById(mirrorId, (m) => ({ ...m, handoff: { ...m.handoff, status: "opened", editorUrl } }));
+  }, [commitById]);
+
+  const confirmHandoffFor = useCallback((mirrorId: string) => {
+    commitById(mirrorId, (m) => ({
+      ...m,
+      handoff: {
+        ...m.handoff,
+        status: "confirmed",
+        confirmedAt: Date.now(),
+        note: "你已在知乎确认搬运。开放平台没有写入接口，发布动作由你本人完成。",
+      },
+      answers: m.answers.map((a) => (a.status === "human" ? { ...a, status: "handed-off" as const } : a)),
+      contributions: [
+        ...m.contributions,
+        { at: Date.now(), who: "你", delta: 12, reason: "把自己的分身回答搬运回真实知乎" },
+      ],
+    }));
+  }, [commitById]);
 
   const confirmHandoff = useCallback(() => {
     commit((m) => ({
@@ -163,8 +210,8 @@ export function MirrorProvider({ children }: { children: React.ReactNode }) {
   }, [commit]);
 
   const value = useMemo<Store>(
-    () => ({ ...state, setMirror, markHandoffOpened, confirmHandoff, applyHumanEdit, addContribution, appendInvite, appendReplies, ready }),
-    [state, setMirror, markHandoffOpened, confirmHandoff, applyHumanEdit, addContribution, appendInvite, appendReplies, ready]
+    () => ({ ...state, setMirror, markHandoffOpenedFor, confirmHandoffFor, applyHumanEdit, addContribution, appendInvite, appendReplies, ready }),
+    [state, setMirror, markHandoffOpenedFor, confirmHandoffFor, applyHumanEdit, addContribution, appendInvite, appendReplies, ready]
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

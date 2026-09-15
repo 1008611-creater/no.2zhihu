@@ -172,6 +172,81 @@ export default function PersonaDetailPage() {
                 <i style={{ width: emotionPct + "%" }} />
               </div>
             </div>
+
+            {/*
+              语言指纹：这三项是「遮住名字能不能认出是谁」的关键。
+              它们比「语气温和」这类形容词可核对得多 —— 评审可以直接拿一段
+              生成的回答回来逐条对：开头是不是这个起法、标点是不是这个习惯、
+              有没有出现明令禁止的句子。
+            */}
+            {(p.voice.opening || p.voice.punctuation) && (
+              <>
+                <hr className="divider" />
+                <div className="lbl">语言指纹</div>
+                <div style={{ display: "grid", gap: 10 }}>
+                  {p.voice.opening && (
+                    <div>
+                      <div className="dimmer mono" style={{ fontSize: 11, marginBottom: 3 }}>
+                        开头习惯
+                      </div>
+                      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.75 }}>
+                        {p.voice.opening}
+                      </div>
+                    </div>
+                  )}
+                  {p.voice.punctuation && (
+                    <div>
+                      <div className="dimmer mono" style={{ fontSize: 11, marginBottom: 3 }}>
+                        标点与分段
+                      </div>
+                      <div className="dim" style={{ fontSize: 12.5, lineHeight: 1.75 }}>
+                        {p.voice.punctuation}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            {p.voice.exemplars && p.voice.exemplars.length > 0 && (
+              <>
+                <hr className="divider" />
+                <div className="lbl">语感范例</div>
+                <div style={{ display: "grid", gap: 9 }}>
+                  {p.voice.exemplars.map((x) => (
+                    <div
+                      key={x}
+                      className="card-flat"
+                      style={{ fontSize: 12.5, lineHeight: 1.85, color: "var(--text-300)" }}
+                    >
+                      {x}
+                    </div>
+                  ))}
+                </div>
+                <p className="mono dimmer" style={{ fontSize: 11, marginTop: 9, lineHeight: 1.7 }}>
+                  这是按本人风格构造的语感范例，不是抓取到的原话，因此不计入「来源」，
+                  也不改变本页标注的语料状态。
+                </p>
+              </>
+            )}
+
+            {p.voice.avoid && p.voice.avoid.length > 0 && (
+              <>
+                <hr className="divider" />
+                <div className="lbl">他不会写的句子</div>
+                <div style={{ display: "grid", gap: 6 }}>
+                  {p.voice.avoid.map((x) => (
+                    <div key={x} className="dimmer" style={{ fontSize: 12.5, lineHeight: 1.7 }}>
+                      × {x}
+                    </div>
+                  ))}
+                </div>
+                <p className="mono dimmer" style={{ fontSize: 11, marginTop: 9, lineHeight: 1.7 }}>
+                  生成时这些句子一律禁止出现。它们都是典型的 AI 通用腔，
+                  列出具体例句比只说「不要写成 AI 腔」有效得多。
+                </p>
+              </>
+            )}
           </motion.div>
 
           <motion.div

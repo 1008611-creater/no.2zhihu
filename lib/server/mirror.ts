@@ -215,6 +215,25 @@ export interface DebateReply {
 }
 
 /**
+ * 把答主的语言指纹压成一小段，用于互相回应的提示词。
+ *
+ * 为什么回应也要带指纹：互相回应是最容易被写成「两个 AI 在辩论」的地方 ——
+ * 两边都开始讲道理、都四平八稳，人格立刻消失。让模型在回应时也拿着
+ * 各自的开头方式、标点习惯和禁区，才能保住「是这两个人在对话」。
+ */
+function debateVoiceLine(entry: DebateEntry): string {
+  const p = PERSONA_SKILLS.find((s) => s.persona?.handle === entry.handle)?.persona;
+  if (!p) return "";
+  const bits = ["语气：" + p.voice.tone.join("、"), "句长：" + sentenceLengthLabel(p.voice.sentenceLength)];
+  if (p.voice.punctuation) bits.push("标点：" + p.voice.punctuation);
+  if (p.voice.opening) bits.push("开口习惯：" + p.voice.opening.slice(0, 50));
+  if (p.voice.avoid && p.voice.avoid.length > 0) {
+    bits.push("绝不出现：" + p.voice.avoid.slice(0, 2).join(" ／ "));
+  }
+  return entry.name + " —— " + bits.join("；");
+}
+
+/**
  * 一轮互相回应：找出这组回答里最尖锐的一处冲突，让双方各回一段。
  *
  * 只跑一轮，不循环 —— 上限 2 次直答：
@@ -370,17 +389,51 @@ function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
           "。语气是「" + op.voice.tone.join("、") + "」，" +
           op.voice.sentenceLength +
           "句为主，" + olo + "–" + ohi + " 字，" +
-          op.catchphrases.slice(0, 2).join("、") + " 是他的口头禅。"
+          op.catchphrases.slice(0, 2).join("、") + " 是他的口头禅。" +
+          (op.voice.opening ? "他开头习惯「" + op.voice.opening.slice(0, 40) + "…」。" : "")
         );
       }),
       "读的人会把你们几段放在一起看。如果遮住名字分不出谁写的，这次就算失败。",
-      "具体说：句长节奏要和他不一样，常用词要和他不一样，看问题的入口也要和他不一样。",
+      "具体说：开头第一句的写法、句长节奏、标点习惯、看问题的入口，四样都要和他不一样。",
+    );
+  }
+
+  /**
+   * 文风特征段。
+   *
+   * 为什么把「开头 / 标点 / 反面例句 / 语感范例」单独拉出来：
+   * 之前只给了「语气」「句长」这类形容词，模型没法把它们落地 —— 形容词谁都能
+   * 认领，结果就是每个人写出来都是同一个温和、条理、有分寸的腔调。
+   * 这四样是**可执行、可核对**的：开头第一句能直接照抄句式，标点习惯能数，
+   * 反面例句是明确的禁区，语感范例给了节奏目标。
+   */
+  const fingerprint: string[] = [];
+  if (p.voice.opening) {
+    fingerprint.push("开头第一句怎么起：" + p.voice.opening);
+    fingerprint.push("（开头是最容易暴露 AI 的位置。不要用「这个问题其实」「先说结论」「随着……的发展」起手。）");
+  }
+  if (p.voice.punctuation) {
+    fingerprint.push("标点与排版习惯（照做，这是识别你最快的地方）：" + p.voice.punctuation);
+  }
+  if (p.voice.avoid && p.voice.avoid.length > 0) {
+    fingerprint.push(
+      "",
+      "【这几句你绝对写不出来 —— 出现任何一句，就算写砸了】",
+      ...p.voice.avoid.map((x) => "× " + x),
+    );
+  }
+  if (p.voice.exemplars && p.voice.exemplars.length > 0) {
+    fingerprint.push(
+      "",
+      "【语感范例 · 只对齐节奏与句式，不要抄内容、不要照搬主题】",
+      ...p.voice.exemplars.map((x) => "→ " + x),
     );
   }
 
   return [
-    "你正在扮演知乎答主「" + p.displayName + "」，回答一个具体问题。",
-    "目标不是给出最完美的答案，而是让读过他文章的人觉得「这像是他本人写的」。",
+    "你在为知乎答主「" + p.displayName + "」代笔回答一个具体问题。",
+    "评价标准只有一条：读过他文章的人看到这段，会觉得「这像是他本人敲出来的」。",
+    "不是「写得好的通用回答」，是**他这个人**的回答。宁可糙一点、偏一点，也不要标准。",
     "",
     "【他是谁】",
     p.headline,
@@ -397,6 +450,7 @@ function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
       : "他习惯连贯段落，不要分点、不要小标题、不要总结段。",
     "举例方式：" + p.voice.exampleStyle,
     "口语习惯（自然地用，不要每句都堆）：" + p.catchphrases.join("、"),
+    ...(fingerprint.length > 0 ? ["", "【这个人的语言指纹 · 这部分比上面更要紧】", ...fingerprint] : []),
     "",
     "硬性约束（违反即视为失败）：",
     "1. 事实只能来自【知乎证据】。不允许引入证据之外的数字、机构名、年份、案例。",
@@ -408,6 +462,7 @@ function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
     "5. 如果证据不足以支撑某个结论，就用一句话说「这一点需要真人补充」，不要编。",
     "6. 用第一人称「我」说话，像本人在知乎上随手敲出来的，不是在写报告。",
     "7. 不要用「先说这一点」「再讲那一点」这种自我报幕的句子，直接说事。",
+    "8. 不要在结尾总结。真人写知乎回答经常说完就走，不写「总之」「综上」也不写收尾句。",
     "",
     "【以下都是 AI 腔，出现任何一个，这段回答就算失败】",
     "首先/其次/最后、总的来说、综上所述、值得注意的是、不难看出、由此可见、",
@@ -419,6 +474,7 @@ function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
     "",
     "【落笔前自检】",
     "第一句是不是直接给了判断或亲身经历？有没有出现上面的 AI 套话？",
+    "标点习惯和段落长度，是不是这个人该有的样子？",
     "把这段读一遍，像不像「" + p.displayName + "」本人会在知乎上写出来的？",
     others.length > 0
       ? "把这段和同场其他人放在一起，遮住名字还能不能认出是你写的？不能就重写。"
@@ -462,9 +518,61 @@ function buildUserPrompt(skill: Skill, question: string): string {
     samples.forEach((s) => lines.push("· " + s.excerpt.slice(0, 150)));
   }
 
-  lines.push("", "请按你的身份和说话方式写一段回答。第一句就进入状态，不要铺垫。");
+  /**
+   * 把语言指纹在最靠近生成的位置再钉一次。
+   *
+   * 为什么要重复：system prompt 离实际生成最远，模型容易「读了但没照做」。
+   * 把开头句式、标点习惯与禁区放到 user prompt 末尾（也就是最后看到的内容），
+   * 是实践中让它真正落到正文上最有效的一次提醒。
+   */
+  if (p) {
+    const tail: string[] = [];
+    if (p.voice.opening) tail.push("第一句就按他这个习惯起 —— " + p.voice.opening);
+    if (p.voice.punctuation) tail.push("标点与分段照这个来 —— " + p.voice.punctuation);
+    if (tail.length > 0) {
+      lines.push("", "【落笔前的最后提醒 · 这两条最影响「像不像他」】", ...tail);
+    }
+    if (p.voice.avoid && p.voice.avoid.length > 0) {
+      lines.push("这些句子一句都不要出现：" + p.voice.avoid.join(" ／ "));
+    }
+  }
+
+  lines.push("", "请按你的身份和说话方式写一段回答。第一句就进入状态，不要铺垫，不要在结尾总结。");
   return lines.join("\n");
 }
+
+/**
+ * 结尾套话黑名单。
+ *
+ * 为什么要在后处理里兜底，而不只靠提示词：模型即使整篇都守住了人格，
+ * 也极容易在最后一句滑回自己的默认收尾（「总之」「综上」「希望……」）。
+ * 而这些收尾恰恰是「一眼就看得出是 AI」的位置 —— 真人写知乎很少正经收尾。
+ * 这里只删**位于末尾**的那一句，中间出现的不动，避免误伤正文。
+ *
+ * ⚠️ 判据：只有**整句就是一个纯套话**时才删（2026-09-15 审计修正）。
+ *
+ * 早期版本写成 `/(?:总之|...)[^\n]{0,80}[。！？]?\s*$/`，实测会误伤：
+ * 「总之我劝你别碰这个，去年我朋友就亏了六十万。」是一句**有实质信息**的
+ * 结论，只因为以「总之」开头就被整句删掉了。而这些答主恰恰爱用「总之」
+ * 起句说硬话 —— 删掉它等于删掉回答里最有价值的一句。
+ *
+ * 所以这里把每个模式收紧成「起手词 + 最多一句空泛收束」，并在
+ * `stripClosing` 里再加一道「删完不能伤到信息量」的兜底校验。
+ */
+const CLOSING_PATTERNS: RegExp[] = [
+  // ⚠️ 长度上限只有 14 字（早期版本给到 80 字）：
+  // 实测 `[^\n]{0,80}` 会把「总之我劝你别碰这个，去年我朋友就亏了六十万。」
+  // 这种**有实质信息的结论**整句删掉 —— 而这几位答主恰恰爱用「总之」起句
+  // 说硬话，删掉它等于删掉回答里最有价值的一句，且用户完全看不出来。
+  // 收紧到 14 字后，只剩「总之，未来可期。」这类真正的空泛收束会被命中。
+  /^(?:总之|综上(?:所述)?|总而言之|总的来说)[，,：:]?[^\n]{0,14}[。！？]?\s*$/,
+  /^(?:希望|祝愿)(?:以上|这些|这)[^\n]{0,40}[。！？]?\s*$/,
+  /^(?:希望(?:能|可以)?(?:对|给)你?[^\n]{0,40}(?:帮助|参考|启发))[。！？]?\s*$/,
+  /^(?:以上(?:就是|便是|是)我[^\n]{0,40})[。！？]?\s*$/,
+  /^(?:仅供参考)[^\n]{0,20}[。！？]?\s*$/,
+  // 「如果觉得有用，欢迎点赞关注」这类求互动收尾，也是典型 AI 腔。
+  /^(?:如果|若)?(?:觉得|认为)?(?:有用|有帮助|感兴趣)?[，,]?\s*(?:欢迎|可以|请)\s*(?:点赞|关注|收藏|转发|评论)[^\n]{0,20}[。！？]?\s*$/,
+];
 
 /** 清理模型偶尔带出的 Markdown 痕迹，并按该人格的字数上限收尾。 */
 function sanitizeAnswer(raw: string, skill: Skill): string {
@@ -474,20 +582,79 @@ function sanitizeAnswer(raw: string, skill: Skill): string {
     .replace(/^\s*[-*+]\s+/gm, "")
     .replace(/^\s*\d+\.\s+/gm, "")
     .replace(/^-{3,}$/gm, "")
-    // 模型很爱写「先算启动这笔账」这种独立成行的小标题。它没有句读、长度短，
-    // 与正文段落可区分 —— 直接删掉，否则回答一眼就是 AI 分节的腔调。
-    .replace(/^\s*[^\n。！？，、；：「」（）()]{2,14}\s*$/gm, "")
+    // 模型很爱写「先算启动这笔账」这种独立成行的小标题，一眼就是 AI 分节的腔调。
+    //
+    // ⚠️ 这里**故意收窄了规则**（2026-09-15 审计修正）。早期版本用
+    // 「短（2–14 字）+ 无句读」作判据，会把真人风格的独立短句一起删掉：
+    //   真人短句：我不信 / 纯属扯淡 / 说不通 / 不是钱的事 / 这事没完
+    //   AI 小标题：先算启动这笔账 / 三个层面看这个问题 / 成本核算
+    // 两者**在文本层面不可分**（长度相近、都没有句读）。既然判不准，
+    // 就该按风险不对称来取舍：误删真人短句 = 静默抹掉本 PR 想要的短促节奏；
+    // 漏删小标题 = 少一处优化，无害。**宁可漏删。**
+    //
+    // 因此只匹配**明确具备标题特征**的行：以序数起手、或以冒号结尾、
+    // 或是「写在前面的」这类元叙述词。这些规则精确度高，代价是召回低。
+    .replace(
+      /^\s*(?:[一二三四五六七八九十]+[、.）)]|\d+[、.）)]|写在前面|结论先行|先给结论|背景交代|简单来说就是)[^\n。！？]{0,14}\s*$/gm,
+      "",
+    )
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
+  // 去掉末尾的 AI 式总结句（真人写完就走，不写收尾）。
+  const trimmed = stripClosing(t);
+
   const hi = skill.persona ? skill.persona.voice.wordRange[1] : 320;
   const hardMax = hi + 80;
-  if (t.length > hardMax) {
-    const cut = t.slice(0, hardMax);
+  if (trimmed.length > hardMax) {
+    const cut = trimmed.slice(0, hardMax);
     const lastStop = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"));
     return lastStop > hardMax * 0.6 ? cut.slice(0, lastStop + 1) : cut + "…";
   }
-  return t;
+  return trimmed;
+}
+
+/**
+ * 删掉末段里的总结句。
+ *
+ * 只在**最后一段**上做：真人也会在中间用「总之」引出下一层意思，
+ * 全局替换会毁掉正文。末尾是套话高发位，且删掉它不会影响信息完整性。
+ */
+function stripClosing(text: string): string {
+  const blocks = text.split(/\n{2,}/);
+  if (blocks.length === 0) return text;
+  const last = blocks[blocks.length - 1];
+
+  let out = last;
+  // 反复剥离：模型有时会连写两句收尾。
+  for (let i = 0; i < 2; i++) {
+    const before = out;
+    for (const re of CLOSING_PATTERNS) out = out.replace(re, "").trim();
+    if (out === before) break;
+  }
+
+  // 剥完如果这段空了，就整段丢掉（说明最后一段本来就是一句收尾）。
+  if (out.trim().length === 0) {
+    const rest = blocks.slice(0, -1).join("\n\n").trim();
+    return rest.length > 0 ? rest : text;
+  }
+
+  /**
+   * 兜底：剥离不能把末段削得太狠。
+   *
+   * 上面每个正则都要求「整句就是套话」，但**正则总有漏网的可能**。
+   * 真人的实质结论恰恰爱用「总之/综上」起句说硬话，一旦误删，
+   * 丢的是整篇最有价值的一句，而且用户看不出来（不是报错，是内容没了）。
+   * 所以这里做一次量的校验：末段被削掉超过一半且剩下的不足 30 字，
+   * 就认为这次剥离「伤到肉了」，回退保留原文 —— 宁可留一句套话，
+   * 也不要丢掉作者的结论。
+   */
+  if (last.trim().length > 0 && out.length < last.trim().length * 0.5 && out.length < 30) {
+    return text;
+  }
+
+  blocks[blocks.length - 1] = out;
+  return blocks.join("\n\n").trim();
 }
 
 export async function draftAnswer(
@@ -582,10 +749,13 @@ const DEBATE_PICKER_PROMPT = [
 const DEBATE_REPLY_PROMPT = [
   "你在帮两位知乎答主做一轮互相回应。",
   "规则：",
-  "1. 每位答主只写一段，100–220 字，用他自己的口吻。",
+  "1. 每位答主只写一段，100–220 字，用他自己的口吻 —— 不是「一个理性的人在讲道理」。",
   "2. 只能针对对方已经说过的内容回应，不允许引入新的数字、机构、年份。",
   "3. 可以锋利，可以不同意，但必须讲道理。",
   "4. 不要写 Markdown，不要分点。",
+  "5. 两个人的语气、句长、标点习惯必须明显不同；遮住名字要能认出是谁在说。",
+  "6. 不要在结尾总结或致谢，说完就走。",
+  "最常犯的错是两边都写成「我理解你的观点，但是……」这种礼貌辩论腔 —— 绝对不要。",
   "输出格式（严格照做）：",
   "===REPLY:第一位答主的名字===",
   "（正文）",
@@ -606,6 +776,7 @@ function buildDebateReplyPrompt(
   b: DebateEntry,
   clash: string,
 ): string {
+  const voices = [debateVoiceLine(a), debateVoiceLine(b)].filter(Boolean);
   return [
     "问题：" + question,
     "分歧点：" + clash,
@@ -616,6 +787,7 @@ function buildDebateReplyPrompt(
     "【" + b.name + "的回答】",
     b.body.slice(0, 700),
     "",
+    ...(voices.length > 0 ? ["【两人的语言指纹 · 回应时必须各自守住】", ...voices, ""] : []),
     "请让这两位各写一段回应，输出格式严格按上面的要求。",
   ].join("\n");
 }
@@ -648,11 +820,13 @@ function parseReplies(raw: string, left: DebateEntry, right: DebateEntry): Debat
   const found: Array<{ name: string; body: string }> = [];
   for (let i = 1; i + 1 < parts.length; i += 2) {
     const name = parts[i].trim();
-    const body = parts[i + 1]
-      .replace(/^#{1,6}\s*/gm, "")
-      .replace(/\*\*(.+?)\*\*/g, "$1")
-      .replace(/^-{3,}$/gm, "")
-      .trim();
+    const body = stripClosing(
+      parts[i + 1]
+        .replace(/^#{1,6}\s*/gm, "")
+        .replace(/\*\*(.+?)\*\*/g, "$1")
+        .replace(/^-{3,}$/gm, "")
+        .trim(),
+    );
     if (name && body) found.push({ name, body });
   }
   if (found.length === 0) return [];
