@@ -6,6 +6,7 @@ import {
   hasOAuth,
   OAUTH_UNCONFIGURED_MESSAGE,
   publicOrigin,
+  ZhihuUserDegraded,
 } from "@/lib/zhihu/oauth";
 import { consumeState, setSession, storeToken } from "@/lib/zhihu/session";
 import { ZhihuApiError } from "@/lib/zhihu/errors";
@@ -53,14 +54,29 @@ export async function GET(req: Request) {
 
   try {
     const token = await exchangeCode(code, stateCheck.redirectUri);
-    const user = await fetchUser(token);
     // token 进展程内存（换一个不透明 sid），cookie 里只放 sid —— 钥匙不进浏览器。
     const sid = storeToken(token.accessToken, token.expiresAt);
+
+    // ⚠️ 取资料失败**不算登录失败**：token 已经到手，登录事实上成功了。
+    // 官方参考实现就是这么降级的（try/catch 后把 profile 置空）。
+    // 之前把它当致命错误，导致用户授权后被弹「暂时不可用」= 登不进去。
+    let user;
+    let profileDegraded = false;
+    try {
+      user = await fetchUser(token);
+    } catch (err) {
+      if (!(err instanceof ZhihuUserDegraded)) throw err;
+      // 降级：身份用占位，登录照常建立，但如实告诉前端「昵称没读到」。
+      profileDegraded = true;
+      user = { id: "", name: "知乎用户", profileLoaded: false };
+    }
+
     await setSession(user, stateCheck.verified === true, sid);
     // 到这里 access_token 只活在服务端内存，URL 与前端都没出现过。
     return back({
       auth: user.name,
       ...(stateCheck.verified === true ? {} : { authNote: "state" }),
+      ...(profileDegraded ? { authNoteProfile: "1" } : {}),
     });
   } catch (err) {
     const message =

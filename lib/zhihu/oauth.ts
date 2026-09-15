@@ -1,6 +1,6 @@
 import "server-only";
 
-import { ZhihuApiError } from "./errors";
+import { ZhihuApiError, kindForCode } from "./errors";
 
 /**
  * 知乎 OAuth 2.0 服务端客户端。
@@ -174,16 +174,32 @@ export async function exchangeCode(code: string, redirectUri: string): Promise<Z
   }
 
   // 响应可能直接给 access_token，也可能包在 data / Data 里。
-  const inner = (data.data && typeof data.data === "object"
-    ? data.data
-    : data.Data && typeof data.Data === "object"
-      ? data.Data
-      : data) as Record<string, unknown>;
+  // 注意：20001 这类**失败**响应里 data 是「错误描述字符串」而不是对象，
+  // 所以这里必须先判类型再用，否则会把错误文案当成 token 容器。
+  const asRecord = (v: unknown): Record<string, unknown> | null =>
+    v !== null && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+  const inner =
+    asRecord(data.data) ?? asRecord(data.Data) ?? (data as Record<string, unknown>);
 
   // ⚠️ 业务成功码是 20000。绝不能把非零 code 一律当错误 ——
   // 20000 被误判会直接让「明明换到了 token」变成登录失败。
+  //
+  // 反过来，真失败时 HTTP 仍是 200 + `{"code":20001,"data":"Access denied: not exists"}`。
+  // 此时必须把上游的 code 与原始 message 如实带出：否则运维只能看到
+  // 一句「缺少 access_token」，把「凭证没批下来」误判成「代码写错了」。
   const bizCode = data.code ?? data.Code;
   const accessToken = typeof inner.access_token === "string" ? inner.access_token : "";
+
+  if (!accessToken && bizCode !== undefined && Number(bizCode) !== 20000) {
+    const upstreamMsg = typeof data.data === "string" ? data.data : typeof data.message === "string" ? data.message : "";
+    throw new ZhihuApiError({
+      message: `token exchange rejected: code=${String(bizCode)}${upstreamMsg ? ` msg=${upstreamMsg}` : ""}`,
+      kind: kindForCode(Number(bizCode)),
+      code: Number(bizCode),
+      endpoint: "oauth.token",
+    });
+  }
+
   if (!accessToken) {
     throw new ZhihuApiError({
       message: `token response missing access_token${bizCode !== undefined ? ` (code=${String(bizCode)})` : ""}`,
@@ -215,6 +231,25 @@ export interface ZhihuUser {
   headline?: string;
   /** 个人主页地址 */
   url?: string;
+  /**
+   * 资料是否成功读到。
+   * false = 只有 token 成功、昵称头像没取到（登录仍然算成功）。
+   * 前端据此显示「已登录，但昵称暂时没读到」而不是假装拿到了。
+   */
+  profileLoaded?: boolean;
+}
+
+/**
+ * `/user` 没成功时的降级信号。
+ *
+ * **不是错误**：token 已经换到了，登录本身成功。只是「顺带取资料」没成。
+ * 单独建一个类是为了让上层能精确区分「登录失败」与「登录成功但资料缺失」。
+ */
+export class ZhihuUserDegraded extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ZhihuUserDegraded";
+  }
 }
 
 /**
@@ -275,13 +310,22 @@ export async function fetchUser(token: ZhihuToken): Promise<ZhihuUser> {
 
   // 业务成功码是 20000（不是 0，也不是 HTTP 200 的语义）——
   // 详见 references/oauth.md「已验证的协议偏差」。
+  //
+  // ⚠️ 关键修正（2026-09-15 线上实测）：
+  // `/user` 失败**不能让整个登录失败**。走到这里时 token 已经换到了，登录
+  // 事实上已经成功；只是「顺带取昵称头像」这一步没成功而已。
+  // 官方参考实现（assets/hello-world-oauth/lib/oauth.mjs）正是这么处理的：
+  //   try { profile = await ... } catch { profile = null }
+  // 之前这里直接 throw，导致用户授权后被弹「知乎开放平台暂时不可用」，
+  // 表现为「点了授权但登不进去」。
   const bizCode = data.code ?? data.Code;
-  if (bizCode !== undefined && Number(bizCode) !== 20000 && !data.access_token) {
-    throw new ZhihuApiError({
-      message: `user response code ${String(bizCode)}`,
-      kind: Number(bizCode) === 401 || Number(bizCode) === 403 ? "auth" : "upstream",
-      endpoint: "oauth.user",
-    });
+  if (bizCode !== undefined && Number(bizCode) !== 20000) {
+    const upstreamMsg =
+      typeof data.data === "string" ? data.data : typeof data.message === "string" ? data.message : "";
+    // 不抛异常，改抛一个「可降级」信号：用空身份返回，让上层决定如何展示。
+    throw new ZhihuUserDegraded(
+      `user response code ${String(bizCode)}${upstreamMsg ? ` msg=${upstreamMsg}` : ""}`,
+    );
   }
 
   // 部分返回会包一层 data / Data。
@@ -300,8 +344,9 @@ export async function fetchUser(token: ZhihuToken): Promise<ZhihuUser> {
 
   const id = pick("id", "url_token", "uid", "UrlToken");
   const name = pick("name", "nickname", "display_name", "Fullname", "fullname");
+  // 同上：拿不到身份也只是资料缺失，不代表登录失败。
   if (!id && !name) {
-    throw new ZhihuApiError({ message: "user response missing identity", kind: "parse", endpoint: "oauth.user" });
+    throw new ZhihuUserDegraded("user response missing identity");
   }
 
   return {
@@ -310,5 +355,6 @@ export async function fetchUser(token: ZhihuToken): Promise<ZhihuUser> {
     avatarUrl: pick("avatar_url", "avatarUrl", "avatar", "AvatarUrl"),
     headline: pick("headline", "description", "Headline"),
     url: pick("url", "profile_url", "Url") ?? (id ? `https://www.zhihu.com/people/${id}` : undefined),
+    profileLoaded: true,
   };
 }

@@ -50,12 +50,22 @@ export default function MeshPage() {
     const sp = new URLSearchParams(window.location.search);
     const ok = sp.get("auth");
     const err = sp.get("authError");
-    if (ok) setAuthNotice({ kind: "ok", text: `已用知乎账号 @${ok} 登录` });
-    else if (err) setAuthNotice({ kind: "err", text: err });
+    const profileMissing = sp.get("authNoteProfile") === "1";
+    if (ok) {
+      // 资料没读到时如实说明：登录是成功的，只是昵称头像这一步没拿到。
+      setAuthNotice({
+        kind: "ok",
+        text: profileMissing
+          ? `已登录（@${ok}）· 昵称头像这次没读到，不影响你的分身与搬运功能`
+          : `已用知乎账号 @${ok} 登录`,
+      });
+    } else if (err) setAuthNotice({ kind: "err", text: err });
     if (ok || err) {
       // 清掉 URL 上的提示参数，刷新不会重复弹。
       sp.delete("auth");
       sp.delete("authError");
+      sp.delete("authNote");
+      sp.delete("authNoteProfile");
       const qs = sp.toString();
       window.history.replaceState(null, "", window.location.pathname + (qs ? "?" + qs : ""));
     }
