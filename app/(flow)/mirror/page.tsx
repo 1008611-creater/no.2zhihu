@@ -133,7 +133,9 @@ export default function MirrorPage() {
                 const skill = mirror.skills.find((s) => s.id === p.skillId);
                 return (
                   <div key={p.skillId} className="card-flat" style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-                    <span className={`chip chip-${skill?.accent ?? "blue"}`}>{p.score}</span>
+                    <span className={`chip chip-${skill?.accent ?? "blue"}`}>
+                      {p.score > 0 ? p.score : "视角"}
+                    </span>
                     <div>
                       <div style={{ fontWeight: 700, fontSize: 13.5 }}>{skill?.name ?? p.skillId}</div>
                       <div className="dim" style={{ fontSize: 12.5 }}>{p.reason}</div>
