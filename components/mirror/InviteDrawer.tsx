@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "motion/react";
 import PersonaCard from "@/components/mirror/PersonaCard";
 import type { PersonaCandidate } from "@/lib/domain/router";
 import type { AnswerDraft, Skill } from "@/lib/domain/types";
+import { SHIFT } from "@/lib/motion/tokens";
 
 export interface InviteOutcome {
   skill: Skill;
@@ -164,9 +165,9 @@ export function InviteDrawer({
             aria-modal="true"
             aria-labelledby="invite-title"
             tabIndex={-1}
-            initial={{ opacity: 0, y: 22 }}
+            initial={{ opacity: 0, y: SHIFT.lg }}
             animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 14 }}
+            exit={{ opacity: 0, y: SHIFT.md }}
             onClick={(e) => e.stopPropagation()}
             className="card"
             style={{ width: "min(1080px, 100%)", padding: 26 }}

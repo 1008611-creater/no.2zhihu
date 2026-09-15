@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 import type { Skill } from "@/lib/domain/types";
-import { CARD_SPRING, STAGGER } from "@/lib/motion/tokens";
+import { CARD_SPRING, SHIFT, STAGGER } from "@/lib/motion/tokens";
 
 /**
  * 分身卡片。
@@ -19,7 +19,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
   return (
     <motion.article
       className="card"
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: SHIFT.md }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ ...CARD_SPRING, delay: index * STAGGER }}
     >

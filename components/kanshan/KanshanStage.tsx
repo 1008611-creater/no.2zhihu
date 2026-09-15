@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Kanshan } from "./Kanshan";
 import { FLOW_STATES, flowStateAt } from "./states";
-import { DUR } from "@/lib/motion/tokens";
+import { DUR, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 看山主持舞台：把产品流程的每一步映射成看山的一个状态。
@@ -41,9 +41,9 @@ export function KanshanStage({ step, size = 190, running = false }: KanshanStage
       <AnimatePresence mode="wait">
         <motion.div
           key={caption}
-          initial={{ opacity: 0, y: 6 }}
+          initial={{ opacity: 0, y: SHIFT.sm }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
+          exit={{ opacity: 0, y: -SHIFT.sm }}
           transition={{ duration: DUR.base }}
           style={{ textAlign: "center", minHeight: 52 }}
         >

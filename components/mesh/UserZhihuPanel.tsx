@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
-import { DUR, EASE } from "@/lib/motion/tokens";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 登录后：把这位用户自己的知乎数据接进 Mesh。
@@ -165,7 +165,7 @@ export default function UserZhihuPanel({ userId }: { userId: string }) {
           <motion.div
             key={it.id}
             className="card"
-            initial={{ opacity: 0, y: 12 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.05, 0.3) }}
           >

@@ -2,7 +2,7 @@
 
 import { motion } from "motion/react";
 import type { PersonaCandidate } from "@/lib/domain/router";
-import { DUR, EASE } from "@/lib/motion/tokens";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 答主选择卡片（简化版，2026-09-15）。
@@ -33,7 +33,7 @@ export function PersonaCard({
       aria-pressed={selected}
       className="card persona-choice"
       data-selected={selected}
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: SHIFT.md }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR.base, ease: EASE.out, delay: Math.min(index * 0.035, 0.35) }}
     >

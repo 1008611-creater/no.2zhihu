@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion } from "motion/react";
 import { useMirror } from "@/lib/store/mirror-store";
+import { SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 单篇回答详情。
@@ -188,7 +189,7 @@ export default function AnswerDetailPage() {
         <div className="card" style={{ display: "grid", gap: 14 }}>
           <div style={{ display: "grid", gap: 10 }}>
             {turns.map((t, i) => (
-              <motion.div key={i} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} style={{ display: "grid", gap: 8 }}>
+              <motion.div key={i} initial={{ opacity: 0, y: SHIFT.sm }} animate={{ opacity: 1, y: 0 }} style={{ display: "grid", gap: 8 }}>
                 <div className="card-flat" style={{ borderColor: "rgba(77,124,255,0.3)" }}>
                   <span className="mono dimmer">你问：</span> {t.q}
                 </div>
