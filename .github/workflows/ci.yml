@@ -1,10 +1,24 @@
 name: CI
 
+# 一条流水线：build → 冒烟 → （只在 main 上）部署
+#
+# 为什么把部署并进来（原来是独立的 deploy.yml）
+#   两者原本是**并行**触发的：push 到 main 会同时启动 CI 和部署。
+#   也就是说，**验证还没跑完，部署已经开始了** —— 验证形同虚设。
+#   并成一条流水线后，部署 needs: build，只有 build（含冒烟）通过才会执行，
+#   于是「线上只跑验证过的代码」这件事由结构保证，而不是靠人盯。
+#
+#   这也让关掉分支保护的 strict 变得安全（见下方说明）。
+
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  # 预留：若将来仓库转到组织名下、启用 merge queue，这条是必需的。
+  # 当前仓库属于个人账号，GitHub 的 merge queue 只在「组织拥有的公开仓库」可用，
+  # 所以暂时用「关 strict + auto-merge」代替（见 PR 描述）。
+  merge_group:
   workflow_dispatch:
 
 jobs:
@@ -30,3 +44,119 @@ jobs:
         env:
           # 构建阶段不需要真实凭证；给空值让代码走降级路径，避免 CI 依赖密钥
           ZHIHU_ACCESS_SECRET: ""
+
+      # ────────────────────────────────────────────────────────────────
+      # 冒烟检查：把「编译通过但运行时挂掉」这一类回归挡在 main 之外。
+      #
+      # 为什么必须加：CI 之前只到 build 为止。而自动部署已经上线，
+      # 一次「能编译、页面 500」的合并会直接推到正在评审的评委眼前 ——
+      # 编译期检查对这类回归完全无感。成本约 15 秒，是当前性价比最高的一道闸门。
+      #
+      # 与部署后用的是同一份脚本（scripts/smoke.mjs），断言一致，
+      # 这样「CI 绿但线上红」就直接指向部署或环境问题，不用再猜。
+      # ────────────────────────────────────────────────────────────────
+      - name: 起服务并跑冒烟检查
+        env:
+          ZHIHU_ACCESS_SECRET: ""
+        run: |
+          set -uo pipefail
+          npx next start -p 3100 > /tmp/next-smoke.log 2>&1 &
+          # 等端口可用：最多 60 秒（首次启动要加载 .next，冷启动偏慢）
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null --max-time 5 http://127.0.0.1:3100/api/health; then
+              echo "服务已就绪（第 ${i} 次探测）"
+              break
+            fi
+            sleep 2
+          done
+          if ! node scripts/smoke.mjs --base http://127.0.0.1:3100 --retries 2 --retry-wait 4000; then
+            echo "──── next start 日志尾部 ────"
+            tail -60 /tmp/next-smoke.log
+            exit 1
+          fi
+
+  # ──────────────────────────────────────────────────────────────────
+  # 部署：只在「push 到 main」时执行，且必须等 build（含冒烟）通过。
+  #
+  # 安全设计（重要）
+  #   Actions 里存着一把能登录生产机的私钥。生产机是多站点共用机
+  #   （同机还有 ans.cauai.fun / sub2api / omniroute），所以这把 key 不是 root 通用 key：
+  #   它在服务器 /root/.ssh/authorized_keys 里被限制为
+  #       restrict,command="/usr/local/bin/no2zhihu-deploy.sh"
+  #   实测：拿这把 key 执行 id 只会触发部署脚本，拿不到 shell。
+  #   也就是说私钥即使泄漏，攻击面也只有「触发一次部署」，碰不到别的站点。
+  #
+  # 幂等
+  #   部署脚本自己判断「已经是最新 main 且服务正常」时直接跳过构建，
+  #   所以连续合并多个 PR 只会真正构建一次。
+  # ──────────────────────────────────────────────────────────────────
+  deploy:
+    needs: build
+    if: ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 串行部署；不取消进行中的那一次（避免把构建打断成半成品）。
+    concurrency:
+      group: deploy-no2zhihu
+      cancel-in-progress: false
+    steps:
+      # 部署后要用仓库里的冒烟脚本验线上，所以需要 checkout
+      - uses: actions/checkout@v4
+
+      - name: 检查 secrets 是否齐备
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for v in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_USER; do
+            if [ -z "${!v:-}" ]; then echo "::error::缺少仓库 secret：$v"; missing=1; fi
+          done
+          [ "$missing" = "0" ] || exit 1
+          echo "secrets 齐备"
+
+      - name: 准备受限部署密钥
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # runner 每次都是干净环境，用 keyscan 填 known_hosts
+          ssh-keyscan -H "$DEPLOY_HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          echo "密钥就绪"
+
+      - name: 触发部署（受限 key 只能跑部署脚本）
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          # -T：服务器侧 restrict 禁用了 PTY，不请求就不会有告警
+          # ServerAlive*：构建 1–3 分钟，别让空闲连接被中间设备掐断
+          ssh -T -i ~/.ssh/deploy_key \
+              -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 \
+              -o ServerAliveInterval=30 -o ServerAliveCountMax=6 \
+              "$DEPLOY_USER@$DEPLOY_HOST" 2>&1 | tee /tmp/deploy.log
+          if ! grep -qE 'RESULT=(deployed|up-to-date)' /tmp/deploy.log; then
+            echo "::error::部署脚本没有返回成功标记 RESULT=..."
+            exit 1
+          fi
+
+      # 部署后冒烟：与 build 阶段用同一份 scripts/smoke.mjs。
+      # 之前这里只探 /api/health —— 那只能说明「进程活着」，
+      # 说明不了「页面还能打开、鉴权还在」。
+      # 因为与 CI 同源，「CI 绿而这里红」能直接指向部署/环境问题。
+      - name: 线上冒烟检查（与 CI 同一份脚本）
+        run: |
+          set -uo pipefail
+          node scripts/smoke.mjs --base https://zhihu.cauai.fun --retries 8 --retry-wait 6000 \
+            || { echo "::error::线上冒烟未通过 —— 服务已部署但行为不对，请查看服务器 journalctl -u no2zhihu"; exit 1; }
+
+      - name: 清理临时密钥
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

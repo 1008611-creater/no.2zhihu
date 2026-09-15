@@ -64,6 +64,21 @@ export default function Home() {
   const [inviteNote, setInviteNote] = useState<string | null>(null);
   /** 「我的」页一键自动回答带过来的答主 handle —— 输入框就绪后自动开跑。 */
   const [pendingAuto, setPendingAuto] = useState<string | null>(null);
+  /**
+   * 首屏角色位是否让位给流程舞台。
+   *
+   * 为什么需要这个开关（2026-09-15 审计）：首页原来**同时**渲染两个看山 ——
+   * 第 240 行首屏一个、`KanshanStage` 内部再包一个（run 阶段挂载）。
+   * 同一视口里出现两个形象，视觉上就是重影。
+   * 现在约定「同一时刻一个视口只出现一个看山」，由这个状态互斥。
+   *
+   * 为什么不用 `phase === "run"` 直接判断：`KanshanStage` 所在的 section 走
+   * AnimatePresence，退出时还会在屏幕上停留一小段淡出动画。若按 phase 判断，
+   * phase 一回到 "pick" 首屏看山就立刻出现，退出动画期间两个形象会同时可见 ——
+   * 正是要避免的中间态。所以这里改成由 `onExitComplete` 在**退出动画结束后**
+   * 才把角色位还回来。
+   */
+  const [hostVacant, setHostVacant] = useState(false);
 
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
@@ -150,6 +165,8 @@ export default function Home() {
       setMirror(null);
       setInviteNote(null);
       setPhase("run");
+      // 角色位让给下方的流程舞台 —— 同一时刻只留一个看山（见 hostVacant 注释）。
+      setHostVacant(true);
       setRunning(true);
       setStep(-1);
 
@@ -237,7 +254,19 @@ export default function Home() {
             <HeroTitle />
           </div>
           <div className="hero-char">
-            <Kanshan state={flowStateAt(step)} size={208} followPointer />
+            {/*
+              首屏角色位：run 阶段让给下方的 KanshanStage。
+              空位里只放装饰环与标签 —— 它是**占位**，不是第二个看山形象：
+              同一个视口里任何时候只有一个 `.kanshan-img`（验收标准 6）。
+              保留 208px 的方框尺寸，避免进入/退出流程时首屏标题发生跳动。
+            */}
+            {hostVacant ? (
+              <div className="hero-char-vacant" aria-hidden>
+                <span className="hero-char-vacant-ring" />
+              </div>
+            ) : (
+              <Kanshan state={flowStateAt(step)} size={208} followPointer />
+            )}
             <div className="hero-char-label mono">KANSHAN · HOST</div>
           </div>
         </div>
@@ -324,7 +353,12 @@ export default function Home() {
       </AnimatePresence>
 
       {/* ------------------------------ 主持舞台 ------------------------------ */}
-      <AnimatePresence>
+      {/*
+        onExitComplete：退出动画播完才把首屏角色位还回去。
+        这样「切换过程中两个看山同时可见」的中间态不存在 —— 舞台上那个
+        完全淡出之后，首屏的才出现（验收标准 5）。
+      */}
+      <AnimatePresence onExitComplete={() => setHostVacant(false)}>
         {phase === "run" && (
           <motion.section
             className="section"

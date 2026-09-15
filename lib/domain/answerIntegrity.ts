@@ -64,6 +64,38 @@ const MARKERS: RegExp[] = [
 export const MIN_ANSWER_CHARS = 60;
 
 /**
+ * 把一段正文截到 `max` 字以内，并且**在句末收尾**。
+ *
+ * 为什么不能直接 `slice(0, 220)`：证据直引（`evidenceBody()`）会把这段摘要
+ * 原样贴进回答正文，硬切会把句子切断。线上实测（`public/square-library.json`，
+ * 张佳玮 ×「读博六年没毕业」）读者看到的是这样一句：
+ *
+ *   「……很多好方法好点子都是在实验的**此外还有 2 条相关回答**」
+ *
+ * 前半句被切断、后半句直接粘上来 —— 这正是 `docs/acceptance.md` 记的
+ * 「问题 3：回答完整性待查（正文停在半路）」。它出现在**降级路径**上，
+ * 而相关性过滤（#14）让降级更常发生，所以必须一起修。
+ *
+ * 规则：优先在 `max` 之内最后一个句末标点收尾；没有句末标点就退到最后一个
+ * 逗号/顿号；再没有就硬切并补省略号。**绝不留半句。**
+ */
+export function cutExcerpt(text: string, max: number): string {
+  const t = text.trim();
+  if (t.length <= max) return t;
+
+  const head = t.slice(0, max);
+  const hardStops = ["。", "！", "？", "”", "）"];
+  let cut = -1;
+  for (const s of hardStops) cut = Math.max(cut, head.lastIndexOf(s));
+  if (cut >= max * 0.5) return head.slice(0, cut + 1);
+
+  const softStops = Math.max(head.lastIndexOf("，"), head.lastIndexOf("、"));
+  if (softStops >= max * 0.5) return head.slice(0, softStops) + "…";
+
+  return head + "…";
+}
+
+/**
  * 一段里命中多少个**不同**标记。
  *
  * 用 `String.search` 而不是 `RegExp.test`：这些正则带 `g` 标志，
