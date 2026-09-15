@@ -59,7 +59,7 @@ app/api/ (路由)  → lib/server/ → lib/domain/
 
 ## 4. 顶级 Skill 工程（.skills/）
 
-本项目维护 8 个 Skill owner（7 个原有工程技能 + 女娲人物蒸馏），用于**提升具体环节的效果**。它们是按需工具，不是默认上下文。
+本项目维护 9 个 Skill owner（7 个原有工程技能 + 女娲人物蒸馏 + humanizer 文风），用于**提升具体环节的效果**。它们是按需工具，不是默认上下文。
 
 **唯一权威：`docs/skill-engineering.md`（总纲）。** 动手前查它的 §3 路由表；命中就按 §4 读法读该 skill 入口，不命中就用普通能力。
 
@@ -79,7 +79,7 @@ app/api/ (路由)  → lib/server/ → lib/domain/
 | L2 执行 | 命中的那个 `SKILL.md`（按 §4 读法只读指定部分） | 仅命中时 |
 | L3 证据 | 本文件 §5 + 总纲 §6 验收判据 | 仅收尾时 |
 
-8 个 owner 一览（完整清单、入口、读法、边界见总纲 §2 与 §4）：
+9 个 owner 一览（完整清单、入口、读法、边界见总纲 §2 与 §4）：
 
 | 环节 | Skill | 判定 | 入口 |
 |---|---|---|---|
@@ -91,6 +91,7 @@ app/api/ (路由)  → lib/server/ → lib/domain/
 | 图像资产 | banana-claude | 必须 | `.skills/banana-claude-main/skills/banana/SKILL.md` |
 | 多模态生成 | Generative-Media-Skills | 条件 | `.skills/Generative-Media-Skills-main/core/media/SKILL.md` |
 | 公共人物研究 / 能力蒸馏 / 人物质量验证 | nuwa-skill（女娲） | 必须（生产阶段） | `docs/skills/nuwa/SKILL.md` → `docs/public-figure-skills.md` |
+| 答主文风真实度（去 AI 味） | humanizer | 必须 | `.skills/humanizer-main/SKILL.md` |
 
 **看山角色引擎是例外**：造型与几何必须原创，动效 skill 只用于弹簧参数、时序与过渡节奏，见 `docs/character-engine.md`。
 
