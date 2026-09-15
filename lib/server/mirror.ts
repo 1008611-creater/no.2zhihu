@@ -175,7 +175,11 @@ async function buildMirror(
         const resolved: Skill = personaSkill
           ? { ...personaSkill, query, sources, confidence }
           : skillFromSeed(seed!, sources, query, confidence);
-        return { ...resolved, evidenceStats: { dropped, scanned } };
+        // 显式标注：否则 `{ ...resolved, evidenceStats }` 会被推断成
+        // evidenceStats **必填**的结构类型，与 Skill 的可选字段不兼容，
+        // 下游 `.filter((s): s is Skill => ...)` 的类型谓词会直接报 TS2677。
+        const withStats: Skill = { ...resolved, evidenceStats: { dropped, scanned } };
+        return withStats;
       }),
     )
   ).filter((s): s is Skill => s !== null);
