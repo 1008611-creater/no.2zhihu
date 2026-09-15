@@ -120,9 +120,27 @@ node scripts/verify-merge.mjs feat/<名字>
 
 - [ ] 用 **API 字面 SHA** 取 main（不用本地 ref）
 - [ ] `node scripts/verify-merge.mjs <branch>` 退出码为 **0**
-- [ ] PR 页面 CI 绿（`build`）
-- [ ] 分支已与 main 同步（分支保护会强制）
-- [ ] 合并后部署，并在浏览器实测该 PR 的验收项
+- [ ] PR 的 **`build` 是绿的**（它含 PS1 编码检查 → `tsc` → `next build` → **运行时冒烟**）
+- [ ] `mergeable` 不是 `CONFLICTING` / `DIRTY`（**`DIRTY` 就是「有冲突」**，不是「只是落后」）
+- [ ] 合并后**不必手动部署**（流水线自动做），跑一次
+      `node scripts/smoke.mjs --base https://zhihu.cauai.fun` 复验即可
+
+### 哪些检查必须过、哪些可以忽略（省时间的关键）
+
+分支保护**只要求 `build`**。下面这些失败**不阻塞合并**，追它们是纯浪费时间：
+
+| 检查 | 为什么可以忽略 |
+|---|---|
+| **Vercel** | 只是备用部署（主站自托管）。且免费版有限流，常报 `rate limited — retry in 24 hours`，与代码无关 |
+| **流程变更声明** | 是**提醒**不是门禁。改了 `.github/` / `scripts/` / `AGENTS.md` / 协作文档却没写 `## 流程变更` 时，它会在 PR 对话里留一条 comment（补上声明后自动删除）——check 本身恒绿 |
+
+判据：`gh pr view <n> --json statusCheckRollup` 里，**只有 `build` 的结论决定能不能合**。
+
+### 提交前的队列自检
+
+- 提 PR 前跑 `node scripts/pr-queue.mjs`（在途数 + 两两文件重叠矩阵）
+- 与本 PR 目标重叠 ≥50% 的另一个 PR → **停手先问**，不要埋头写完再发现撞车
+  （踩过：两条线程各自独立做完同一个 IA 重构，都绿、都改同一批 7 个文件）
 
 ---
 

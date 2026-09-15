@@ -13,6 +13,12 @@ name: 流程变更声明
 # 触发范围（只在改了这些路径时才检查）
 #   .github/**  scripts/**  AGENTS.md
 #   docs/collaboration.md  docs/branch-flow-rules.md  docs/skill-engineering.md
+#
+# 2026-09-15 更晚：从「check 失败」改成「在 PR 上留 comment」。
+#   原因：它是**流程提醒**，不是**质量门禁**，用 failure 表达提醒是语义错位 ——
+#   红叉让审计线程以为这个 PR 坏了（实测 #35 / #40 都因此被多看一眼），
+#   而它其实完全不影响合并（分支保护只要求 build）。
+#   现在 check 恒绿，提醒改在 PR 对话里出现，且**补上声明后会自动删除**。
 
 on:
   pull_request:
@@ -20,7 +26,7 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
+  pull-requests: write   # 需要写权限：在 PR 上留 / 更新 / 删除提醒 comment
 
 jobs:
   flow-change-declaration:
@@ -46,30 +52,65 @@ jobs:
           echo "hit=$hit" >> "$GITHUB_OUTPUT"
           echo "基础设施改动：$hit"
 
-      - name: 检查 PR 描述是否声明流程变更
+      - name: 缺声明时在 PR 上留提醒（check 不再变红）
         if: steps.infra.outputs.hit == 'true'
+        uses: actions/github-script@v7
         env:
           PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-          if printf '%s' "$PR_BODY" | grep -qE '^#{2,3} *流程变更'; then
-            echo "✓ 已声明流程变更"
-            exit 0
-          fi
-          echo "::error::这个 PR 改了基础设施（.github / scripts / AGENTS.md / 协作文档），但描述里没有「## 流程变更」一节。"
-          echo "::error::请补上这一节，写明它改变了哪些既有习惯或流程（没有改变就写「无」）。"
-          echo ""
-          echo "原因：其他线程按文档和记忆里的习惯干活。基础设施变了而不声明，"
-          echo "它们会继续做已经自动化掉的事 —— 2026-09-15 实测因此白干约 15 分钟。"
-          echo ""
-          echo "模板："
-          echo "## 流程变更"
-          echo ""
-          echo "- 之前怎么做：…"
-          echo "- 现在怎么做：…"
-          echo "- 受影响的线程/文档：…"
-          echo "（没有流程变化就写「无」）"
-          exit 1
+        with:
+          script: |
+            // 用固定 marker 保证幂等：同一 PR 上只有一条提醒，补上声明后自动删除。
+            const MARKER = "<!-- flow-change-reminder -->";
+            const body = process.env.PR_BODY || "";
+            const declared = /^#{2,3} *流程变更/m.test(body);
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { owner, repo, issue_number }
+            );
+            const mine = comments.find((c) => (c.body || "").includes(MARKER));
+
+            if (declared) {
+              if (mine) {
+                await github.rest.issues.deleteComment({ owner, repo, comment_id: mine.id });
+                core.info("已声明流程变更，删除此前的提醒。");
+              } else {
+                core.info("已声明流程变更。");
+              }
+              return;
+            }
+
+            const text = [
+              MARKER,
+              "## ⚠️ 这个 PR 改了基础设施，但描述里没有「## 流程变更」一节",
+              "",
+              "改了 `.github/` / `scripts/` / `AGENTS.md` / 协作文档之一。",
+              "",
+              "**这不是错误，是提醒** —— 其他线程按文档和记忆里的习惯干活；",
+              "基础设施变了而不声明，它们会继续做**已经自动化掉**的事",
+              "（2026-09-15 实测因此白干约 15 分钟）。",
+              "",
+              "补上这一节即可（没有流程变化就写「无」）：",
+              "",
+              "```markdown",
+              "## 流程变更",
+              "",
+              "- 之前怎么做：…",
+              "- 现在怎么做：…",
+              "- 受影响的线程 / 需要同步的文档：…",
+              "```",
+              "",
+              "> 本条由 `pr-flow-check.yml` 自动维护；补上声明后会自行删除。",
+            ].join("\n");
+
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body: text });
+              core.info("已更新提醒 comment。");
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: text });
+              core.info("已创建提醒 comment。");
+            }
 
       - name: 未改基础设施
         if: steps.infra.outputs.hit != 'true'
