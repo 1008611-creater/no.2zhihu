@@ -104,7 +104,7 @@
 | `.gap` | 左边 3px orange，右侧渐变淡出。**缺口专用，不可复用于其他提示** |
 | `.notice` | 虚线描边，用于降级/错误提示。`notice-warn` / `notice-info` 两种语气 |
 | `.btn-primary` | 蓝紫渐变，无描边。**全页面最多一处主按钮** |
-| `.stat-n` | DM Mono，26px，用于统计数字 |
+| `.stat-n` | `--font-mono`（JetBrains Mono），26px，用于统计数字 |
 | `.kanshan` | 看山舞台：状态色光晕 + 缓慢旋转装饰环 + 官方 GIF/PNG。`data-accent` 决定配色 |
 | `.persona-tile` | 答主名册卡片，整卡可点，hover 上移 3px，不做阴影堆叠 |
 | `.rail / .rail-step` | 流程轨道：8 步收成一条可读竖列，当前步高亮、已完成转绿 |
@@ -130,3 +130,22 @@
 - [x] 项目 icon —— `app/icon.svg`（矢量几何标记，随 `app/manifest.ts` 注册；角色形象本身用官方素材）
 - [x] 项目封面图 —— `docs/assets/cover.svg`（1600×900，大标题 + 坐标纸网格；看山形象以官方素材为准）
 - [x] 缺口动效与分镜说明 —— `docs/demo-video-script.md`
+
+## 九、精致度收敛记录（2026-09-15）
+
+一轮以「收敛」为目标的巡检与修复，共 12 处。原则：**不新增视觉语言，只把已有规范落到实处**。
+
+| # | 问题 | 处置 |
+|---|---|---|
+| 1 | `HeroTitle` 在 `prefers-reduced-motion` 下把副标题永久留在 `opacity: 0`（`initial={false}` 配 `animate="visible"` 互相打架） | 降级路径改为直接返回静态 `<h1>`，不依赖动画终态 |
+| 2 | `.eyebrow` / `.persona-mono` 引用 `"DM Mono"`，而该字体**从未被加载**，mono 字体栈实际一直靠系统兜底 | 改用 `var(--font-mono)`，与 `layout.tsx` 的 `localFont` 对齐 |
+| 3 | 6 个官方 GIF 合计 **5.56 MB**，其中 951 KB 的 `idle.gif` 被当作首页 LCP 元素预加载 | 转 WebP（`scripts/convert-kanshan-webp.py`）→ **1.36 MB（24%）**；`<picture>` + WebP 优先、GIF 兜底（保留 GIF 是素材授权要求） |
+| 4 | `metadata.other` 里写的 preload 被 Next 渲染成 `<meta name="link:preload:...">`，浏览器**不认**，属静默失效 | 改用 `ReactDOM.preload()`，渲染出真正的 `<link rel="preload" as="image" type="image/webp">` |
+| 5 | `app/globals.css` 与 `app/frontend-v2.css` 各有一份 `prefers-reduced-motion` 块，规则互相覆盖 | 统一到 `globals.css` 一处，另一处只保留 v2 专有项 |
+| 6 | reduced-motion 下 `.skeleton` 的扫光被禁用后留下冻结的渐变条纹 | 显式改为纯色底 |
+| 7 | 首页空态只有一行 `.notice`，浪费首屏最有价值的位置，且**没有教会用户「缺口」这个核心差异** | 换成 3 张机制说明卡（`01 HUMAN ROUTER` / `02 各自作答` / `03 缺口`），只描述产品机制，不含任何知乎数据 |
+| 8 | `.section-head` 在标题与多行说明并排时基线错位 | `:has(.lede, .dim)` 时改 `align-items: flex-start` |
+| 9 | 长页面（首页 / mirror / mesh）无阅读进度提示 | 新增 `.scroll-progress`（2px 渐变条）+ `ScrollProgress` 组件，reduced-motion 下不渲染 |
+| 10 | `MeshGraph` 固定 720px viewBox，窄屏节点标签重叠、不可用 | `≤720px` 时改为 560px 最小宽的横向滚动容器 + 右缘渐隐 |
+| 11 | 证据时间轴缺少序号，长列表难以定位 | 每条加 `#01` 形式序号 |
+| 12 | `RouteTransition` 写 `gsap.core.Tween` 类型注解导致 `next build` 类型检查失败（`gsap.core` 是全局 ambient 命名空间，未从 `"gsap"` 模块导出） | 改用 `ReturnType<typeof gsap.to>` |

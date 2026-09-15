@@ -37,7 +37,33 @@ h3 { font-size: clamp(1rem, .95rem + .2vw, 1.125rem); }
 h1 { text-wrap: balance; }
 h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: currentColor; }
 .text-character { display: inline-block; }
+
+/* 关系图在窄屏会退化成「标签互相压住」的一团。缩字号解决不了 ——
+   节点是 SVG 内固定坐标，缩字只会更糊。改成给一个最小可读宽度，
+   让容器横向滚动，保住节点与标签的相对关系。
+   为什么是 560px：问题 + 5 个环位 + 外环约 2 个标签并排刚好不重叠。 */
+.mesh-scroll { position: relative; }
+@media (max-width: 720px) {
+  .mesh-scroll { overflow-x: auto; overflow-y: hidden; }
+  .mesh-scroll > svg { min-width: 560px; }
+  /* 右侧渐隐，告诉用户「这里可以划」。 */
+  .mesh-scroll::after {
+    content: "";
+    position: absolute; top: 0; right: 0; bottom: 0; width: 32px;
+    background: linear-gradient(90deg, transparent, var(--surface));
+    pointer-events: none;
+  }
+}
 .route-transition { position: fixed; inset: 0; z-index: 90; pointer-events: none; background: var(--surface-hover); clip-path: circle(0% at 100% 0%); }
+/* 骨架屏：只在真正等待时出现，且比 v1 更克制 —— 描边 + 缓慢横扫，不做浮夸光效。 */
+.skeleton { border: 1px solid var(--line-soft); }
+@keyframes sk-sweep { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+.skeleton {
+  background-image: linear-gradient(90deg, var(--ink-800), var(--ink-700), var(--ink-800));
+  background-size: 200% 100%;
+  animation: sk-sweep 1.3s linear infinite;
+  border-radius: var(--radius-sm);
+}
 .hero { padding-block: clamp(36px, 6vw, 80px); }
 .hero h1 { font-size: clamp(2rem, 3.8vw, 3.8rem); letter-spacing: -.045em; }
 .eyebrow, .brand-sub, .stat-n { font-family: var(--font-mono), monospace; }
@@ -63,6 +89,11 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
   .route-transition { display: none; }
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .rise, .page-enter, [class*="rise-"] { opacity: 1 !important; transform: none !important; }
+  /* 骨架屏的横扫被禁用后不能留一条死色块 —— 退化成静态描边占位。 */
+  .skeleton {
+    background-image: none !important;
+    background: var(--ink-800) !important;
+  }
 }
 
 /* ---------------- 虚拟广场信息流 ---------------- */
