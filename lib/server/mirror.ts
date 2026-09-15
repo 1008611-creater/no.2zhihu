@@ -1,5 +1,6 @@
 import "server-only";
 
+import { stripAssistantBoilerplate } from "@/lib/domain/answerIntegrity";
 import { findGaps } from "@/lib/domain/gap";
 import { voiceFingerprintGaps } from "@/lib/domain/personas";
 import { filterEvidence } from "@/lib/domain/relevance";
@@ -766,17 +767,33 @@ function sanitizeAnswer(raw: string, skill: Skill): string {
   // 两层都留着才覆盖完整（提示词是概率性约束，光靠 prompt 拦不住）。
   const cleaned = stripAiCliches(trimmed);
 
+  /**
+   * 拦住「模型掉出人格」的输出。判据与边界见 lib/domain/answerIntegrity.ts。
+   *
+   * 与上一步的分工：stripAiCliches 管**句首的连接词**（「总的来说，」），属于腔调；
+   * 这里管**整段变成 AI 助手**（自我介绍 / 客服式拒答）—— 性质不同，
+   * 后者不是「腔调不对」，而是「这段根本不是这位答主写的」。
+   *
+   * 这里只做一件事：清理后如果已经不成其为回答，返回空串。上层 draftAnswer
+   * 见到空串会跳出重试循环、落到既有的「证据直引」降级路径
+   * （generatedBy: "retrieval"），如实告诉用户这一段没生成出来 ——
+   * 而不是把 AI 助手的自我介绍当成答主的回答渲染出去。
+   */
+  const integrity = stripAssistantBoilerplate(cleaned);
+  if (integrity.degenerate) return "";
+  const safe = integrity.text;
+
   // 视角型（无 persona）的上限：systemPromptFor 给它的区间是 240–400 字，
   // 所以硬上限取 400 + 20% 余量。这里只用来兜住偶发的超长输出，
   // **不用来「统一篇幅」** —— 全站写死同一个值正是旧版把所有人拉平的元凶。
   const hi = skill.persona ? skill.persona.voice.wordRange[1] : 400;
   const hardMax = hi + 80;
-  if (cleaned.length > hardMax) {
-    const cut = cleaned.slice(0, hardMax);
+  if (safe.length > hardMax) {
+    const cut = safe.slice(0, hardMax);
     const lastStop = Math.max(cut.lastIndexOf("。"), cut.lastIndexOf("！"), cut.lastIndexOf("？"));
     return lastStop > hardMax * 0.6 ? cut.slice(0, lastStop + 1) : cut + "…";
   }
-  return cleaned;
+  return safe;
 }
 
 /**
