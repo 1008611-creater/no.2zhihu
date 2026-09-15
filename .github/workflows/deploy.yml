@@ -36,6 +36,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # 部署后要用仓库里的冒烟脚本验线上，所以需要 checkout
+      - uses: actions/checkout@v4
+
       - name: 检查 secrets 是否齐备
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
@@ -80,18 +83,17 @@ jobs:
             exit 1
           fi
 
-      - name: 线上健康检查
+      # ────────────────────────────────────────────────────────────────
+      # 部署后冒烟：与 CI 用同一份 scripts/smoke.mjs。
+      # 之前这里只探 /api/health —— 那只能说明「进程活着」，
+      # 说明不了「页面还能打开、鉴权还在」。现在换成完整的 8 项断言，
+      # 且因为与 CI 同源，「CI 绿而这里红」能直接指向部署/环境问题。
+      # ────────────────────────────────────────────────────────────────
+      - name: 线上冒烟检查（与 CI 同一份脚本）
         run: |
           set -uo pipefail
-          for i in 1 2 3 4 5 6; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 \
-                   https://zhihu.cauai.fun/api/health || true)
-            echo "第 $i 次：HTTP $code"
-            [ "$code" = "200" ] && { echo "线上健康检查通过"; exit 0; }
-            sleep 6
-          done
-          echo "::error::线上健康检查未通过，请查看服务器 journalctl -u no2zhihu"
-          exit 1
+          node scripts/smoke.mjs --base https://zhihu.cauai.fun --retries 8 --retry-wait 6000 \
+            || { echo "::error::线上冒烟未通过 —— 服务已部署但行为不对，请查看服务器 journalctl -u no2zhihu"; exit 1; }
 
       - name: 清理临时密钥
         if: always()
