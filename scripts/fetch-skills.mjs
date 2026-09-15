@@ -25,6 +25,7 @@ const SKILLS = [
   { repo: "Vincentwei1021/video-talkcraft",          branch: "main" },
   { repo: "AgriciDaniel/banana-claude",              branch: "main" },
   { repo: "SamurAIGPT/Generative-Media-Skills",      branch: "main" },
+  { repo: "blader/humanizer",                        branch: "main" },
 ];
 
 /** 最小 zip 解包：只用 Node 内置 zlib，避免依赖外部命令。 */

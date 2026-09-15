@@ -27,10 +27,15 @@ import type { MeshNode, MirrorQuestion } from "@/lib/domain/types";
  * 比塞满六种节点更有信息量。
  */
 
-/** 同心圈：我提过的问题在内环，领域关键词在外环。 */
+/**
+ * 同心圈：我提过的问题在内环，领域关键词在外环。
+ *
+ * 内环从 0.32 外推到 0.42 —— 0.32 时问题挤在半径 63px 的小圈上，
+ * 四个问题的标签必然互相压；外环同步外推到 0.82，两圈之间留出空隙。
+ */
 const CORPUS_RINGS: Partial<Record<MeshNode["type"], number>> = {
-  question: 0.32,
-  keyword: 0.78,
+  question: 0.42,
+  keyword: 0.82,
 };
 
 /** 这两类节点的名字必须看得见 —— 图要读的就是它们。 */
@@ -151,6 +156,10 @@ export default function MyMeshPanel({
           rings={CORPUS_RINGS}
           showLabels={CORPUS_LABELS}
           legendLabels={CORPUS_LEGEND}
+          /* 严格同心：这张图要读的是「哪一圈、多密」，不能让力导向把环拉成偏心椭圆。 */
+          layout="radial"
+          /* 问题标题偏长，截到 14 字；完整原文在悬停提示与点击详情里。 */
+          labelMaxChars={14}
         />
 
         <p className="dimmer mono" style={{ fontSize: 11.5, marginTop: 12 }}>

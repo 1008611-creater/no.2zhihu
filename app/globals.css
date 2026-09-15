@@ -735,6 +735,29 @@ button.chip[data-on="true"] {
   background: var(--ink-700);
 }
 
+/* 名册卡片：整卡即触发区（PersonaPopover 的 cover 模式）。
+   按钮透明铺满卡片，视觉上的「i」由调用方渲染成静态提示、不参与交互。 */
+.persona-popover-anchor.is-cover {
+  position: absolute;
+  inset: 0;
+}
+.persona-info-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.persona-info-cover:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
 /* ============================================================
    答主详情浮层
    ============================================================ */
