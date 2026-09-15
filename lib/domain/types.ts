@@ -70,6 +70,9 @@ export interface PersonaVoice {
    * 这是「遮住名字能不能认出人」最有效的一组特征：破折号、括号吐槽、
    * 省略号、问号密度、段落长度，比「语气温和」这类词有信息量得多 ——
    * 因为它是**可数**的。模型无法把「温和」落地，但可以执行「每段 2–4 句」。
+   *
+   * 本项目进一步把它**解析成数字**（见 lib/domain/voice.ts），
+   * 用于生成后的确定性校验，而不只是当提示词文字。
    */
   punctuation?: string;
   /**
@@ -130,6 +133,14 @@ export interface Skill {
   persona?: Persona;
   /** true = 降级的补充视角，不占主叙事 */
   supplementary?: boolean;
+  /**
+   * 本轮检索的质量统计。
+   *
+   * 为什么要暴露到 UI：实测检索经常返回与问题无关的内容（力学答主回答
+   * 「大厂转行」时拿回 7 条力学劝退帖）。把「原始 N 条 / 跑题丢弃 M 条」
+   * 如实显示出来，比假装检索成功更可信 —— 也让评委看到这层过滤真的在跑。
+   */
+  evidenceStats?: { dropped: number; scanned: number };
 }
 
 export interface SkillSource {
