@@ -58,6 +58,9 @@ export interface PersonaVoice {
 }
 
 export interface PersonaCorpus {
+  /** 可选以兼容旧版浏览器记录；false 不再一律解释为预置。 */
+  status?: "extracted" | "unavailable";
+  note?: string;
   /** 实际用于蒸馏的回答条数；0 表示未抓取 */
   sampleSize: number;
   /** 抓取时间（ISO）；未抓取为空字符串 */

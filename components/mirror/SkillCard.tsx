@@ -25,7 +25,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9 }}>
         <h3 style={{ marginRight: "auto" }}>{skill.name}</h3>
         <span className={"chip chip-" + skill.accent}>
-          {p ? (p.corpus.real ? "真实蒸馏" : "预置人格") : Math.round(skill.confidence * 100) + "% 证据覆盖"}
+          {p ? (p.corpus.real ? "基于公开片段提取" : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "人格提取未完成" : "预置风格设定") : Math.round(skill.confidence * 100) + "% 证据覆盖"}
         </span>
       </div>
       <p className="dim" style={{ fontSize: 13.5, marginBottom: 12 }}>{skill.lens}</p>
@@ -56,13 +56,22 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
             </>
           )}
 
-          <div className="mono dimmer" style={{ marginBottom: 6 }}>
+          <div className="mono dimmer" style={{ marginBottom: 8 }}>
             {p.corpus.real
-              ? "基于 " + p.corpus.sampleSize + " 条真实回答蒸馏"
-              : "预置人格 · 未抓取全量回答"}
+              ? "实际使用 " + p.corpus.sampleSize + " 条公开片段；样本覆盖不代表人格准确率"
+              : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "未能提取人格；以下回答采用通用表达" : "人工预置表达设定，未由本人语料验证"}
             {" · "}
             {p.voice.wordRange[0]}–{p.voice.wordRange[1]} 字
           </div>
+
+          {p.corpus.note && <p role="status" className="notice notice-warn">{p.corpus.note}</p>}
+          <details style={{ marginBottom: 12 }}>
+            <summary>人格依据 · 为什么这样表达</summary>
+            {p.corpus.capturedAt && <p className="dim">采集时间：{p.corpus.capturedAt.slice(0, 19).replace("T", " ")} UTC</p>}
+            {p.corpus.sources.map((s) => <a key={s.url} className="link" style={{ display: "block", padding: "8px 0" }} href={s.url} target="_blank" rel="noreferrer noopener">{s.author} · {s.title}</a>)}
+            {!p.corpus.sources.length && <p className="dim">尚无可核对的人格来源。</p>}
+          </details>
+
         </>
       )}
 
@@ -72,6 +81,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
         </div>
       )}
 
+      <div className="lbl">回答证据 · 观点依据什么</div>
       {skill.sources.slice(0, 2).map((s) => (
         <a
           key={s.url}
