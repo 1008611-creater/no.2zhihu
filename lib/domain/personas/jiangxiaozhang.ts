@@ -12,7 +12,7 @@ import type { Persona } from "../types";
  * 卡片上会如实显示这两种状态，不假装是真实蒸馏。
  */
 export const persona: Persona = {
-  handle: 'jiang-xiao-zhang',
+  handle: 'jiangxiaozhang',
   displayName: '蒋校长',
   headline: '军事与历史 · 用后勤和编制解释一场仗为什么打成这样',
   accent: 'orange',

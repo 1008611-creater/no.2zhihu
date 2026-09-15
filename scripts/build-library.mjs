@@ -197,7 +197,7 @@ export function resolve(specifier, context, next) {
   if ((specifier.startsWith("./") || specifier.startsWith("../")) && context.parentURL) {
     // ⚠️ 必须用 fileURLToPath，不能用 decodeURIComponent(base.pathname)：
     // Windows 上 pathname 会得到 "/E:/codex/..."（前导斜杠）→ existsSync 一律失败 →
-    // 报 ERR_MODULE_NOT_FOUND: Cannot find module '.../personas/ban-fo-xian-ren'。
+    // 报 ERR_MODULE_NOT_FOUND: Cannot find module '.../personas/banfoxianren'。
     // fileURLToPath 会正确还原成 "E:\\codex\\..."，两个平台都对。
     const hit = tryExt(fileURLToPath(new URL(specifier, context.parentURL)));
     if (hit) return { url: pathToFileURL(hit).href, shortCircuit: true };

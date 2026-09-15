@@ -21,7 +21,7 @@ export type SkillKind =
 
 /** 一个知乎答主的语言与认知特征。由真实公开回答蒸馏，或按公开印象手工撰写。 */
 export interface Persona {
-  /** 知乎 url_token，例如 "ban-fo-xian-ren" */
+  /** 知乎 url_token，例如 "banfoxianren" */
   handle: string;
   displayName: string;
   /** 一句话身份，显示在卡片上 */
