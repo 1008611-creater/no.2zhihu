@@ -22,7 +22,7 @@
  *   · 默认 dry-run，必须显式 --apply 才动手
  *   · 有冲突 / CI 失败 / 非 MERGEABLE 的 PR 一律跳过，不做任何「智能解冲突」
  *   · 每次合并后重新取 main，后续 PR 重新判定（因为 strict 会让它们 BEHIND）
- *   · 只合并，**不部署** —— 部署由 deploy.yml 在 push 到 main 时自动触发
+ *   · 只合并，**不部署** —— 部署是 ci.yml 的 deploy job（needs: build，push 到 main 时触发）
  */
 import { execFileSync } from "node:child_process";
 
@@ -171,7 +171,7 @@ for (const pr of prs) {
   }
   const after = mainSha();
   console.log(`   ✓ 已合并  main → ${after.slice(0, 8)}`);
-  console.log("   · 部署由 deploy.yml 自动触发，无需手动 ssh");
+  console.log("   · 部署是 ci.yml 的 deploy job（needs: build），无需手动 ssh");
   done.push({ n, sha: after.slice(0, 8) });
 }
 

@@ -94,6 +94,9 @@ node scripts/pr-queue.mjs
 
 ## 四、部署（现有形态，无需改动）
 
+**正常路径不需要这条** —— 合并到 main 即自动部署（见本节末）。以下只在 CI 的 deploy job
+失败、或需要紧急回滚时用。
+
 ```bash
 cd /opt/no2zhihu
 git config --global --add safe.directory /opt/no2zhihu
@@ -106,9 +109,14 @@ systemctl restart no2zhihu
 判成败看 `✓ Compiled successfully`，别只看 exit code。服务器是多站点共用机
 （同机还有 `ans.cauai.fun` / `sub2api` / `omniroute`），**不要动它们的 nginx 与 systemd**。
 
-> **合并后自动部署**需要仓库 Secrets 里配好部署用的 SSH key 与主机地址；
-> 配置之前不要加自动触发的 workflow，否则会得到一个必然失败的红叉。
-> 配好之后再加 `deploy.yml`（`workflow_dispatch` + `push: main`）即可。
+> **合并后自动部署已生效**：部署是 `.github/workflows/ci.yml` 的 `deploy` job
+> （`needs: build` —— build 含运行时冒烟，不过就不部署）。
+> Secrets 已配好（`DEPLOY_SSH_KEY` / `DEPLOY_HOST` / `DEPLOY_USER`；受限 key 只能触发部署脚本，
+> 拿不到 shell）。
+>
+> ⚠️ 历史上部署曾是独立的 `deploy.yml`，与 `ci.yml` **并行**触发 —— 那等于「验证还没跑完
+> 就开始部署」。已合并为一条流水线。**不要再新建 `deploy.yml`**：`gh run list --workflow=deploy.yml`
+> 对已删除的 workflow 仍会返回历史运行，看起来正常却是过期数据。
 
 ---
 

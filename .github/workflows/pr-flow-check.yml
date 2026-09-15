@@ -3,7 +3,7 @@ name: 流程变更声明
 # 为什么需要它
 #   2026-09-15 实测：审计线程在 50 分钟里白干了约 15 分钟 ——
 #   它手动 ssh 部署、手动逐个 gh pr update-branch，而这两件事
-#   在 PR #15 合并后**已经自动化**（deploy.yml / sync-pr-branches.yml）。
+#   在 PR #15 合并后**已经自动化**（部署 = ci.yml 的 deploy job；分支同步 = sync-pr-branches.yml）。
 #   根因不是它慢，是**没人通知它流程变了**：基础设施类 PR 合并后，
 #   其他线程仍按老习惯干活，而习惯是写在文档和记忆里的。
 #
