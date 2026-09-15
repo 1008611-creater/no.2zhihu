@@ -104,7 +104,9 @@ function CrowdClusterImpl({
                 y={fy - h}
                 width={w}
                 height={h}
-                className={"sq-figure f-" + f.accent + (isGap ? " sq-figure-is-gap" : "")}
+                // 类名直接由 kind 派生，颜色写死在 CSS 里：
+                // 在场 = 中性剪影，缺口 = 空心橙（见 crowd.ts 文件头）。
+                className={"sq-figure sq-figure-" + f.kind}
               />
             );
           })}
