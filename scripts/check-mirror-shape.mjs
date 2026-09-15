@@ -209,6 +209,31 @@ else {
 }
 
 /* ========================================================================== */
+/**
+ * ⑤ 来源计数口径必须只有一套（2026-09-15 #53 之后补的守卫）。
+ *
+ * 当时把「只数可核对来源」统一到了 splitSources()，但漏了镜像页顶栏那一处：
+ * 它仍是 `skills.reduce(s => s.sources.length)`，把署名/链接缺失的条目也数进去
+ * （全库 195 条里有 5 条如此）。结果就是同一场讨论，顶栏写 9 条、回答页只列得出 8 条。
+ * 这类不一致**不报错、不崩**，只会让人怀疑数字是编的 —— 只能靠源码断言钉住。
+ */
+const mirrorPageSrc = readFileSync(join(here, "..", "app", "(flow)", "mirror", "page.tsx"), "utf8");
+if (!mirrorPageSrc.includes("条真实知乎来源")) {
+  bad("镜像页找不到「条真实知乎来源」这处统计，守卫失效（文案被改了？）");
+} else {
+  // 统计值必须来自 splitSources().displayable.length —— 这是「只数可核对来源」的唯一入口。
+  if (!/splitSources\([^)]*\)\.displayable\.length/.test(mirrorPageSrc)) {
+    bad("镜像页顶栏的来源统计没走 splitSources().displayable.length —— 会与回答页列出的条数不一致");
+  } else ok("镜像页顶栏的来源统计走 splitSources（与回答页同口径）");
+  if (!/from "@\/lib\/domain\/evidence"/.test(mirrorPageSrc)) {
+    bad("镜像页没有从 lib/domain/evidence 引入 splitSources");
+  } else ok("镜像页从 lib/domain/evidence 引入 splitSources");
+  if (/skills\.reduce\(\(a,\s*s\)\s*=>\s*a\s*\+\s*s\.sources\.length/.test(mirrorPageSrc)) {
+    bad("镜像页仍存在未过滤的 skills.reduce(sources.length) 计数");
+  } else ok("镜像页已无未过滤的 sources.length 计数");
+}
+
+/* ========================================================================== */
 console.log("=".repeat(74));
 if (fail === 0) {
   console.log("全部通过 ✓");
