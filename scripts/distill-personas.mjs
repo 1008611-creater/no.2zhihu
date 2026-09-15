@@ -16,7 +16,7 @@
  *
  * 用法：
  *   node scripts/distill-personas.mjs                     # 蒸馏全部已抓取的答主
- *   node scripts/distill-personas.mjs ban-fo-xian-ren      # 只蒸馏某一位
+ *   node scripts/distill-personas.mjs banfoxianren         # 只蒸馏某一位
  */
 
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
@@ -29,24 +29,44 @@ const RAW_DIR = join(ROOT, ".personas-raw");
 const OUT_DIR = join(ROOT, "lib", "domain", "personas");
 
 const DEFAULT_HANDLES = [
-  "ban-fo-xian-ren",
-  "zhang-jia-wei",
-  "splitter",
-  "li-song-wei",
-  "da-meng",
-  "chen-zhang-yu",
+  "banfoxianren",                 // 半佛仙人
+  "zhang-jia-wei",                // 张佳玮
+  "splitter",                     // 贱贱
+  "lisongwei",                    // 李松蔚
+  "da-meng-24-13",                // 大猛
+  "ChenZhangyu",                  // 陈章鱼
+  "bing-deng-xing",               // 丙等星
+  "cai-tong",                     // 采铜
+  "chen-lan-xiang-76",            // 陈兰香
+  "dong-ji-zai-hang-zhou",        // 动机在杭州
+  "jiangxiaozhang",               // 蒋校长
+  "li-lei-up",                    // 李雷
+  "mulianghai",                   // 赤戟
+  "pi-bo-shi-tai-kong-jing-niang", // 太空精酿
+  "shui-qian-xiao-xi",            // 马前卒
+  "wen-yi-fei-31",                // 温义飞
 ];
 
 const ACCENT_CYCLE = ["orange", "violet", "blue", "green", "blue", "violet"];
 
 /** 默认显示名。若人格文件里已有 displayName，则以文件为准。 */
 const DEFAULT_DISPLAY = {
-  "ban-fo-xian-ren": "半佛仙人",
+  "banfoxianren": "半佛仙人",
   "zhang-jia-wei": "张佳玮",
-  splitter: "贱贱",
-  "li-song-wei": "李松蔚",
-  "da-meng": "大猛",
-  "chen-zhang-yu": "陈章鱼",
+  "splitter": "贱贱",
+  "lisongwei": "李松蔚",
+  "da-meng-24-13": "大猛",
+  "ChenZhangyu": "陈章鱼",
+  "bing-deng-xing": "丙等星",
+  "cai-tong": "采铜",
+  "chen-lan-xiang-76": "陈兰香",
+  "dong-ji-zai-hang-zhou": "动机在杭州",
+  "jiangxiaozhang": "蒋校长",
+  "li-lei-up": "李雷",
+  "mulianghai": "赤戟",
+  "pi-bo-shi-tai-kong-jing-niang": "太空精酿",
+  "shui-qian-xiao-xi": "马前卒",
+  "wen-yi-fei-31": "温义飞",
 };
 
 const API_BASE = "https://developer.zhihu.com";
@@ -56,6 +76,23 @@ const DRY_RUN = process.argv.includes("--dry-run");
 
 /** 单条回答送进模型的正文上限，避免上下文过长被截断。 */
 const PER_ANSWER_CHARS = 1400;
+
+/**
+ * 降级重试用：素材压到 6 篇 × 500 字（约 3000 字输入）。
+ *
+ * 实测（2026-09-15，对照实验见 .tools/probe-sqx5.mjs）：zhida-thinking-1p5 有一个
+ * 「输入长度阈值」——大约 3400 字。低于它，模型老老实实按 JSON 模板输出 13 个字段；
+ * 高于它，模型会抛掉 JSON 任务，转去「回答」素材里的第一个话题。
+ *
+ * 证据（同一位答主 shui-qian-xiao-xi 马前卒，单变量变化）：
+ *   ≈2744 字 ✓ / ≈3045 字 ✓ / ≈3344 字 ✓ / ≈3524 字 ✗（稳定输出一篇军校解读）
+ * 早期版本把原因归给「时政语料」是错的 —— 语料换成完全无关的日常流水账，模型照样
+ * 正常输出；真正变量是输入长度。所以主调用仍用 1400（信息更全），失败再压到
+ * 6 × 500 重试。
+ */
+const FALLBACK_ANSWER_CHARS = 500;
+/** 降级时最多喂几篇。必须与 FALLBACK_ANSWER_CHARS 一起把输入压到 ~3000 字。 */
+const FALLBACK_ANSWER_COUNT = 6;
 /** 整体语料上限，超出的回答按赞同数从高到低截断。 */
 const TOTAL_CHARS = 26000;
 
@@ -128,24 +165,35 @@ function readCorpus(handle) {
   return { items, meta };
 }
 
-const DISTILL_PROMPT = [
-  "你是一个写作风格分析器。下面是一位知乎答主自己写的公开回答（按赞同数排序）。",
-  "请只根据原文判断，不要脑补原文里没有的信息。",
-  "只输出一行严格 JSON，不要 Markdown 代码块，不要任何解释：",
+/**
+ * system 只放角色。
+ *
+ * ⚠️ 实测（2026-09-15）：**不要把输出模板放进 system** —— zhida-thinking-1p5
+ * 会把 system 里的 JSON 当成「背景素材」而不是「必须遵守的格式」，
+ * 于是自创中文字段名（第一次叫「风格总述」，第二次叫「总体定性」，每次还不一样），
+ * 导致 parseDistill 一律失败。模板必须放进 user message 的任务指令里、紧邻素材。
+ */
+const SYSTEM_ROLE = [
+  "你是一个写作风格分析器。",
+  "你只描述「作者怎么写」，从不回答或评论素材里提到的话题。",
+].join("\n");
+
+/** 输出模板。字段名必须与 lib/domain/types.ts 的 Persona / PersonaVoice 对齐。 */
+const OUTPUT_TEMPLATE = [
   "{",
-  '  "headline": "一句话身份，20 字以内",',
-  '  "knows": ["他熟悉的领域、经历、专业边界，3-5 条"],',
-  '  "stance": ["他的价值判断、常见立场、思考路径，3-5 条"],',
-  '  "tone": ["语气标签，3-5 个"],',
-  '  "sentenceLength": "short|medium|long|mixed",',
-  '  "usesLists": true,',
-  '  "emotion": 0.5,',
-  '  "exampleStyle": "他怎么举例，一句话",',
-  '  "voiceSummary": "他怎么说话，100 字以内，能直接当写作指令用",',
-  '  "opening": "他开口的第一句长什么样。必须写成**可以照抄的句式**，不要形容词。例：\"我干这行十几年，这种事见过不少\"；反例：\"语气老练\"。只给一句。",',
-  '  "punctuation": "他的标点与排版习惯，用**可数**的描述。例：\"几乎不用破折号；括号用来吐槽；每段 2-3 句，段间空行\"。反例：\"标点丰富\"（没法执行）。",',
-  '  "doesNotKnow": ["他明确不装懂的范围，2-4 条"],',
-  '  "catchphrases": ["口头禅，2-6 个，尽量直接取自原文"]',
+  '  "headline": "<一句话身份，20 字以内>",',
+  '  "knows": ["<他熟悉的领域、经历、专业边界，3-5 条>"],',
+  '  "stance": ["<他的价值判断、常见立场、思考路径，3-5 条>"],',
+  '  "tone": ["<语气标签，3-5 个>"],',
+  '  "sentenceLength": "<short 或 medium 或 long 或 mixed>",',
+  '  "usesLists": <true 或 false>,',
+  '  "emotion": <0 到 1 之间的小数>,',
+  '  "exampleStyle": "<他怎么举例，一句话>",',
+  '  "voiceSummary": "<他怎么说话，100 字以内，能直接当写作指令用>",',
+  '  "opening": "<他开口第一句的句式，要能照抄，只给一句>",',
+  '  "punctuation": "<他的标点与排版习惯，用可数描述>",',
+  '  "doesNotKnow": ["<他明确不装懂的范围，2-4 条>"],',
+  '  "catchphrases": ["<口头禅，2-6 个，尽量直接取自原文>"]',
   "}",
 ].join("\n");
 
@@ -161,7 +209,7 @@ async function callZhida(secret, userContent) {
       model: MODEL,
       stream: false,
       messages: [
-        { role: "system", content: DISTILL_PROMPT },
+        { role: "system", content: SYSTEM_ROLE },
         { role: "user", content: userContent },
       ],
     }),
@@ -255,7 +303,7 @@ function tsStringArray(arr, indent) {
 function existingDisplayName(handle) {
   const p = join(OUT_DIR, handle + ".ts");
   if (existsSync(p)) {
-    const m = readFileSync(p, "utf8").match(/displayName:\s*"([^"]+)"/);
+    const m = readFileSync(p, "utf8").match(/displayName:\s*['"]([^'"]+)['"]/);
     if (m) return m[1];
   }
   return DEFAULT_DISPLAY[handle] || handle;
@@ -432,6 +480,42 @@ function buildCorpus(items, meta) {
 }
 
 /**
+ * 构造给直答的 user message：任务 + 输出模板 + 素材。
+ *
+ * 模板必须在这里（user message），不能放进 system —— 放 system 会被模型
+ * 当成「背景素材」而不是「必须遵守的格式」，于是自创中文字段名。
+ */
+function buildUserContent(handle, used, perChars, bare = false) {
+  const samples = bare
+    ? // 降级模式：只给正文碎片，不带「话题：」标题，也不成篇。
+      // 实测（2026-09-15）：素材里只要出现「话题：延迟退休」这类标题，zhida-thinking-1p5
+      // 就会把它当成一个待回答的问题，抛掉 JSON 模板去写一篇政策解读。
+      // 去掉标题、并把每段截到不成篇之后，它才回到「观察文风」这个任务上。
+      used.map((it) => it.body.slice(0, perChars)).join("\n\n···\n\n")
+    : used
+        .map(
+          (it, i) =>
+            "【样本 " + (i + 1) + "】话题：" + (it.question || "（无标题）") +
+            "\n" + it.body.slice(0, perChars),
+        )
+        .join("\n\n---\n\n");
+
+  return (
+    "任务：分析下面这位答主（" + handle + "）的写作风格。\n" +
+    "要求：只输出 JSON，键名严格照抄下面的模板 —— 不要翻译成中文，不要增删字段。\n" +
+    "不要回答或评论素材里的任何话题，素材只是用来观察文风的样本。\n" +
+    "素材里可能出现政策、法律、时政、医疗等话题 —— 它们同样只是文风样本。\n" +
+    "你的产出是「这个人怎么写字」，不是「这些话题该怎么看」。哪怕素材是一篇政策解读，\n" +
+    "你也只回答：他习惯怎么起句、怎么断句、怎么用标点、爱说什么口头禅。\n\n" +
+    "输出模板：\n" +
+    OUTPUT_TEMPLATE +
+    "\n\n===== 素材开始（" + used.length + " 篇回答）=====\n" +
+    samples +
+    "\n===== 素材结束 ====="
+  );
+}
+
+/**
  * 蒸馏一位答主。
  *
  * dryRun 做成**参数**而不是只读模块常量：测试进程不会带 --dry-run 启动，
@@ -446,22 +530,36 @@ async function distillOne(handle, index, secret, dryRun = DRY_RUN) {
 
   const built = buildCorpus(corpus.items, corpus.meta, handle);
 
-  const userContent =
-    "答主：" + handle + "\n" +
-    "共 " + corpus.items.length + " 条回答，以下为按赞同数排序的节选：\n\n" +
-    built.used
-      .map((it, i) => "[" + (i + 1) + "] 问题：" + (it.question || "（无标题）") + "（赞同 " + it.voteUp + "）\n" + it.body.slice(0, PER_ANSWER_CHARS))
-      .join("\n\n---\n\n");
-
   let raw;
   try {
-    raw = await callZhida(secret, userContent);
+    raw = await callZhida(secret, buildUserContent(handle, built.used, PER_ANSWER_CHARS));
   } catch (e) {
     console.log("  失败 " + handle + "：" + e.message);
     return { handle, ok: false, reason: "zhida" };
   }
 
-  const d = parseDistill(raw);
+  let d = parseDistill(raw);
+
+  // 降级重试：素材压到 6 篇 × 500 字，把输入压回阈值以内。见 FALLBACK_ANSWER_CHARS。
+  // 重试 2 次：实测该模型同一输入也有随机性，单次失败不代表这条路径走不通。
+  for (let attempt = 0; attempt < 2 && !d; attempt++) {
+    try {
+      raw = await callZhida(
+        secret,
+        buildUserContent(
+          handle,
+          built.used.slice(0, FALLBACK_ANSWER_COUNT),
+          FALLBACK_ANSWER_CHARS,
+          true,
+        ),
+      );
+      d = parseDistill(raw);
+      if (d) console.log("  （降级重试成功：" + handle + "，第 " + (attempt + 1) + " 次）");
+    } catch {
+      /* 单次失败就继续下一次；两次都失败则交给下面的 parse 失败分支统一报告 */
+    }
+  }
+
   if (!d) {
     console.log("  失败 " + handle + "：直答输出无法解析成四要素。");
     return { handle, ok: false, reason: "parse" };

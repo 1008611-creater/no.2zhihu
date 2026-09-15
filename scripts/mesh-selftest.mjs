@@ -68,7 +68,7 @@ const check = (label, ok, detail = "") => {
 
 /* ------------------------------ 用真实人格造一场镜像问答 ------------------------------ */
 
-const HANDLES = ["ban-fo-xian-ren", "ma-qian-zu", "wen-yi-fei", "chi-ji"];
+const HANDLES = ["banfoxianren", "shui-qian-xiao-xi", "wen-yi-fei-31", "mulianghai"];
 const skills = HANDLES.map((h) => {
   const base = PERSONA_SKILLS.find((s) => s.persona?.handle === h);
   return {

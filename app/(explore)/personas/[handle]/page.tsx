@@ -327,7 +327,10 @@ export default function PersonaDetailPage() {
                 >
                   <div style={{ fontWeight: 700, fontSize: 13.5 }}>{s.title}</div>
                   <div className="mono dimmer" style={{ fontSize: 11.5, marginTop: 4 }}>
-                    {s.author} · 赞同 {s.voteUp}
+                    {/* 赞同数只有真拿到时才显示：members/answers 上游不返回 voteup_count，
+                        抓取侧的 voteUp 恒为 0，直接渲染会印出「赞同 0」这种假数字。 */}
+                    {s.author}
+                    {s.voteUp > 0 ? " · 赞同 " + s.voteUp : ""}
                   </div>
                 </a>
               ))}

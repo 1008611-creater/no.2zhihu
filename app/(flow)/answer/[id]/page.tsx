@@ -163,7 +163,9 @@ export default function AnswerDetailPage() {
                     <div style={{ display: "flex", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
                       <span className="chip mono">[{i + 1}]</span>
                       <span className="chip chip-blue">{e.author}</span>
-                      <span className="chip mono">赞同 {e.voteUp}</span>
+                      {/* 赞同数只有真拿到时才显示：上游不返回 voteup_count 时它是 0，
+                          渲染出来就是「赞同 0」这种假数字。 */}
+                      {e.voteUp > 0 && <span className="chip mono">赞同 {e.voteUp}</span>}
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 5 }}>{e.title}</div>
                     <div className="dimmer" style={{ fontSize: 12.5 }}>{e.excerpt.slice(0, 140)}…</div>

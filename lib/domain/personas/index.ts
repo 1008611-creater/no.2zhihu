@@ -1,21 +1,21 @@
 import type { Persona } from "../types";
 
-import { persona as banFoXianRen } from "./ban-fo-xian-ren";
+import { persona as banFoXianRen } from "./banfoxianren";
 import { persona as zhangJiaWei } from "./zhang-jia-wei";
 import { persona as splitter } from "./splitter";
-import { persona as liSongWei } from "./li-song-wei";
-import { persona as daMeng } from "./da-meng";
-import { persona as chenZhangYu } from "./chen-zhang-yu";
-import { persona as maQianZu } from "./ma-qian-zu";
-import { persona as taiKongJingNiang } from "./tai-kong-jing-niang";
-import { persona as liLei } from "./li-lei";
-import { persona as wenYiFei } from "./wen-yi-fei";
+import { persona as liSongWei } from "./lisongwei";
+import { persona as daMeng } from "./da-meng-24-13";
+import { persona as chenZhangYu } from "./ChenZhangyu";
+import { persona as maQianZu } from "./shui-qian-xiao-xi";
+import { persona as taiKongJingNiang } from "./pi-bo-shi-tai-kong-jing-niang";
+import { persona as liLei } from "./li-lei-up";
+import { persona as wenYiFei } from "./wen-yi-fei-31";
 import { persona as caiTong } from "./cai-tong";
 import { persona as dongJiZaiHangZhou } from "./dong-ji-zai-hang-zhou";
 import { persona as bingDengXing } from "./bing-deng-xing";
-import { persona as jiangXiaoZhang } from "./jiang-xiao-zhang";
-import { persona as chiJi } from "./chi-ji";
-import { persona as chenLanXiang } from "./chen-lan-xiang";
+import { persona as jiangXiaoZhang } from "./jiangxiaozhang";
+import { persona as chiJi } from "./mulianghai";
+import { persona as chenLanXiang } from "./chen-lan-xiang-76";
 
 /**
  * 预置答主名册（16 位）。
@@ -23,9 +23,15 @@ import { persona as chenLanXiang } from "./chen-lan-xiang";
  * 顺序即默认展示顺序：领域与风格反差最大化，方便评委一眼看出
  * 「同一个问题换不同答主，回答真的不是一个人写的」。
  *
- * 全部为预置人格（按公开印象撰写，未抓取全量回答），卡片上如实标注。
- * 跑 scripts/persona-crawler.mjs 抓取真实回答后，各文件里的 corpus.real
- * 会变成 true、sampleSize 变成实际条数，其余字段由 distill-personas.mjs 覆盖。
+ * 16 位中 15 位已用真实公开回答蒸馏（corpus.real = true，卡片上显示条数）；
+ * 蒋校长（jiangxiaozhang）保持预置人格 —— 他 0 回答、文章接口也不返回内容
+ * （21 万关注但只有 2 篇不公开的文章），没有可用的公开语料，卡片如实标注 real=false。
+ *
+ * 数据管线：scripts/persona-crawler.mjs 抓取 → scripts/distill-personas.mjs 蒸馏。
+ *   node scripts/persona-crawler.mjs  <handle...>   # 需先有登录态，见 scripts/zhihu-session.cjs
+ *   node scripts/distill-personas.mjs <handle...>
+ * 两个脚本的 handle 必须是**知乎真实 url_token**（用搜索或 members/profile 核对），
+ * 名册早期版本的 handle 是拼出来的假 ID，会静默抓 0 条。
  *
  * 2026-09-15：从 6 位扩到 16 位。原来的 6 位集中在互联网/心理/制造/文学，
  * 换上问题就容易全打平；新增 10 位把工业、航天、生物、金融、学习方法、
