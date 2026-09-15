@@ -1,5 +1,6 @@
 import "server-only";
 
+import { checkClaims } from "@/lib/domain/claims";
 import { stripAssistantBoilerplate } from "@/lib/domain/answerIntegrity";
 import { findGaps } from "@/lib/domain/gap";
 import { voiceFingerprintGaps } from "@/lib/domain/personas";
@@ -885,7 +886,25 @@ const LEADING_CLICHE_PATTERNS: RegExp[] = [
   /(^|[。！？\n])\s*(?:作为一个人工智能|我们应该辩证地看|让我们一起)[，,]?\s*/g,
 ];
 
+/**
+ * 对外入口：真实生成结果 + 一次「无据断言」核对。
+ *
+ * 做成薄包装而不是在下面每个 return 点各写一遍 —— draftAnswerRaw 有 5 个返回分支
+ * （凭证缺失 / 未开直答 / 生成成功 / 上游报错 / 兜底直引），逐个改容易漏，
+ * 而漏掉的那条恰好就是最可能出问题的那条。
+ */
 export async function draftAnswer(
+  skill: Skill,
+  question: string,
+  useZhida: boolean,
+  siblings: Skill[] = [],
+): Promise<AnswerDraft> {
+  const draft = await draftAnswerRaw(skill, question, useZhida, siblings);
+  // 用 draft.evidence 而不是 skill.sources：证据字段才是这次回答真正引用的那批。
+  return { ...draft, claimCheck: checkClaims(draft.body, draft.evidence) };
+}
+
+async function draftAnswerRaw(
   skill: Skill,
   question: string,
   useZhida: boolean,
