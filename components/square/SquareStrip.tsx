@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useRef } from "react";
 import Link from "next/link";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import type { SquareLayout, SquareScope, TopicNode } from "@/lib/domain/square-layout";
 import { SCOPE_LABELS } from "@/lib/domain/square-layout";
 

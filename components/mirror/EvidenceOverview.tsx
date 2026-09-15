@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducedMotion } from 'motion/react';
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { MirrorQuestion } from '@/lib/domain/types';
 import CountUp from '@/components/ui/CountUp';

@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { GAP_SPRING, GAP_PAUSE, STAGGER } from "@/lib/motion/tokens";
 import type { Gap } from "@/lib/domain/types";
 

@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import CrowdCluster from "@/components/square/CrowdCluster";
 import { crowdSummary, type CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
 import type { SquareLayout, SquareScope, TopicNode, Viewport } from "@/lib/domain/square-layout";
