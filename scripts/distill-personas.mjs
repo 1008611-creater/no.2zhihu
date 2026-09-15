@@ -21,7 +21,7 @@
 
 import { readdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -51,6 +51,8 @@ const DEFAULT_DISPLAY = {
 
 const API_BASE = "https://developer.zhihu.com";
 const MODEL = process.env.ZHIHU_DISTILL_MODEL || "zhida-thinking-1p5";
+/** --dry-run：跑完整流程但不写文件，只报告会改什么。覆盖人格文件前的安全阀。 */
+const DRY_RUN = process.argv.includes("--dry-run");
 
 /** 单条回答送进模型的正文上限，避免上下文过长被截断。 */
 const PER_ANSWER_CHARS = 1400;
@@ -140,6 +142,8 @@ const DISTILL_PROMPT = [
   '  "emotion": 0.5,',
   '  "exampleStyle": "他怎么举例，一句话",',
   '  "voiceSummary": "他怎么说话，100 字以内，能直接当写作指令用",',
+  '  "opening": "他开口的第一句长什么样。必须写成**可以照抄的句式**，不要形容词。例：\"我干这行十几年，这种事见过不少\"；反例：\"语气老练\"。只给一句。",',
+  '  "punctuation": "他的标点与排版习惯，用**可数**的描述。例：\"几乎不用破折号；括号用来吐槽；每段 2-3 句，段间空行\"。反例：\"标点丰富\"（没法执行）。",',
   '  "doesNotKnow": ["他明确不装懂的范围，2-4 条"],',
   '  "catchphrases": ["口头禅，2-6 个，尽量直接取自原文"]',
   "}",
@@ -218,6 +222,8 @@ function parseDistill(raw) {
     emotion,
     exampleStyle: typeof obj.exampleStyle === "string" ? obj.exampleStyle.trim() : "未知",
     voiceSummary,
+    opening: typeof obj.opening === "string" ? obj.opening.trim() : "",
+    punctuation: typeof obj.punctuation === "string" ? obj.punctuation.trim() : "",
     doesNotKnow: asArray(obj.doesNotKnow, 4),
     catchphrases: asArray(obj.catchphrases, 6),
   };
@@ -264,7 +270,80 @@ function existingAccent(handle, index) {
   return ACCENT_CYCLE[index % ACCENT_CYCLE.length];
 }
 
-function buildTs(handle, displayName, accent, d, corpus) {
+/**
+ * 从旧人格文件里原样抠出一个字段的**值文本**（不含字段名与尾随逗号）。
+ *
+ * 为什么需要它：本脚本会整体重写人格文件，但有几个字段是**构造性**的 ——
+ * avoid 是「这个人绝不会写出来的句子」（AI 腔禁区）、exemplars 是语感范例，
+ * 它们在真实语料里并不存在，蒸馏产不出来。不保留就等于跑一次蒸馏把它们抹掉。
+ * 用「抠原始文本 + 重新解析字符串字面量」而不是 eval，是为了不引入执行风险。
+ */
+function extractRaw(src, field) {
+  const m = src.match(new RegExp("(^|\\n)\\s*" + field + "\\s*:"));
+  if (!m) return null;
+  const colon = src.indexOf(":", m.index);
+  if (colon < 0) return null;
+  let j = colon + 1;
+  while (j < src.length && (src[j] === " " || src[j] === "\n" || src[j] === "\t")) j++;
+
+  if (src[j] === "[") {
+    let depth = 0;
+    for (let k = j; k < src.length; k++) {
+      if (src[k] === "[") depth++;
+      else if (src[k] === "]") {
+        depth--;
+        if (depth === 0) return src.slice(j, k + 1);
+      }
+    }
+    return null;
+  }
+  if (src[j] === '"') {
+    for (let k = j + 1; k < src.length; k++) {
+      if (src[k] === "\\") { k++; continue; }
+      if (src[k] === '"') return src.slice(j, k + 1);
+    }
+    return null;
+  }
+  return null;
+}
+
+/** 把一段 TS 数组字面量里的字符串安全地取出来（不 eval）。 */
+function stringsIn(rawArray) {
+  if (!rawArray) return [];
+  const out = [];
+  const re = /"((?:[^"\\]|\\.)*)"/g;
+  let m;
+  while ((m = re.exec(rawArray))) {
+    try {
+      out.push(JSON.parse('"' + m[1] + '"'));
+    } catch {
+      /* 坏字面量跳过，不阻断整体 */
+    }
+  }
+  return out;
+}
+
+/**
+ * 读旧人格文件里需要「保留」的构造性字段。
+ *
+ * 分级策略（这是本次改动的核心）：
+ *   opening / punctuation —— 语料能提供更准的：蒸馏值优先，旧值兜底；
+ *   avoid / exemplars     —— 语料里没有的构造性字段：一律原样保留。
+ * 之前 buildTs 是整体覆盖且完全不产出这四个字段，跑一次蒸馏就把它们抹掉了。
+ */
+function readPreserved(handle) {
+  const p = join(OUT_DIR, handle + ".ts");
+  if (!existsSync(p)) return { avoid: [], exemplars: [], opening: "", punctuation: "" };
+  const src = readFileSync(p, "utf8");
+  return {
+    avoid: stringsIn(extractRaw(src, "avoid")),
+    exemplars: stringsIn(extractRaw(src, "exemplars")),
+    opening: stringsIn(extractRaw(src, "opening"))[0] || "",
+    punctuation: stringsIn(extractRaw(src, "punctuation"))[0] || "",
+  };
+}
+
+function buildTs(handle, displayName, accent, d, corpus, preserved) {
   const lines = [];
   lines.push('import type { Persona } from "../types";');
   lines.push("");
@@ -282,6 +361,10 @@ function buildTs(handle, displayName, accent, d, corpus) {
   lines.push("  accent: " + tsString(accent) + ",");
   lines.push("  knows: " + tsStringArray(d.knows, 2) + ",");
   lines.push("  stance: " + tsStringArray(d.stance, 2) + ",");
+  // 文风指纹的合并策略见 readPreserved 的注释：能用语料的用语料，构造性的原样保留。
+  const opening = (d.opening || "").trim() || preserved.opening;
+  const punctuation = (d.punctuation || "").trim() || preserved.punctuation;
+
   lines.push("  voice: {");
   lines.push("    sentenceLength: " + tsString(d.sentenceLength) + ",");
   lines.push("    wordRange: [" + corpus.wordRange[0] + ", " + corpus.wordRange[1] + "],");
@@ -290,6 +373,10 @@ function buildTs(handle, displayName, accent, d, corpus) {
   lines.push("    emotion: " + d.emotion + ",");
   lines.push("    exampleStyle: " + tsString(d.exampleStyle) + ",");
   lines.push("    summary: " + tsString(d.voiceSummary) + ",");
+  if (opening) lines.push("    opening: " + tsString(opening) + ",");
+  if (punctuation) lines.push("    punctuation: " + tsString(punctuation) + ",");
+  if (preserved.avoid.length > 0) lines.push("    avoid: " + tsStringArray(preserved.avoid, 4) + ",");
+  if (preserved.exemplars.length > 0) lines.push("    exemplars: " + tsStringArray(preserved.exemplars, 4) + ",");
   lines.push("  },");
   lines.push("  doesNotKnow: " + tsStringArray(d.doesNotKnow, 2) + ",");
   lines.push("  catchphrases: " + tsStringArray(d.catchphrases, 2) + ",");
@@ -344,7 +431,13 @@ function buildCorpus(items, meta) {
   };
 }
 
-async function distillOne(handle, index, secret) {
+/**
+ * 蒸馏一位答主。
+ *
+ * dryRun 做成**参数**而不是只读模块常量：测试进程不会带 --dry-run 启动，
+ * 若只读常量，测试跑一次就会把真实人格文件覆盖掉。默认值仍是命令行开关。
+ */
+async function distillOne(handle, index, secret, dryRun = DRY_RUN) {
   const corpus = readCorpus(handle);
   if (!corpus) {
     console.log("  跳过 " + handle + "：.personas-raw/" + handle + "/ 里没有可用回答（先跑 crawler）。");
@@ -376,7 +469,28 @@ async function distillOne(handle, index, secret) {
 
   const accent = existingAccent(handle, index);
   const displayName = existingDisplayName(handle);
-  const ts = buildTs(handle, displayName, accent, d, built);
+  const preserved = readPreserved(handle);
+  const ts = buildTs(handle, displayName, accent, d, built, preserved);
+
+  // dry-run：只报告会改什么，不落盘 —— 真正覆盖前用它确认指纹没被抹掉。
+  if (dryRun) {
+    const p = join(OUT_DIR, handle + ".ts");
+    const before = existsSync(p) ? readFileSync(p, "utf8") : "";
+    const openingFrom = d.opening ? "distill" : preserved.opening ? "existing" : "none";
+    const punctuationFrom = d.punctuation ? "distill" : preserved.punctuation ? "existing" : "none";
+    console.log(
+      "  [dry-run] 将写入 " + ts.length + " 字符（原 " + before.length + "）；" +
+      "保留 avoid " + preserved.avoid.length + " 条 / exemplars " + preserved.exemplars.length + " 条；" +
+      "opening=" + openingFrom + "，punctuation=" + punctuationFrom + "。",
+    );
+    return {
+      handle, ok: true, sampleSize: built.sampleSize, dryRun: true,
+      preservedAvoid: preserved.avoid.length,
+      preservedExemplars: preserved.exemplars.length,
+      openingFrom, punctuationFrom,
+    };
+  }
+
   writeFileSync(join(OUT_DIR, handle + ".ts"), ts, "utf8");
 
   console.log(
@@ -397,7 +511,10 @@ async function main() {
   const targets = process.argv.slice(2).filter((a) => !a.startsWith("-"));
   const handles = targets.length > 0 ? targets : DEFAULT_HANDLES;
 
-  console.log("准备蒸馏 " + handles.length + " 位答主，模型 " + MODEL + "。");
+  console.log(
+    "准备蒸馏 " + handles.length + " 位答主，模型 " + MODEL +
+    (DRY_RUN ? "（--dry-run：只报告，不写文件）" : "") + "。",
+  );
   console.log("原始语料目录：" + RAW_DIR + "\n");
 
   const summary = [];
@@ -425,7 +542,30 @@ async function main() {
   }
 }
 
-main().catch((e) => {
-  console.error("未捕获错误：" + e.message);
-  process.exit(1);
-});
+/**
+ * 导出纯函数供 scripts/test-distill.mjs 做单元测试。
+ *
+ * 为什么必须 export：这条离线路径此前**零测试**，而它恰好是「会整体覆盖人格文件」
+ * 的那条路径 —— 0.1 修的就是它把文风指纹抹掉的问题，没有测试守着就会再犯。
+ */
+export {
+  parseDistill,
+  buildTs,
+  distillOne,
+  readCorpus,
+  buildCorpus,
+  extractRaw,
+  stringsIn,
+  readPreserved,
+  wordRangeFor,
+  asArray,
+};
+
+// 只有直接执行本文件时才跑 main；被 import 时不跑，测试才能安全引用上面的函数。
+const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isMain) {
+  main().catch((e) => {
+    console.error("未捕获错误：" + e.message);
+    process.exit(1);
+  });
+}

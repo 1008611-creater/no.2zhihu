@@ -12,6 +12,11 @@
 - [ ] 已同步最新 main（`git fetch origin main && git rebase origin/main`，或点 PR 页面的 Update branch）
 - [ ] 已查重：没有别的在途 PR 在改**同一批文件**（重叠 ≥3 个文件 ≈ 同一件事的两个版本）
 - [ ] `node scripts/verify-merge.mjs <本分支>` 退出码为 0
+- [ ] `node scripts/preflight.mjs --text "<改动涉及的关键文案>"` → **接线**与**产物**两项全过
+      （接线 = 新增导出必须有调用点，防「定义进了结果、调用行被合并丢掉」，tsc 抓不到；
+        产物 = 构建成功 ≠ 生效，标 ○ (Static) 的页面只输出 shell，必须到 .next/server 与 .next/static 里找。
+        它同时把上面那条「已查重」从人工勾选变成自动判据：与在途 PR 文件重叠 ≥50% 直接失败 ——
+        人工勾选在本项目已经失守过 2 次：#21/#23 各自修了同一个「假登录」，#11/#15 做了同一套护栏）
 
 ## 改了什么
 

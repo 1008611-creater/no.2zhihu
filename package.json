@@ -12,7 +12,10 @@
     "push:github": "pwsh -ExecutionPolicy Bypass -File scripts/push-to-github.ps1",
     "fix:powershell": "pwsh -ExecutionPolicy Bypass -File scripts/fix-powershell-default.ps1",
     "personas:crawl": "node scripts/persona-crawler.mjs",
-    "personas:distill": "node scripts/distill-personas.mjs"
+    "personas:distill": "node scripts/distill-personas.mjs",
+    "personas:distill:dry": "node scripts/distill-personas.mjs --dry-run",
+    "test:distill": "node scripts/test-distill.mjs",
+    "preflight": "node scripts/preflight.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
