@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HeroTitle from '@/components/ui/HeroTitle';
 import { useInviteUrl } from '@/lib/motion/useInviteUrl';
@@ -11,7 +12,6 @@ import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import { FLOW_STATES, flowStateAt } from "@/components/kanshan/states";
 import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDrawer";
 import PersonaPicker from "@/components/mirror/PersonaPicker";
-import FeedStream from "@/components/square/FeedStream";
 import { personaCandidates, type PersonaCandidate } from "@/lib/domain/router";
 import { useMirror } from "@/lib/store/mirror-store";
 import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
@@ -25,14 +25,11 @@ import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
  * 2026-09-15 收敛（评委反馈）：
  *   · 首页不再铺开全部结果 —— 答主阵容、回答群组、缺口、Mesh 都与 /mirror 重复，
  *     现在统一由 /mirror（首页的子级页面）承载，生成完成后直接跳过去。
- *   · 空闲态不再是一块说明文字，而是**广场信息流**：主体是已经做完的
- *     镜像讨论组，后面跟知乎热榜，点任意一条就能变成新的镜像问题。
  *
  * 2026-09-15 二次收敛（信息架构）：
- *   · 首页只负责「提出问题」这一件事。下方信息流**只看公开内容**
- *     （别人问过的 + 热榜）—— 我自己提过的问题封存在 /square 的
- *     「我曾经提问过的」里。原先首页会为刚提过的问题重复给出多个入口，
- *     同一场问答有好几条路进去，反而让人不知道哪条才是"正路"。
+ *   · 首页只负责「提出问题」这一件事。原先首页还铺了一整段广场信息流，
+ *     与 /square 是同一份内容 —— 同一件事有两个入口，用户反而不知道哪边是"正路"。
+ *     现在首页只留一个入口（一行卡片 + 一个链接），内容整体归 /square。
  *   · 支持 `?auto=1&q=…&persona=…`：从「我的」页的一键自动回答进来时，
  *     跳过手动点选，直接开跑。
  *
@@ -41,7 +38,7 @@ import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
  *   配套的 `.no-tail + .lede / .no-tail + .dim { display: none }` 兜住残留小字。
  *
  * 三步状态机（phase）：
- *   ask   —— 输入问题（下方是公开广场信息流）
+ *   ask   —— 输入问题（下方只有一个广场入口，不铺内容）
  *   pick  —— 选答主（默认勾选推荐 3 位）
  *   run   —— 生成中，完成后跳转到 /mirror#answers
  */
@@ -53,10 +50,10 @@ type Phase = "ask" | "pick" | "run";
 
 export default function Home() {
   const router = useRouter();
-  const { mirror, setMirror, ready, appendInvite } = useMirror();
+  const { mirror, setMirror, appendInvite } = useMirror();
 
   const [question, setQuestion] = useState("");
-  // 从答主档案页「带他去提问」过来时带 ?persona=handle，用于预选这位答主。
+  // ?persona=handle：预选这位答主。现在只有「我的」页的一键自动回答会带它过来。
   const [preferred, setPreferred] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("ask");
   const [selected, setSelected] = useState<string[]>([]);
@@ -75,8 +72,8 @@ export default function Home() {
     timers.current = [];
   }, []);
 
-  // 从虚拟广场点热榜条目过来时带 ?q=，直接填进输入框，省一步操作。
-  // 从答主档案页过来时带 ?persona=handle，记下这位答主，进选人步骤时优先选中。
+  // 从虚拟广场点条目过来时带 ?q=，直接填进输入框，省一步操作。
+  // ?persona=handle：记下这位答主，进选人步骤时优先选中。
   // 从「我的」页一键自动回答过来时带 ?auto=1，记下后自动开跑。
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
@@ -123,7 +120,7 @@ export default function Home() {
     setError(null);
     // 默认勾选推荐的前 3 位 —— 用户想直接开始就点确认，想换人就点卡片。
     const ranked = personaCandidates(q).map((c) => c.handle);
-    // 从档案页带过来的答主排在第一位，保证「带他去提问」真的带上他。
+    // 指定了答主就把他排在第一位，保证「一键自动回答」真的用上他。
     const withPreferred =
       preferred && ranked.includes(preferred)
         ? [preferred, ...ranked.filter((h) => h !== preferred)]
@@ -357,22 +354,23 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* ------------------------------ 广场信息流 ------------------------------ */}
+      {/* ------------------------------ 广场入口（只给门，不铺内容） ------------------------------ */}
       {phase === "ask" && (
         <section className="section">
-          <div className="section-head">
-            <div>
-              <p className="eyebrow">Virtual square · 虚拟广场</p>
-              <h2 className="no-tail">这座虚拟知乎里已经讨论过的事</h2>
+          <div
+            className="card-flat"
+            style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+          >
+            <div style={{ marginRight: "auto" }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>虚拟广场</div>
+              <div className="dim" style={{ fontSize: 12.5 }}>
+                别人正在讨论的事，以及你自己提问过的，都在广场里。
+              </div>
             </div>
+            <Link className="btn" href="/square">
+              进入广场 →
+            </Link>
           </div>
-          {/*
-            scope="public"：这里只放别人问过的与热榜。
-            我自己提过的问题不在首页出现 —— 它们封存在 /square 的
-            「我曾经提问过的」里，避免同一场问答在首页有多个入口。
-          */}
-          {ready && <FeedStream hotLimit={20} scope="public" />}
-          {!ready && <div className="skeleton" style={{ height: 260 }} />}
         </section>
       )}
 

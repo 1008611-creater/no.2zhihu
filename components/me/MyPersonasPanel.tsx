@@ -11,8 +11,8 @@ import type { Accent, MirrorQuestion } from "@/lib/domain/types";
 /**
  * 「我的分身」—— 我请过的分身，各自答过哪些问题。
  *
- * 它是一份**记录**，不是操作台：这里只回答「谁、替我答过什么」。
- * 想带某位分身去答新问题，点卡片上的链接回首页；想换一批人，去「分身发现」。
+ * 它是一份**记录**，不是操作台：这里只回答「谁、替我答过什么」，不挂任何
+ * 「带他去答新问题」式的导流按钮 —— 要再问一次，回首页重新提问。
  *
  * 空态必须给出下一步而不是一句「暂无数据」：新用户刚进「我的」时什么都没答过，
  * 干看着一句空话就走了。所以空态直接推荐「一条问题 + 一位最合适的答主」，
@@ -157,11 +157,6 @@ export default function MyPersonasPanel({ history }: { history: MirrorQuestion[]
                   · {q}
                 </div>
               ))}
-            </div>
-            <div style={{ marginTop: 14 }}>
-              <Link className="link mono" style={{ fontSize: 11.5 }} href={"/?persona=" + p.handle}>
-                带他答新问题 →
-              </Link>
             </div>
           </motion.div>
         ))}
