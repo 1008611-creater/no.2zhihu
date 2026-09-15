@@ -288,24 +288,30 @@ export async function fetchUser(token: ZhihuToken): Promise<ZhihuUser> {
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
   } catch (cause) {
-    throw new ZhihuApiError({ message: "user fetch network failure", kind: "network", endpoint: "oauth.user", cause });
+    // 网络层失败同理降级：token 已在手，不该被一次取资料的超时拖垮登录。
+    throw new ZhihuUserDegraded(
+      `user fetch network failure: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
   }
 
   const text = await res.text();
   if (!res.ok) {
-    throw new ZhihuApiError({
-      message: `user fetch failed: ${res.status}`,
-      kind: res.status === 401 || res.status === 403 ? "auth" : "upstream",
-      endpoint: "oauth.user",
-      status: res.status,
-    });
+    // ⚠️ 同一条纪律：`/user` 拿不到资料**不等于登录失败**。
+    // 线上实测：带上正确的 Access Secret + 任意 token，`/user` 会直接回
+    // HTTP 500（`<html>500: Internal Server Error</html>`）。若这里抛致命错，
+    // 用户就永远登不进去 —— 而 token 明明已经换到了。
+    // 所以整个「取资料」阶段的失败一律降级，只有「换 token」失败才致命。
+    throw new ZhihuUserDegraded(
+      `user fetch failed: ${res.status}${text ? ` body=${text.slice(0, 120)}` : ""}`,
+    );
   }
 
   let data: Record<string, unknown>;
   try {
     data = JSON.parse(text);
-  } catch (cause) {
-    throw new ZhihuApiError({ message: "user response not JSON", kind: "parse", endpoint: "oauth.user", cause });
+  } catch {
+    // 同上：非 JSON 响应也只是资料缺失。500 页面走 HTML 分支正是这种情况。
+    throw new ZhihuUserDegraded(`user response not JSON (${text.slice(0, 120)})`);
   }
 
   // 业务成功码是 20000（不是 0，也不是 HTTP 200 的语义）——
