@@ -393,32 +393,7 @@ body.sq-locked {
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke; /* 缩放时线宽不变，避免放大后糊成一条 */
   /* opacity 由内联 style 给（随 strength 变化），这里不写死 */
-}
-
-/* ------------------------------ 主题分区标签 ------------------------------ */
-
-/* 分区标签必须压在卡片**之上**。
- * 实测踩坑：分区中心在扇区几何中心，而卡片围着它散开，所以标签
- * 天然会被卡片盖住 —— 截图里只看见 4 个色斑糊在卡片缝里，读不出街区名。
- * 卡片在 DOM 里排在标签之后（自然层叠更高），所以这里显式抬 z-index，
- * 并给一层不透明底，让「科技 6」这样的归属标签始终可读。 */
-.sq-cluster {
-  position: absolute;
-  left: 0;
-  top: 0;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  padding: 5px 11px 5px 9px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: rgba(11, 13, 23, 0.94);
-  backdrop-filter: blur(8px);
-  white-space: nowrap;
-  pointer-events: none;
-}
-.sq-cluster-dot {
+}.sq-cluster-dot {
   width: 7px;
   height: 7px;
   border-radius: 50%;
@@ -430,21 +405,7 @@ body.sq-locked {
 .sq-cluster-dot.a-blue { background: var(--blue); }
 .sq-cluster-dot.a-violet { background: var(--violet); }
 .sq-cluster-dot.a-green { background: var(--green); }
-.sq-cluster-dot.a-orange { background: var(--orange); }
-
-.sq-cluster-label {
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--text-300);
-}
-.sq-cluster-count {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-size: 10.5px;
-  color: var(--text-700);
-}
-
-/* ------------------------------ 话题卡 ------------------------------ */
+.sq-cluster-dot.a-orange { background: var(--orange); }/* ------------------------------ 话题卡 ------------------------------ */
 
 /* 为什么卡片是正方形且用绝对定位 + translate 定位中心：
    布局层算的是「中心坐标」，用 translate(-50%,-50%) 的百分比写法会与
@@ -459,73 +420,7 @@ body.sq-locked {
   transform-origin: 50% 50%;
   /* 刻意不加 transition: transform —— 位置由 JS 一次算好，
      给过渡会在布局重算时让卡片「滑」过去，看起来像飘。 */
-}
-.sq-card:focus-visible { outline: 2px solid var(--blue); outline-offset: 4px; }
-
-.sq-card-inner {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  border-radius: inherit;
-  border: 1px solid var(--line);
-  /* 不规则但克制的「小岛」：两层径向渐变错位，形成非矩形的光斑边界，
-     但不用 clip-path（那会让卡片内容截断，且 22 张各不同会很杂）。 */
-  background:
-    radial-gradient(ellipse 120% 90% at 18% 12%, rgba(255, 255, 255, 0.055), transparent 58%),
-    radial-gradient(ellipse 100% 80% at 88% 96%, rgba(139, 92, 246, 0.05), transparent 60%),
-    linear-gradient(165deg, var(--ink-850), var(--ink-900));
-  box-shadow: 0 20px 48px -30px rgba(0, 0, 0, 0.95);
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  transition: border-color 0.3s ease, box-shadow 0.35s ease;
-}
-
-.sq-card:hover .sq-card-inner {
-  border-color: var(--ink-600);
-  box-shadow: 0 30px 68px -34px rgba(0, 0, 0, 1);
-}
-
-/* 顶部强调色条：渐隐，不做到边，避免读成「进度条」 */
-.sq-card-bar {
-  position: absolute;
-  top: 0;
-  left: 18px;
-  right: 18px;
-  height: 2px;
-  border-radius: 2px;
-  opacity: 0.5;
-  mask-image: linear-gradient(90deg, #000, #000 40%, transparent);
-  -webkit-mask-image: linear-gradient(90deg, #000, #000 40%, transparent);
-}
-
-.sq-card-body {
-  position: relative;
-  flex: 1;
-  min-height: 0;
-  padding: 20px 22px 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.sq-card-meta {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  flex: none;
-}
-.sq-card-status {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  color: var(--text-700);
-  text-transform: uppercase;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.sq-card-mine-tag {
+}.sqs-mine-tag {
   flex: none;
   font-size: 10px;
   font-weight: 700;
@@ -535,75 +430,7 @@ body.sq-locked {
   background: rgba(62, 121, 254, 0.16);
   border: 1px solid rgba(62, 121, 254, 0.34);
   color: var(--blue-soft);
-}
-
-/* 标题是卡片上唯一必须可读的信息 —— 行数按尺寸自适应，
-   由 CSS line-clamp 控制，避免小卡片溢出（规格：不塞完整说明文字）。 */
-.sq-card-title {
-  font-weight: 650;
-  line-height: 1.42;
-  letter-spacing: -0.005em;
-  color: var(--text-100);
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  /* 行数 clamp 由 .sq-card 的尺寸区间决定：卡片最小 132px，
-     20px 内边距下剩 92px 可用宽度，13.5px 字号一行约 6 字 → 最多 4 行 */
-  -webkit-line-clamp: 4;
-  line-clamp: 4;
-}
-.sq-card:hover .sq-card-title,
-.sq-card-focused .sq-card-title { -webkit-line-clamp: 5; line-clamp: 5; }
-
-/* 回答预览：悬停/聚焦才出现 */
-.sq-card-preview {
-  flex: none;
-  font-size: 12.5px;
-  line-height: 1.62;
-  color: var(--text-500);
-  border-left: 2px solid var(--line);
-  padding-left: 10px;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
-  overflow: hidden;
-}
-
-.sq-card-avatars {
-  flex: none;
-  margin-top: auto;
-  display: flex;
-  align-items: center;
-  /* 头像依次浮现时用负边距叠压，比等距排开更像「一群人围过来」 */
-  padding-left: 2px;
-  min-height: 30px; /* 占位，避免展开/收起时卡片内容跳动 */
-}
-
-/* 「我的讨论」：只做极轻的区分 —— 一条蓝调内描边。
-   为什么不用整片蓝底或发光：广场上有 22 张卡，任一张过亮都会破坏
-   「散落的小岛」这一整体观感；而用户找自己那场主要靠右下角
-   「回到我的位置」按钮，卡片本身只需给一个可辨认的落点。 */
-.sq-card-mine .sq-card-inner {
-  border-color: rgba(62, 121, 254, 0.3);
-  box-shadow:
-    0 0 0 1px rgba(62, 121, 254, 0.1) inset,
-    0 20px 48px -30px rgba(0, 0, 0, 0.95);
-}
-
-/* 已聚焦的卡片：强调边界，但不用发光圈（规格禁止高亮霓虹） */
-.sq-card-focused .sq-card-inner {
-  border-color: rgba(192, 164, 255, 0.42);
-  box-shadow:
-    0 0 0 1px rgba(192, 164, 255, 0.18),
-    0 34px 76px -34px rgba(0, 0, 0, 1);
-}
-
-/* 聚焦某张卡时，其他卡片退到背景，形成焦点层级 */
-.sq-card-dimmed { opacity: 0.34; transition: opacity 0.42s ease; }
-.sq-card-dimmed .sq-card-inner { border-color: var(--line-soft); }
-
-/* ------------------------------ 答主头像 ------------------------------ */
+}/* ------------------------------ 答主头像 ------------------------------ */
 
 .sq-avatar {
   display: inline-flex;
@@ -623,39 +450,12 @@ body.sq-locked {
   flex: none;
   user-select: none;
 }
-.sq-avatar:first-child { margin-left: 0; }
-
-.sq-avatar-more {
-  font-size: 10.5px;
-  color: var(--text-500);
-  background: var(--ink-850);
-}
-.sq-avatar-lg {
+.sq-avatar:first-child { margin-left: 0; }.sq-avatar-lg {
   width: 34px;
   height: 34px;
   font-size: 14px;
   margin-left: 0;
-}
-
-/* ------------------------------ 呼吸光点 ------------------------------ */
-
-/* 「正在回答的话题带很轻的呼吸光点」—— 关键是「很轻」：
-   只给一个 5px 的点 + 极低透明度扩散，不用 box-shadow 光晕，
-   否则 22 张卡同时呼吸会变成一堆闪烁的霓虹。 */
-.sq-breathe {
-  position: absolute;
-  top: 16px;
-  right: 18px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--violet-soft);
-  opacity: 0.5;
-  pointer-events: none;
-}
-.sq-breathe-static { animation: none; opacity: 0.42; }
-
-/* ------------------------------ 顶部一句话 ------------------------------ */
+}/* ------------------------------ 顶部一句话 ------------------------------ */
 
 /* 规格：「顶部只保留一句，避免原先巨大的静态标题」。
    所以这里刻意做小（12.5px）、做轻，只当状态提示，不当标题。 */
@@ -668,75 +468,7 @@ body.sq-locked {
   pointer-events: none;
   max-width: min(92vw, 560px);
   text-align: center;
-}
-.sq-count {
-  display: inline-block;
-  padding: 8px 16px;
-  border-radius: 999px;
-  border: 1px solid var(--line-soft);
-  background: rgba(11, 13, 23, 0.78);
-  backdrop-filter: blur(10px);
-  font-size: 12.5px;
-  letter-spacing: 0.02em;
-  color: var(--text-500);
-  white-space: nowrap;
-}
-.sq-count b {
-  font-family: var(--font-mono), ui-monospace, monospace;
-  font-weight: 500;
-  font-size: 13.5px;
-  color: var(--text-100);
-  padding: 0 2px;
-}
-
-/* ------------------------------ 缩略地图 ------------------------------ */
-
-.sq-minimap {
-  position: absolute;
-  left: 22px;
-  bottom: 22px;
-  z-index: 3;
-  border-radius: 8px;
-  border: 1px solid var(--line-soft);
-  background: rgba(11, 13, 23, 0.76);
-  backdrop-filter: blur(10px);
-  overflow: hidden;
-  opacity: 0.68;
-  transition: opacity 0.3s ease;
-}
-.sq-minimap:hover { opacity: 1; }
-.sq-minimap svg { display: block; cursor: pointer; }
-
-.sq-minimap-bg { fill: transparent; stroke: var(--line-soft); }
-/* 分区在缩略图上是一个「晕」，不是实心圆 —— 保持克制 */
-.sq-minimap-cluster {
-  fill: rgba(139, 92, 246, 0.07);
-  stroke: rgba(139, 92, 246, 0.16);
-  stroke-width: 1;
-}
-.sq-minimap-dot { fill: var(--text-700); }
-.sq-minimap-dot.mine { fill: var(--blue); }
-.sq-minimap-view {
-  fill: rgba(62, 121, 254, 0.08);
-  stroke: rgba(147, 176, 255, 0.5);
-  stroke-width: 1;
-}
-
-/* ------------------------------ 右下角控制 ------------------------------ */
-
-.sq-controls {
-  position: absolute;
-  right: 22px;
-  bottom: 22px;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-/* 为什么不用现成的 .btn：那是 44px 高、圆角胶囊的「主操作」按钮，
+}.sq-minimap-dot.mine { fill: var(--blue); }/* 为什么不用现成的 .btn：那是 44px 高、圆角胶囊的「主操作」按钮，
    放在画布右下角会抢焦点。广场的控制是辅助性的，做小、做哑。 */
 .sq-btn {
   display: inline-flex;
@@ -753,24 +485,7 @@ body.sq-locked {
   color: var(--text-300);
   cursor: pointer;
   transition: border-color 0.24s ease, color 0.24s ease, background 0.24s ease;
-}
-.sq-btn:hover {
-  border-color: var(--ink-600);
-  color: var(--text-100);
-  background: rgba(22, 25, 39, 0.9);
-}
-.sq-btn:focus-visible { outline: 2px solid var(--blue); outline-offset: 2px; }
-.sq-btn-ghost { background: transparent; color: var(--text-500); }
-
-.sq-zoom {
-  font-size: 11px;
-  color: var(--text-700);
-  padding: 0 4px;
-  min-width: 38px;
-  text-align: right;
-}
-
-/* ------------------------------ 原地展开的详情 ------------------------------ */
+}/* ------------------------------ 原地展开的详情 ------------------------------ */
 
 /* 规格：「点击话题后，镜头平滑移动到该话题并放大，在原地展开讨论详情」。
    实现选择：镜头聚焦交给画布 transform，详情做成右侧靠上的浮层 ——
@@ -963,11 +678,7 @@ body.sq-locked {
 }
 
 @media (max-width: 640px) {
-  .sq-root { min-height: 460px; }
-  .sq-card-body { padding: 16px 16px 14px; gap: 8px; }
-  /* 小屏上「我的位置 / 全景」这类平移操作价值低，只留发现 */
-  .sq-btn { padding: 8px 11px; font-size: 12px; }
-  .sq-detail-actions { flex-direction: column; }
+  .sq-root { min-height: 460px; }  .sq-detail-actions { flex-direction: column; }
   .sq-detail-actions .btn { width: 100%; }
 }
 
@@ -1224,4 +935,420 @@ body.sq-locked {
   padding: 0 20px;
   font-size: 11.5px;
   color: var(--text-700);
+}
+
+
+/* ============================================================================
+ * 虚拟广场（人群）+ 现场广播   ·   2026-09-15 第二轮改造
+ *
+ * 页面结构：顶部导航（固定）+ 左侧广场（约 75%）+ 右侧现场广播（约 25%）。
+ * 两块各自滚动、互不控制 —— 这是产品说明的硬要求，不是实现取舍。
+ *
+ * 人群的两种人形来自 lib/domain/crowd.ts：
+ *   实心 = 真实在场分身；空心橙色 = 未补缺口（「还缺的那个真人」）。
+ * 除此之外没有第三种人形，也没有按热度放大规模的逻辑。
+ * ========================================================================= */
+
+:root {
+  /* 顶栏真实高度。由 SquareField 用 ResizeObserver 量出来覆盖；
+     这里给的是 1440 宽默认字号下的实测值，只在 JS 还没跑起来时兜底。 */
+  --sq-chrome: 73px;
+}
+
+/* ------------------------------ 分栏 ------------------------------ */
+
+.sq-stage {
+  display: grid;
+  /* 左广场 3 份、右广播 1 份 = 75% / 25%。
+     右栏给 minmax(280px, 1fr)：1440 下约 360px，1100 下仍有 280px ——
+     再窄，标题就会开始一个词一行。 */
+  grid-template-columns: minmax(0, 3fr) minmax(280px, 1fr);
+  height: calc(100vh - var(--sq-chrome));
+  height: calc(100svh - var(--sq-chrome));
+}
+
+.sq-plaza {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* SquareCanvas 的根节点现在住在广场里，高度由广场决定，
+   不再自己按视口算（否则会溢出到右栏下面）。 */
+.sq-plaza > .sq-root {
+  height: 100%;
+}
+
+/* 人形轮廓的 <defs> 容器：零尺寸、不参与布局、不接收事件。 */
+.sq-defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+/* ------------------------------ 广场标题 ------------------------------ */
+
+/* 概念图上的两行：大字「虚拟广场」+ 一句副题。
+   刻意不做成首屏 hero —— 广场本身才是主角，标题是立在广场边上的指示牌。
+
+   为什么是**整幅顶带 + 向下渐隐**而不是一小块浮字：广场是会动的，
+   总会有簇飘到标题底下，两行文字叠在一起谁都读不清。顶带保证标题区
+   永远是干净的；渐隐而不是实心底，是为了不把广场切出一条硬边。
+   pointer-events: none 让它完全不挡拖动。 */
+.sq-plaza-head {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 3;
+  padding: 22px 26px 40px;
+  background: linear-gradient(
+    180deg,
+    var(--ink-950) 34%,
+    rgba(7, 8, 15, 0.82) 68%,
+    rgba(7, 8, 15, 0) 100%
+  );
+  pointer-events: none;
+}
+
+.sq-plaza-title {
+  margin: 0;
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--text-100);
+}
+
+.sq-plaza-sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-500);
+}
+
+/* ------------------------------ 人群 ------------------------------ */
+
+/* 外层只负责定位。pointer-events: none 是**必须**的：
+   如果整块方形区域都吃事件，22 个簇会把广场铺满，
+   用户就找不到地方按住拖动平移了。接事件的只有下面那个圆形按钮。 */
+.sq-crowd-node {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  will-change: transform;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+/* 聚焦某一场时，其他人群退到背景，形成焦点层级。
+   用透明度而不是模糊/发光 —— 设计系统禁止发光与阴影堆叠。 */
+.sq-crowd-node-dimmed {
+  opacity: 0.34;
+}
+
+.sq-crowd-body {
+  position: absolute;
+  inset: 0;
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+
+.sq-crowd-node-hover .sq-crowd-body {
+  /* 只抬 4%，与卡片版的「轻微升起」同一量级 —— 广场上有一百多个人形，
+     任何一处动作过大都会让整片区域看起来在抖。 */
+  transform: scale(1.04);
+}
+
+/* 地面圈：虚线圆，标出「这场讨论占的那块地」。
+   没有它，外圈的小簇在大片深色地面上会像漂浮的点，看不出是个聚落。 */
+.sq-crowd-ground {
+  position: absolute;
+  inset: 5%;
+  border: 1px dashed var(--line-soft);
+  border-radius: 50%;
+}
+
+/* 聚焦环：只在当前打开的那一场上出现。 */
+.sq-crowd-ring {
+  position: absolute;
+  inset: -4%;
+  border: 1.5px solid var(--blue);
+  border-radius: 50%;
+  opacity: 0.5;
+}
+
+/* ⚠️ 这里用 r-* 而不是复用全局的 .a-*。
+   .a-blue / .a-green 那几个类设的是 `background: linear-gradient(...)`（为横条设计的），
+   挂在圆环上会把「描边圆」直接填成一个**实心色盘** —— 实测截图里聚焦的那一簇
+   整个被一大块绿色盖住，人形全看不见了。
+   .sq-cluster-dot 早先就踩过同一个坑（见它自己的注释）。 */
+.sq-crowd-ring.r-violet { border-color: var(--violet); }
+.sq-crowd-ring.r-green  { border-color: var(--green); }
+.sq-crowd-ring.r-orange { border-color: var(--orange); }
+
+.sq-crowd {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  opacity: 0.62;
+  transition: opacity var(--dur-fast) var(--ease-standard);
+}
+
+.sq-crowd-node-hover .sq-crowd   { opacity: 0.86; }
+.sq-crowd-node-focused .sq-crowd { opacity: 1; }
+
+/* 人形的颜色。形状来自 <symbol>，颜色靠 fill/stroke 继承下去 ——
+   所以 <use> 上挂一个 .a-* 就够了，不必给每个 <symbol> 复制四份。 */
+/* 同样用 f-* 而不是 .a-*：SVG 元素虽然会忽略 background，
+   但把「背景条工具类」当成「图形填充类」用，迟早会有人把 .a-* 改成别的属性。 */
+.sq-figure.f-blue   { fill: var(--blue); }
+.sq-figure.f-violet { fill: var(--violet); }
+.sq-figure.f-green  { fill: var(--green); }
+.sq-figure.f-orange { fill: var(--orange); }
+
+/* 缺口人形：只描边不填色。这是它和「在场的人」唯一的视觉差别，
+   也是设计系统里「orange 是缺口专用色」这条规则的落点。 */
+.sq-figure-is-gap {
+  fill: none;
+  stroke: var(--orange);
+  opacity: 0.95;
+}
+
+/* 浮标标题：问题标题是视觉主体，所以放在人群**上方**而不是塞进圆里。
+   宽度给到 15em 就换行 —— 再宽，相邻两簇的标题会撞在一起。 */
+.sq-crowd-label {
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  width: max-content;
+  /* 12em ≈ 156px。簇间距约 215px，留出这个宽度之后相邻两簇的标题才不会撞上；
+     再窄一点长标题就要折成三行，反而更挤。 */
+  max-width: 12em;
+}
+
+.sq-crowd-label .sq-cluster-dot {
+  /* 圆点对齐标题第一行的视觉中线（不是行框顶） */
+  margin-top: 5px;
+}
+
+.sq-crowd-title {
+  line-height: 1.4;
+  color: var(--text-100);
+}
+
+/* 唯一接事件的元素。做成真的 <button>，键盘与读屏软件天然可用 ——
+   WCAG 2.2 要求拖拽之外必须有单指针/键盘路径。 */
+.sq-crowd-hit {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  cursor: pointer;
+  pointer-events: auto;
+}
+
+.sq-crowd-hit:focus-visible {
+  outline: 2px solid var(--blue-soft);
+  outline-offset: 4px;
+}
+
+/* ------------------------------ 首次拖动提示 ------------------------------ */
+
+/* 一次性的，不是常驻板块：4.6s 后或首次拖动后自己消失，
+   所以不需要关闭按钮，也不该有背景板。 */
+.sq-hint {
+  position: absolute;
+  left: 26px;
+  bottom: 26px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 14px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(16, 18, 31, 0.86);
+  color: var(--text-300);
+  font-size: 12.5px;
+  pointer-events: none;
+}
+
+.sq-hint svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  color: var(--text-500);
+}
+
+/* ------------------------------ 生效中的筛选 ------------------------------ */
+
+/* 只在 URL 深链（?filter=mine 等）生效时出现。
+   界面上没有常驻的筛选入口 —— 但筛选一旦生效就必须**可见**，
+   否则用户看到的是全部讨论，界面却以为自己被筛过，那是骗人。 */
+.sq-scope-active {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: rgba(16, 18, 31, 0.9);
+  font-size: 12px;
+}
+
+.sq-scope-clear {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--blue-soft);
+  font: inherit;
+  cursor: pointer;
+  border-bottom: 1px solid rgba(147, 176, 255, 0.3);
+}
+
+.sq-scope-clear:hover {
+  border-bottom-color: var(--blue-soft);
+}
+
+/* ------------------------------ 现场广播 ------------------------------ */
+
+.sq-broadcast {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border-left: 1px solid var(--line-soft);
+  background: var(--ink-900);
+  overflow: hidden;
+}
+
+/* 栏头在滚动容器外面 —— 说明要求「标题始终停在右栏上方」。
+   用 sticky 也能做，但 sticky 在带 backdrop-filter 或 transform 的
+   祖先里会失效；放在外面是唯一不会出意外的做法。 */
+.sq-broadcast-head {
+  flex: none;
+  padding: 20px 18px 14px;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.sq-broadcast-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--text-100);
+}
+
+/* 独立纵向滚动。overscroll-behavior: contain 防止滚到底之后
+   把滚动传给外层（虽然 body 已锁，但触控板惯性滚动仍可能穿透）。 */
+.sq-broadcast-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* 每条是一整块可点的按钮 —— 这也是广场的键盘/单指针替代路径。 */
+.sq-broadcast-row {
+  display: block;
+  width: 100%;
+  padding: 15px 18px 16px;
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.sq-broadcast-row:hover {
+  background: var(--ink-850);
+}
+
+.sq-broadcast-row:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: -2px;
+}
+
+/* 标题是这一条的主体：字号最大、颜色最实、行高最松。 */
+.sq-broadcast-row-title {
+  display: block;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
+  color: var(--text-100);
+}
+
+/* 摘要**至多两行**（说明的硬要求）。用 line-clamp 而不是按字数截 ——
+   字数在不同字号/缩放下和行数不成正比。 */
+.sq-broadcast-row-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  margin-top: 7px;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--text-500);
+}
+
+.sq-broadcast-row-meta {
+  display: block;
+  margin-top: 9px;
+  font-size: 11.5px;
+  letter-spacing: 0.01em;
+  color: var(--text-700);
+}
+
+/* 每段元信息整体不折行 —— 只在段与段之间换行。
+   否则窄栏会从词中间断开（实测把「1 个缺口待补」断成「…待」+「补」）。 */
+.sq-broadcast-meta-item {
+  white-space: nowrap;
+  margin-right: 6px;
+}
+
+/* ------------------------------ 详情里的人群说明 ------------------------------ */
+
+.sq-detail-crowd {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.sq-detail-crowd-note {
+  font-size: 12.5px;
+}
+
+/* ------------------------------ 降级 ------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  /* 位移改为无 —— 缩放这类纯装饰动作在 reduced-motion 下没有存在理由，
+     而透明度变化仍能表达「悬停到了」。 */
+  .sq-crowd-node-hover .sq-crowd-body { transform: none; }
+}
+
+@media (max-width: 900px) {
+  /* 900 以下不再分栏：广场与广播挤在一起两边都读不了。
+     结构切换由 SquareField 的 useIsNarrow 决定（那边走 SquareStrip），
+     这里只是兜底，避免窗口在临界点抖动时出现半栏。 */
+  .sq-stage {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .sq-broadcast {
+    display: none;
+  }
 }

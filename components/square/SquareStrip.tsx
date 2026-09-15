@@ -114,7 +114,7 @@ export default function SquareStrip({
           >
             <span className={"sqs-bar a-" + n.theme.accent} />
             <span className="sqs-meta">
-              {n.mine && <span className="sq-card-mine-tag">我的</span>}
+              {n.mine && <span className="sqs-mine-tag">我的</span>}
               <span className="sqs-theme">
                 <span className={"sq-cluster-dot a-" + n.theme.accent} />
                 {n.theme.label}
