@@ -2,10 +2,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
 import { useMirror } from "@/lib/store/mirror-store";
 import { PERSONA_BY_HANDLE } from "@/lib/domain/personas";
 import { skillFromPersona } from "@/lib/domain/skills";
+import { DISCUSSION_TOPICS } from "@/lib/domain/topics";
 import type { HotItem } from "@/lib/zhihu/types";
 import type {
   Accent,
@@ -26,35 +28,26 @@ import { DUR, EASE } from "@/lib/motion/tokens";
  *
  * 数据来自 `/square-library.json`，由 `scripts/build-library.mjs` 生成；
  * 不在 render 里直接调上游接口 —— 22 个问题逐个调知乎会把额度打穿。
+ *
+ * 2026-09-15 收敛：
+ *   · 加 `scope` —— 首页只看**公开**内容（别人问过的 + 热榜），我自己的问题
+ *     统一封存在广场的「我曾经提问过的」里，不在首页再铺一遍入口。
+ *   · 每条只剩**一个**进入动作。原先同一场问答给了两个入口
+ *     （「载入工作台」+「看 N 位分身怎么答的」），两个都通向同一个地方。
  */
 
-/** 人工整理的讨论组话题：每条都故意选「有争议、没有标准答案」的日常决策题。 */
-export const DISCUSSION_TOPICS = [
-  "30 岁从大厂转行做独立开发，值得吗？",
-  "孩子近视了，要不要立刻配离焦镜？",
-  "小城市开一家咖啡店，真实成本和风险是什么？",
-  "该不该借钱给亲戚？借了不还怎么办？",
-  "考研三年没上岸，还要不要继续？",
-  "父母执意要买保健品，怎么劝？",
-  "相亲对象说「先做朋友」，是什么意思？",
-  "副业做自媒体，多久能超过主业收入？",
-  "上班摸鱼被领导发现，要不要主动认错？",
-  "月薪两万，在一线城市该不该买房？",
-  "年轻人第一份工作，该看薪资还是看成长？",
-  "要不要为了孩子上学，搬到老破小的学区房？",
-  "35 岁被优化，转行做家政或网约车丢人吗？",
-  "相亲时对方要求婚前全款买房，合理吗？",
-  "存款 50 万，是先买车还是先还房贷？",
-  "同事把活推给我，我该不该撕破脸？",
-  "要不要送孩子去读国际学校？",
-  "长期加班到十点，身体开始报警，该辞职吗？",
-  "朋友创业拉我入伙，出钱还是出力？",
-  "父母老了要不要接来同住？",
-  "读博六年没毕业，还要不要坚持？",
-  "在县城做公务员，一辈子就到头了吗？",
-];
+/** 人工整理的讨论组话题见 lib/domain/topics.ts —— 那里是唯一来源。 */
 
 type FeedKind = "done" | "mine" | "hot" | "todo";
+
+/** 信息流的取材范围。 */
+export type FeedScope =
+  /** 全部：公开内容 + 我曾经提问过的 */
+  | "all"
+  /** 公开：只保留别人问过的与热榜，我自己的问题不出现在这里 */
+  | "public"
+  /** 我曾经提问过的 */
+  | "mine";
 
 interface FeedEntry {
   key: string;
@@ -73,7 +66,7 @@ interface FeedEntry {
 
 const KIND_LABEL: Record<FeedKind, string> = {
   done: "镜像讨论组",
-  mine: "我这场",
+  mine: "我曾经提问过的",
   hot: "知乎热榜",
   todo: "待讨论",
 };
@@ -227,20 +220,32 @@ function hydrate(entry: LibraryEntry): MirrorQuestion {
 export function FeedStream({
   hotLimit = 30,
   todoLimit = 0,
+  scope = "all",
   className,
 }: {
   /** 热榜条数上限 */
   hotLimit?: number;
   /** 「待讨论」条数上限；默认 0 —— 广场主角是已完成的组，不必再堆没做的题 */
   todoLimit?: number;
+  /** 取材范围：见 FeedScope。首页传 "public"，广场按筛选传 "all" / "mine"。 */
+  scope?: FeedScope;
   className?: string;
 }) {
+  const router = useRouter();
   const { history, setMirror } = useMirror();
   const [hot, setHot] = useState<HotItem[] | null>(null);
   const [hotError, setHotError] = useState<string | null>(null);
   const [library, setLibrary] = useState<LibraryEntry[] | null>(null);
 
+  const wantsHot = scope !== "mine";
+  const wantsLibrary = scope !== "mine";
+
   useEffect(() => {
+    // 只看「我曾经提问过的」时不必碰知乎热榜 —— 省下当天有限的额度。
+    if (!wantsHot) {
+      setHot([]);
+      return;
+    }
     let alive = true;
     fetch("/api/zhihu/hot?limit=" + hotLimit)
       .then((r) => r.json())
@@ -253,9 +258,13 @@ export function FeedStream({
     return () => {
       alive = false;
     };
-  }, [hotLimit]);
+  }, [hotLimit, wantsHot]);
 
   useEffect(() => {
+    if (!wantsLibrary) {
+      setLibrary([]);
+      return;
+    }
     let alive = true;
     fetch("/square-library.json")
       .then((r) => r.json())
@@ -264,10 +273,12 @@ export function FeedStream({
     return () => {
       alive = false;
     };
-  }, []);
+  }, [wantsLibrary]);
 
   const feed = useMemo<FeedEntry[]>(() => {
-    const done: FeedEntry[] = (library ?? []).map((s) => ({
+    const lib = library ?? [];
+
+    const done: FeedEntry[] = lib.map((s) => ({
       key: "k-" + s.id,
       kind: "done",
       title: s.title,
@@ -277,8 +288,8 @@ export function FeedStream({
       mirrorId: s.id,
     }));
 
-    // 「我这场」= 本地新生成、库里的 22 个还没有的镜像问题。
-    const libraryIds = new Set((library ?? []).map((s) => s.id));
+    // 「我曾经提问过的」= 本地生成过、库里的 22 个还没有的镜像问题。
+    const libraryIds = new Set(lib.map((s) => s.id));
     const mine: FeedEntry[] = history
       .filter((m) => !libraryIds.has(m.id))
       .map((m) => ({
@@ -286,6 +297,7 @@ export function FeedStream({
         kind: "mine",
         title: m.title,
         summary: m.routing.summary,
+        answerCount: m.answers.filter((a) => (a.round ?? 0) === 0).length,
         mirrorId: m.id,
       }));
 
@@ -303,11 +315,26 @@ export function FeedStream({
       sourceUrl: item.Url,
     }));
 
-    // 已完成的讨论组排最前 —— 广场第一眼就该是「这里讨论过什么」。
-    return [...mine, ...done, ...todo, ...hotEntries];
-  }, [library, hot, history, hotLimit, todoLimit]);
+    if (scope === "mine") return mine;
+    if (scope === "public") return [...done, ...todo, ...hotEntries];
+    // 已完成的讨论组排最前，自己的问题紧随其后 —— 广场第一眼就该是「这里讨论过什么」。
+    return [...done, ...mine, ...todo, ...hotEntries];
+  }, [library, hot, history, hotLimit, todoLimit, scope]);
 
-  const loading = library === null || (!hot && !hotError);
+  const loading = wantsLibrary ? library === null || (wantsHot && !hot && !hotError) : false;
+
+  /** 载入某一条并跳去工作台 —— 一个动作走完，不拆成「先载入、再点链接」。 */
+  function openEntry(entry: FeedEntry) {
+    if (!entry.mirrorId) return;
+    if (entry.kind === "mine") {
+      const m = history.find((h) => h.id === entry.mirrorId);
+      if (m) setMirror(m);
+    } else {
+      const s = (library ?? []).find((x) => x.id === entry.mirrorId);
+      if (s) setMirror(hydrate(s));
+    }
+    router.push("/mirror#answers");
+  }
 
   return (
     <div className={className ? "feed-stream " + className : "feed-stream"}>
@@ -347,25 +374,11 @@ export function FeedStream({
 
             <div className="feed-actions">
               {entry.kind === "done" || entry.kind === "mine" ? (
-                <>
-                  <button
-                    className="link mono"
-                    onClick={() => {
-                      if (entry.kind === "mine") {
-                        const m = history.find((h) => h.id === entry.mirrorId);
-                        if (m) setMirror(m);
-                        return;
-                      }
-                      const s = (library ?? []).find((x) => x.id === entry.mirrorId);
-                      if (s) setMirror(hydrate(s));
-                    }}
-                  >
-                    载入工作台
-                  </button>
-                  <Link className="link mono" href="/mirror#answers">
-                    看{entry.answerCount ? " " + entry.answerCount + " " : ""}位分身怎么答的 →
-                  </Link>
-                </>
+                // 一条目一个入口。原先这里同时给「载入工作台」和「看 N 位分身怎么答的」，
+                // 两者通向同一场问答，用户要多点一下才真正看到答案。
+                <button className="link mono" onClick={() => openEntry(entry)}>
+                  重新进入 · 看{entry.answerCount ? " " + entry.answerCount + " " : ""}位分身怎么答的 →
+                </button>
               ) : (
                 <>
                   {entry.sourceUrl && (
@@ -389,6 +402,21 @@ export function FeedStream({
       ))}
 
       {loading && <div className="skeleton" style={{ height: 76 }} />}
+
+      {!loading && feed.length === 0 && (
+        <div className="notice">
+          {scope === "mine" ? (
+            <>
+              你还没有提过问题。
+              <Link className="link" href="/" style={{ marginLeft: 6 }}>
+                去提一个 →
+              </Link>
+            </>
+          ) : (
+            "这里还没有已经讨论过的事。"
+          )}
+        </div>
+      )}
     </div>
   );
 }

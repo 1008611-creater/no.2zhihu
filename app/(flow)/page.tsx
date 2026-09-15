@@ -17,7 +17,7 @@ import { useMirror } from "@/lib/store/mirror-store";
 import { DUR, EASE } from "@/lib/motion/tokens";
 
 /**
- * 首页 = 提问入口 + 广场信息流。
+ * 首页 = 提出问题。
  *
  * v1 主叙事（2026-09-14 重构）：不是「抽象视角」，而是「具体知乎答主的分身」。
  * 提问 → 选答主 → 每位答主按自己的领域/立场/说话方式作答。
@@ -28,12 +28,20 @@ import { DUR, EASE } from "@/lib/motion/tokens";
  *   · 空闲态不再是一块说明文字，而是**广场信息流**：主体是已经做完的
  *     镜像讨论组，后面跟知乎热榜，点任意一条就能变成新的镜像问题。
  *
+ * 2026-09-15 二次收敛（信息架构）：
+ *   · 首页只负责「提出问题」这一件事。下方信息流**只看公开内容**
+ *     （别人问过的 + 热榜）—— 我自己提过的问题封存在 /square 的
+ *     「我曾经提问过的」里。原先首页会为刚提过的问题重复给出多个入口，
+ *     同一场问答有好几条路进去，反而让人不知道哪条才是"正路"。
+ *   · 支持 `?auto=1&q=…&persona=…`：从「我的」页的一键自动回答进来时，
+ *     跳过手动点选，直接开跑。
+ *
  * 文案约定（req 10）：大字后面不加解释性小字，大字末尾不加句号。
  *   HeroTitle 与各 section 标题统一走 `className="no-tail"`，
  *   配套的 `.no-tail + .lede / .no-tail + .dim { display: none }` 兜住残留小字。
  *
  * 三步状态机（phase）：
- *   ask   —— 输入问题（下方是广场信息流）
+ *   ask   —— 输入问题（下方是公开广场信息流）
  *   pick  —— 选答主（默认勾选推荐 3 位）
  *   run   —— 生成中，完成后跳转到 /mirror#answers
  */
@@ -57,6 +65,8 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useInviteUrl();
   const [inviteNote, setInviteNote] = useState<string | null>(null);
+  /** 「我的」页一键自动回答带过来的答主 handle —— 输入框就绪后自动开跑。 */
+  const [pendingAuto, setPendingAuto] = useState<string | null>(null);
 
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
@@ -67,12 +77,14 @@ export default function Home() {
 
   // 从虚拟广场点热榜条目过来时带 ?q=，直接填进输入框，省一步操作。
   // 从答主档案页过来时带 ?persona=handle，记下这位答主，进选人步骤时优先选中。
+  // 从「我的」页一键自动回答过来时带 ?auto=1，记下后自动开跑。
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const q = sp.get("q");
     if (q) setQuestion(q);
     const p = sp.get("persona");
     if (p) setPreferred(p);
+    if (sp.get("auto") === "1" && q && p) setPendingAuto(p);
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
@@ -133,8 +145,8 @@ export default function Home() {
    * 首页继续堆一份一样的内容就是重复。生成完直接把人送过去。
    */
   const run = useCallback(
-    async (handles: string[]) => {
-      const q = question.trim();
+    async (handles: string[], qOverride?: string) => {
+      const q = (qOverride ?? question).trim();
       if (q.length < MIN_QUESTION) return;
 
       setError(null);
@@ -178,6 +190,28 @@ export default function Home() {
     },
     [clearTimers, playFlow, question, router, setMirror],
   );
+
+  /**
+   * 一键自动回答：把 `?auto=1` 接成「选人 → 生成 → 跳工作台」。
+   *
+   * 「我的」页在没有分身记录时会推荐「一个问题 + 一位答主」，点一下就带
+   * auto=1 回到这里。用户在那边已经表过态（就是这个问题、就是这个人），
+   * 再让他手动点两次选人/确认纯属多余。
+   *
+   * 消费掉之后立刻把 auto 从地址栏抹掉：否则生成失败退回 pick 步骤时，
+   * 用户刷新页面会被再自动跑一遍。
+   */
+  useEffect(() => {
+    if (!pendingAuto) return;
+    const q = question.trim();
+    if (q.length < MIN_QUESTION) return;
+    const handle = pendingAuto;
+    setPendingAuto(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("auto");
+    window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+    void run([handle], q);
+  }, [pendingAuto, question, run]);
 
   /** 继续邀请的回调：把新答主与回答追加进当前镜像问题，不重跑旧的。 */
   const handleInvited = useCallback(
@@ -332,7 +366,12 @@ export default function Home() {
               <h2 className="no-tail">这座虚拟知乎里已经讨论过的事</h2>
             </div>
           </div>
-          {ready && <FeedStream hotLimit={20} />}
+          {/*
+            scope="public"：这里只放别人问过的与热榜。
+            我自己提过的问题不在首页出现 —— 它们封存在 /square 的
+            「我曾经提问过的」里，避免同一场问答在首页有多个入口。
+          */}
+          {ready && <FeedStream hotLimit={20} scope="public" />}
           {!ready && <div className="skeleton" style={{ height: 260 }} />}
         </section>
       )}

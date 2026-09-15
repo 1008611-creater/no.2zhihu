@@ -63,7 +63,7 @@ loadEnv();
 /* ------------------------------ 话题清单 ------------------------------ */
 
 /**
- * 与 components/square/FeedStream.tsx 的 DISCUSSION_TOPICS 保持一致 ——
+ * 与 lib/domain/topics.ts 的 DISCUSSION_TOPICS 保持一致 ——
  * 广场上的讨论组就是这些话题，这里把它们做成「已经答完」的样子。
  * 改这里时同步改那边，否则广场会出现点进去空白的条目。
  */

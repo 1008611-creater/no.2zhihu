@@ -9,11 +9,24 @@ import { LogoMark } from "./LogoMark";
 import { DUR, SPRING } from "@/lib/motion/tokens";
 import { useSession } from "@/lib/hooks/useSession";
 
+/**
+ * 四个 tab，一个 tab 只回答一个问题：
+ *   · 首页     —— 我要问一个问题（提问 + 选答主，不铺任何结果）
+ *   · 分身发现 —— 这座虚拟知乎里住着谁（答主名册 + 公共人物）
+ *   · 虚拟广场 —— 别人问过什么、我问过什么（含「我曾经提问过的」）
+ *   · 我的     —— 我的分身答过什么、我的 Mesh 长什么样
+ *
+ * 为什么把「分身发现」从 /mirror 拆出来：/mirror 原本同时干两件事 ——
+ * 既列全部答主（看人），又渲染本场结果（看答案）。两者生命周期完全不同：
+ * 名册永远在那儿，本场结果只在生成后存在。合在一个 tab 里，没生成过问题的
+ * 用户进来只看到一句提示，生成过的用户又要先划过一整页名册才看到自己的答案。
+ * 拆成独立 tab 之后，「看人」和「看回答」各归各位。
+ */
 const NAV = [
   { href: "/", label: "首页" },
+  { href: "/personas", label: "分身发现" },
   { href: "/square", label: "虚拟广场" },
-  { href: "/mirror", label: "分身发现" },
-  { href: "/mesh", label: "我的 Mesh" }
+  { href: "/me", label: "我的" }
 ];
 
 /**
