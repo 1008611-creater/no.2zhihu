@@ -43,6 +43,12 @@ export class ZhihuApiError extends Error {
 
   /** 面向用户的降级文案，前端可直接展示。 */
   get userMessage(): string {
+    // OAuth 换 token 失败要单独说清楚 —— 20001 在 OAuth 场景下几乎总是
+    // 「app_id 还没被知乎侧开通」，而不是 Access Secret 过期。混用同一句
+    // 文案会把「等平台审批」误导成「去改密钥」。
+    if (this.endpoint === "oauth.token" && this.kind === "auth") {
+      return `知乎 OAuth 登录未开通：平台未识别当前 app_id（code=${this.code ?? "?"}）。请确认应用是否已在 openplatform@zhihu.com 申请通过、且回调地址与登记值完全一致。`;
+    }
     switch (this.kind) {
       case "config":
         return "服务端尚未配置知乎开放平台凭证，当前为只读降级模式。";

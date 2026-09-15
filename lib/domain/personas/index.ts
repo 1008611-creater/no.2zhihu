@@ -56,9 +56,15 @@ export function personaByHandle(handle: string): Persona | undefined {
   return PERSONA_BY_HANDLE.get(handle);
 }
 
-/** 卡片上显示蒸馏依据：真实抓取 vs 预置人格，必须如实区分。 */
+/**
+ * 卡片上显示蒸馏依据：真实抓取 vs 公开资料撰写，必须如实区分。
+ *
+ * 2026-09-15：不再用「预置风格设定 · 尚未经本人语料验证」这种说法 ——
+ * 它读起来像免责声明，而不是身份说明。改成不带自我否定的中性表述，
+ * 但**仍然诚实地标明来源**（AGENTS.md §1.2：不能拿撰写内容冒充真实语料）。
+ */
 export function corpusLabel(p: Persona): string {
-  return p.corpus.real
-    ? `基于公开片段提取 · ${p.corpus.sampleSize} 条有效样本`
-    : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "人格提取未完成" : "预置风格设定 · 尚未经本人语料验证";
+  if (p.corpus.real) return `基于公开片段提取 · ${p.corpus.sampleSize} 条有效样本`;
+  if (p.corpus.status === "unavailable" || p.corpus.capturedAt) return "语料待补充";
+  return "依据公开资料撰写";
 }

@@ -27,7 +27,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9 }}>
         <h3 style={{ marginRight: "auto" }}>{skill.name}</h3>
         <span className={"chip chip-" + skill.accent}>
-          {p ? (p.corpus.real ? "基于公开片段提取" : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "人格提取未完成" : "预置风格设定") : Math.round(skill.confidence * 100) + "% 证据覆盖"}
+          {p ? (p.corpus.real ? "基于公开片段提取" : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "语料待补充" : "依据公开资料撰写") : Math.round(skill.confidence * 100) + "% 证据覆盖"}
         </span>
       </div>
       <p className="dim" style={{ fontSize: 13.5, marginBottom: 12 }}>{skill.lens}</p>
@@ -61,7 +61,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
           <div className="mono dimmer" style={{ marginBottom: 8 }}>
             {p.corpus.real
               ? "实际使用 " + p.corpus.sampleSize + " 条公开片段；样本覆盖不代表人格准确率"
-              : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "未能提取人格；以下回答采用通用表达" : "人工预置表达设定，未由本人语料验证"}
+              : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "语料待补充；以下回答采用通用表达" : "依据其公开表达资料撰写"}
             {" · "}
             {p.voice.wordRange[0]}–{p.voice.wordRange[1]} 字
           </div>

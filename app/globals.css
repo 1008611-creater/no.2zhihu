@@ -16,7 +16,7 @@
   --text-700: #5f6780;
 
   /* 状态色：蓝 / 紫 / 绿 / 橙 */
-  --blue: #3E79FE;
+  --blue: #4d7cff;
   --blue-soft: #93b0ff;
   --violet: #8b5cf6;
   --violet-soft: #c0a4ff;
@@ -114,12 +114,11 @@ body::before {
 .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; }
 .brand-mark {
   width: 32px; height: 32px; border-radius: 10px;
-  overflow: hidden; flex: none;
-  /* logo 自带暖白底砖，容器只负责裁圆角与隔离，不再叠加渐变和光晕，
-     否则会和 logo 自身的暖白底色打架。 */
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
+  background: linear-gradient(140deg, var(--blue), var(--violet) 62%, var(--green));
+  display: grid; place-items: center;
+  box-shadow: 0 0 24px -6px rgba(77, 124, 255, 0.8);
+  flex: none;
 }
-.brand-mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
 .brand-name { font-weight: 800; font-size: 15.5px; letter-spacing: -0.01em; }
 .brand-sub { color: var(--text-700); font-size: 11.5px; }
 
@@ -644,7 +643,7 @@ button.chip[data-on="true"] {
 
 
 /* ============================================================
-   答主名册卡片：整卡可点，hover 抬升，不堆阴影
+   答主名册卡片：hover 抬升，不堆阴影
    ============================================================ */
 .persona-tile {
   text-decoration: none;
@@ -657,6 +656,76 @@ button.chip[data-on="true"] {
 }
 .persona-tile .link { border-bottom: 0; }
 .persona-tile:hover .link { border-bottom: 1px solid rgba(147, 176, 255, 0.45); }
+
+/* 卡片主体的可点区（标题下方到色标签），与底部的「带他去提问」分开 */
+.persona-tile-main {
+  text-decoration: none;
+  color: inherit;
+}
+.persona-tile-main:hover .persona-mono { color: var(--text-500); }
+
+/* 右上角「i」按钮：打开答主详情浮层 */
+.persona-info-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 19px;
+  height: 19px;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--ink-800);
+  color: var(--text-700);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.16s, color 0.16s, background 0.16s;
+}
+.persona-info-btn:hover,
+.persona-info-btn[aria-expanded="true"] {
+  border-color: var(--ink-600);
+  color: var(--text-100);
+  background: var(--ink-700);
+}
+
+/* ============================================================
+   答主详情浮层
+   ============================================================ */
+.persona-popover {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 60;
+  width: min(340px, calc(100vw - 48px));
+  max-height: min(420px, 60vh);
+  overflow-y: auto;
+  text-align: left;
+  padding: 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--ink-850);
+  box-shadow: var(--shadow-lift);
+  cursor: default;
+}
+.persona-popover:focus { outline: none; }
+.persona-popover .lbl { margin-top: 0; }
+.persona-popover summary {
+  cursor: pointer;
+  color: var(--text-500);
+  padding: 4px 0;
+}
+.persona-popover summary:hover { color: var(--text-300); }
+
+/* 窄屏：浮层改为贴边全宽，避免超出视口 */
+@media (max-width: 560px) {
+  .persona-popover {
+    right: auto;
+    left: 0;
+    width: min(320px, calc(100vw - 32px));
+  }
+}
 
 /* ============================================================
    答主详情页

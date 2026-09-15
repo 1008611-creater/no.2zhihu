@@ -19,6 +19,7 @@ import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
 import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
 import MeshGraph from "@/components/mesh/MeshGraph";
 import MineHandoffPanel from "@/components/mesh/MineHandoffPanel";
+import PersonaPopover from "@/components/mirror/PersonaPopover";
 
 /**
  * 镜像工作台。
@@ -290,35 +291,45 @@ function DiscoverSection() {
             transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
             style={{ display: "flex" }}
           >
-            <Link
-              href={"/?persona=" + p.handle}
+            {/* 外层是 div 而不是 Link：卡片里现在有两个动作（看档案 / 带他去提问），
+                整块可点会让「查看详情」永远被跳转吃掉。改由内层两个链接各自承担。 */}
+            <div
               className="card persona-tile"
               style={{ display: "flex", flexDirection: "column", width: "100%" }}
             >
               <div className={"accent-bar a-" + p.accent} />
               <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
                 <h3 style={{ margin: 0, fontSize: 16 }}>{p.displayName}</h3>
-                <span className="persona-mono">@{p.handle}</span>
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
+                  <span className="persona-mono">@{p.handle}</span>
+                  <PersonaPopover persona={p} />
+                </span>
               </div>
-              <p className="dim" style={{ fontSize: 13, margin: "8px 0 10px" }}>
-                {p.headline}
-              </p>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                {p.voice.tone.slice(0, 3).map((t) => (
-                  <span key={t} className="chip">
-                    {t}
-                  </span>
-                ))}
-              </div>
+              <Link
+                href={"/personas/" + p.handle}
+                className="persona-tile-main"
+                style={{ display: "block" }}
+              >
+                <p className="dim" style={{ fontSize: 13, margin: "8px 0 10px" }}>
+                  {p.headline}
+                </p>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                  {p.voice.tone.slice(0, 3).map((t) => (
+                    <span key={t} className="chip">
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </Link>
               <div className="row-between" style={{ marginTop: "auto" }}>
                 <span className="mono dimmer" style={{ fontSize: 11.5 }}>
                   {corpusLabel(p)}
                 </span>
-                <span className="link mono" style={{ fontSize: 11.5 }}>
+                <Link href={"/?persona=" + p.handle} className="link mono" style={{ fontSize: 11.5 }}>
                   带他去提问 →
-                </span>
+                </Link>
               </div>
-            </Link>
+            </div>
           </motion.div>
         ))}
       </div>

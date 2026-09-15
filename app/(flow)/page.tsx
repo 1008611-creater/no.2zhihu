@@ -201,7 +201,7 @@ export default function Home() {
       <section className="hero">
         <div className="hero-grid">
           <div>
-            <p className="eyebrow">SHADOW ZHIHU · 0 级入口</p>
+            <p className="eyebrow">HUMAN MESH · 真人专家网络</p>
             <HeroTitle />
           </div>
           <div className="hero-char">
