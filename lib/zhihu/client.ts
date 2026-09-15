@@ -26,8 +26,9 @@ import type {
  * 参数大小写坑（2026-09-14 实测）：搜索类接口的条数参数是 `Count`，不是 `Limit`。
  * 传错名字上游不会报错，而是静默按默认值返回 10 条，容易在联调时误判为「正常」。
  *
- * system 角色坑（2026-09-15 实测）：`POST /v1/chat/completions` 会**丢弃 system 消息**，
- * 只按 user 内容作答。所有写在 system 里的指令都等于没写 —— 详见 foldSystemIntoUser()。
+ * system 角色坑（2026-09-15 实测）：`POST /v1/chat/completions` 对 `system` 的遵从**不够稳定**
+ * —— 同一条 messages 曾出现「先失败、后成功」。注意它**不是被丢弃**：A/B 实测两种写法
+ * 成功率相同。折叠处理见 foldSystemIntoUser()。
  */
 
 const API_BASE = "https://developer.zhihu.com";
@@ -325,26 +326,23 @@ export function questionRecommendations(
 
 /* ------------------------------ 直答 ------------------------------- */
 
-/** 公共人物追加只允许一次生成尝试，失败由用户决定是否再次发起。 */
 /**
  * 把 `system` 消息折叠进第一条 `user` 消息。
  *
- * 为什么需要（2026-09-15 线上实测，两组对照，`zhida-fast-1p5`）：
- *   ① system 写「你的每一段都必须以「※」开头」→ 输出里一个「※」都没有；
- *      同一句话改放 user → 每一段都以「※」开头。
- *   ② system 写「只输出 {"ping":true}」→ 模型回答的是自我介绍
- *      「我是知乎直答，由知乎与面壁智能联合打造…」，说明它根本没收到 system。
+ * ⚠️ 这不是因为上游「丢弃 system」—— 实测它**会**处理 system：
+ *   同一句格式约束分别放 system / user，各 3 次独立采样（换不同主题避开缓存），
+ *   两边都是 3/3 生效；真实蒸馏提示词做 A/B，两边也都是 3/3 成功。
  *
- * 影响面：所有写在 system 里的约束（答主人格口吻、「只能使用知乎证据里的信息」、
- * 「不要 Markdown / 不要分点」、防雷同参照、人格蒸馏与互相回应的 JSON 格式要求）
- * 此前**全部等于没写**。这不是「模型读了没照做」，是指令压根没送到。
+ * 保留折叠是因为上游对 `system` 的遵从**不够稳定**：同一条 messages 曾出现
+ * 「07:22 失败、07:53 成功」这种时好时坏的情况。把指令放进 `user`（离生成更近的
+ * 位置）是对这种不稳定的低成本对冲 —— 实测对生成质量无副作用（回答长度与
+ * 雷同度均无变化），所以宁可多这一道归一化。
  *
  * 折叠顺序：system 内容放在 user 消息**最前面**，原始 user 内容跟在后面。
  * 实测这个顺序（指令在前、材料在后）模型会稳定照做；反过来容易被材料带跑
  * —— 例如只给材料时，直答会按本能输出「信源评估报告」而不是要求的 JSON。
  *
  * 调用方仍可照常写 `role: "system"`（读起来更符合原意），由这里统一补偿。
- * 将来上游修好 system 角色后，删掉这一处即可，调用方无需改动。
  */
 function foldSystemIntoUser(messages: ZhidaMessage[]): ZhidaMessage[] {
   if (!messages.some((m) => m.role === "system")) return messages;
@@ -360,6 +358,7 @@ function foldSystemIntoUser(messages: ZhidaMessage[]): ZhidaMessage[] {
   return rest.map((m, i) => (i === at ? { ...m, content: head + "\n\n" + m.content } : m));
 }
 
+/** 公共人物追加只允许一次生成尝试，失败由用户决定是否再次发起。 */
 export function publicFigureCompletion(messages: ZhidaMessage[]): Promise<ZhidaCompletion> {
   return request<ZhidaCompletion>(`${API_BASE}/v1/chat/completions`, {
     method: "POST",
