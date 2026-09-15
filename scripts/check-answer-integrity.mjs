@@ -10,11 +10,21 @@
  * 用法：node scripts/check-answer-integrity.mjs
  */
 
-import {
+import { register } from "node:module";
+
+// 被测模块必须动态 import —— 见 scripts/_ts-hook.mjs 的注释。
+//
+// 也不能像最初那样直接 `import ... from "../lib/domain/answerIntegrity.ts"`：
+// 静态 import 的 `.ts` 在本机 Node 22 上能跑（原生类型剥离），
+// 但在 CI 的 Node 20 上是 ERR_UNKNOWN_FILE_EXTENSION ——
+// 表现就是「本机绿、CI 红」。走 hook 之后两端同一条路径。
+register(new URL("./_ts-hook.mjs", import.meta.url));
+
+const {
   stripAssistantBoilerplate,
   hasAssistantBoilerplate,
   cutExcerpt,
-} from "../lib/domain/answerIntegrity.ts";
+} = await import("../lib/domain/answerIntegrity.ts");
 
 /** 负例：必须原样保留（一个字都不能动）。 */
 const NEGATIVE = [
