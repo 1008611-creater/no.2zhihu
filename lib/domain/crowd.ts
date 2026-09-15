@@ -24,10 +24,24 @@
  * 而设计系统里 **orange 是缺口专用色**，所以空心橙色人形与它天然对齐。
  *
  * 这两条之外，**没有第三种人形**。不按热度放大规模、不复制、不填充。
+ *
+ * ## 为什么人形不带街区色（2026-09-15 改，线上实测后回改）
+ *
+ * 第一版把「在场分身」染成所属街区的状态色，看着更热闹。上线后一数：
+ * **21 个实心分身与 31 个空心缺口是同一个橙色** —— 因为六个街区里
+ * `life`（生活）这一区的强调色本来就是 orange，而它是最大的一区。
+ *
+ * 于是「谁在场、谁缺席」这个产品的核心论点，在默认缩放下只剩
+ * 「实心 / 空心」这一个线索，而小尺寸下那点线宽差根本看不出来。
+ * 更要命的是设计系统明文写着「**orange 是缺口的专用色**」，把它给分身用
+ * 属于挪用。
+ *
+ * 所以现在：在场分身一律中性剪影，**全广场唯一使用 orange 的人形是缺口**。
+ * 街区的颜色仍然保留 —— 在浮标标题的小圆点和聚焦环上（那是「标签」，
+ * 与人形不是一个视觉层级，不会和缺口抢语义）。
  */
 
 import { hashUnit, stableHash, type TopicNode } from "./square-layout";
-import type { Accent } from "./types";
 
 /** 人形的两种身份。见文件头注释：除此之外没有第三种。 */
 export type FigureKind = "persona" | "gap";
@@ -43,13 +57,6 @@ export interface CrowdFigure {
   height: number;
   /** 绘制顺序：数值越大越靠前，由调用方排序后先画小的 */
   depth: number;
-  /**
-   * 人形颜色。
-   *
-   * persona 用所属街区的状态色（与既有 `.sq-cluster-dot.a-*` 同一套映射），
-   * gap **恒为 orange** —— 设计系统规定 orange 是缺口专用色，不可挪用。
-   */
-  accent: Accent;
 }
 
 export interface CrowdCluster {
@@ -186,7 +193,6 @@ export function crowdOf(node: TopicNode): CrowdCluster {
       dy,
       height: base * depth,
       depth: dy,
-      accent: kind === "gap" ? "orange" : node.theme.accent,
     });
   }
 

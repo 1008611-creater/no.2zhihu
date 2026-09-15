@@ -1089,29 +1089,32 @@ body.sq-locked {
   position: absolute;
   inset: 0;
   overflow: visible;
-  opacity: 0.62;
+}
+
+/* 在场分身：**中性剪影，不染街区色**。
+   街区色里有 orange，而 orange 是缺口的专用色 —— 同色会让「谁在场、谁缺席」
+   这个核心论点读不出来（线上实测：21 个实心分身与 31 个空心缺口同为橙色）。
+   街区的颜色改在浮标小圆点与聚焦环上体现。 */
+.sq-figure-persona {
+  fill: var(--text-300);
+  opacity: 0.55;
   transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.sq-crowd-node-hover .sq-crowd   { opacity: 0.86; }
-.sq-crowd-node-focused .sq-crowd { opacity: 1; }
+.sq-crowd-node-hover .sq-figure-persona   { opacity: 0.82; }
+.sq-crowd-node-focused .sq-figure-persona { opacity: 1; }
 
-/* 人形的颜色。形状来自 <symbol>，颜色靠 fill/stroke 继承下去 ——
-   所以 <use> 上挂一个 .a-* 就够了，不必给每个 <symbol> 复制四份。 */
-/* 同样用 f-* 而不是 .a-*：SVG 元素虽然会忽略 background，
-   但把「背景条工具类」当成「图形填充类」用，迟早会有人把 .a-* 改成别的属性。 */
-.sq-figure.f-blue   { fill: var(--blue); }
-.sq-figure.f-violet { fill: var(--violet); }
-.sq-figure.f-green  { fill: var(--green); }
-.sq-figure.f-orange { fill: var(--orange); }
-
-/* 缺口人形：只描边不填色。这是它和「在场的人」唯一的视觉差别，
-   也是设计系统里「orange 是缺口专用色」这条规则的落点。 */
-.sq-figure-is-gap {
+/* 缺口：**全广场唯一使用 orange 的人形** —— 只描边不填色。
+   实心中性 vs 空心橙，两种人形在任何缩放下都不会混。 */
+.sq-figure-gap {
   fill: none;
   stroke: var(--orange);
-  opacity: 0.95;
+  opacity: 0.92;
 }
+
+/* 聚焦某一簇时，其余人群整体退到背景（由 .sq-crowd-node-dimmed 的
+   opacity 统一处理），所以缺口不需要单独降透明度 —— 降了反而会和
+   在场的实心人形混在一起。 */
 
 /* 浮标标题：问题标题是视觉主体，所以放在人群**上方**而不是塞进圆里。
    宽度给到 15em 就换行 —— 再宽，相邻两簇的标题会撞在一起。 */
