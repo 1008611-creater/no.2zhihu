@@ -15,7 +15,7 @@ import { useMirror } from "@/lib/store/mirror-store";
  *   3. 由用户本人在知乎点击发布，回来点「我已在知乎发布」确认状态。
  */
 export function HandoffPanel() {
-  const { mirror, markHandoffOpened, confirmHandoff } = useMirror();
+  const { mirror, markHandoffOpenedFor, confirmHandoffFor } = useMirror();
   const [copied, setCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
@@ -67,7 +67,7 @@ export function HandoffPanel() {
 
       if (await copyText(composed)) setCopied(true);
 
-      markHandoffOpened(data.editorUrl);
+      if (mirror) markHandoffOpenedFor(mirror.id, data.editorUrl);
       window.open(data.editorUrl, "_blank", "noopener,noreferrer");
     } catch (e) {
       setError(e instanceof Error ? e.message : "打开失败");
@@ -119,7 +119,7 @@ export function HandoffPanel() {
           <button className="btn btn-primary" onClick={open} disabled={!ready}>
             {ready ? "复制并打开知乎编辑器" : "先让真人补充内容"}
           </button>
-          <button className="btn" onClick={confirmHandoff} disabled={!ready || confirmed}>
+          <button className="btn" onClick={() => confirmHandoffFor(mirror.id)} disabled={!ready || confirmed}>
             {confirmed ? "已确认" : "我已在知乎发布"}
           </button>
           {mirror.handoff.editorUrl && (

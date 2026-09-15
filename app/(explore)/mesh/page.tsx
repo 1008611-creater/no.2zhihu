@@ -301,6 +301,12 @@ export default function MeshPage() {
             去提一个问题
           </Link>
         </section>
+        {/*
+          空态也保留搬运面板：history 里可能已经攒了上一批问题的分身回答，
+          而当前 mirror 恰好为空（例如刚清过当前会话）。若这里不渲染，
+          用户就没法处理那批积压产出 —— 面板自己处理 items.length === 0。
+        */}
+        <MineHandoffPanel history={history} />
         {peopleSection}
       </>
     );
@@ -320,6 +326,16 @@ export default function MeshPage() {
   );
 
   const humans = focused.graph.nodes.filter((n) => n.type === "human");
+
+  /** 还没搬回知乎的分身回答篇数 —— 用作搬运入口的可见提示。 */
+  const pendingHandoff = history.reduce(
+    (n, m) =>
+      n +
+      (m.handoff?.status === "confirmed"
+        ? 0
+        : m.answers.filter((a) => a.status !== "human" && a.status !== "handed-off").length),
+    0
+  );
 
   return (
     <>
@@ -346,6 +362,24 @@ export default function MeshPage() {
             </div>
           ))}
         </div>
+
+        {pendingHandoff > 0 && (
+          <a
+            className="card-flat"
+            href="#handoff-mine"
+            style={{
+              display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap",
+              marginTop: 16, textDecoration: "none", color: "inherit",
+              borderColor: "rgba(77,124,255,0.34)"
+            }}
+          >
+            <span className="chip chip-blue">待搬运</span>
+            <strong style={{ fontSize: 14, marginRight: "auto" }}>
+              {pendingHandoff} 篇分身回答还没搬回知乎
+            </strong>
+            <span className="link mono" style={{ fontSize: 12 }}>去一键发布 →</span>
+          </a>
+        )}
       </section>
 
       <section className="section">
@@ -358,8 +392,12 @@ export default function MeshPage() {
         <MeshGraph graph={focused.graph} height={520} />
       </section>
 
-      {/* 把自己分身的回答搬回真实知乎。 */}
-      <MineHandoffPanel mirror={focused.mirror} answers={focused.mirror.answers} />
+      {/*
+        搬运是「回头处理产出」的动作，因此和「我的分身答过哪些问题」合成同一块叙事：
+        上面说分身答过什么，下面就能把任一场一键搬回知乎。
+        传 history 而不是单场 —— 用户在自己 Mesh 里要处理的是**全部**积压产出。
+      */}
+      <MineHandoffPanel history={history} />
 
       <section className="section">
         <div className="section-head">

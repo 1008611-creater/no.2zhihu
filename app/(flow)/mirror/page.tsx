@@ -18,7 +18,6 @@ import { personaCandidates } from "@/lib/domain/router";
 import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
 import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
 import MeshGraph from "@/components/mesh/MeshGraph";
-import MineHandoffPanel from "@/components/mesh/MineHandoffPanel";
 import PersonaPopover from "@/components/mirror/PersonaPopover";
 
 /**
@@ -218,10 +217,6 @@ export default function MirrorPage() {
       )}
 
       <section className="section">
-        <MineHandoffPanel mirror={mirror} answers={mirror.answers} />
-      </section>
-
-      <section className="section">
         <HandoffPanel />
       </section>
 
@@ -229,7 +224,11 @@ export default function MirrorPage() {
         <section className="section">
           <div className="section-head">
             <h2 className="no-tail">这场生成出来的关系</h2>
-            <Link className="link mono" href="/mesh">去我的 Mesh 搬运分身回答 →</Link>
+            {/*
+              搬运入口统一收在「我的 Mesh」—— 搬运是收尾动作，不是作答流程的一步。
+              这里只留一条去路，不再把整个搬运面板塞进作答流程下方。
+            */}
+            <Link className="link mono" href="/mesh">去我的 Mesh 一键搬回知乎 →</Link>
           </div>
           <MeshGraph graph={mesh} height={380} />
         </section>
