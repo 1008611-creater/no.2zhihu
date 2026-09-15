@@ -71,7 +71,7 @@ if (!args.has("--no-remote") && existsSync(SSH_KEY)) {
   const drift = liveSha === mainSha ? "同步 ✓" : "**落后**";
   console.log(`线上（服务器 HEAD）      ${String(liveSha).slice(0, 8)}   ${drift}`);
   if (liveSha !== mainSha) {
-    console.log("   → deploy.yml 是 push-to-main 自动部署；若落后，先看 Actions 里 deploy 运行状态，");
+    console.log("   → ci.yml 是 push-to-main 的一条流水线（build 含冒烟 → 部署）；若落后，先看 Actions，");
     console.log("     不要手动 ssh 构建（会与 CI 抢 .next，实测撞过一次 EACCES）。");
   }
 } else {
@@ -121,16 +121,18 @@ for (const p of prs) {
 console.log("\n" + "─".repeat(72));
 console.log("自动化（先看这里，再决定要不要手动操作）");
 console.log("─".repeat(72));
-const runs = ghJson(["run", "list", "--workflow=deploy.yml", "--limit", "5",
+// 注意：deploy.yml 已并入 ci.yml（2026-09-15），不再单独存在。
+// 用 --workflow=ci.yml 取记录；CI 的 build 阶段含运行时冒烟，deploy 是它的下游 job。
+const runs = ghJson(["run", "list", "--workflow=ci.yml", "--limit", "5",
   "status,conclusion,headSha,createdAt"]);
 if (Array.isArray(runs) && runs.length) {
-  console.log("\ndeploy.yml（push 到 main 自动部署 · 幂等）");
+  console.log("\nci.yml（build 含冒烟 → 部署 · 一条流水线 · 幂等）");
   for (const r of runs) {
     console.log(`   ${r.createdAt.slice(11, 16)}  ${r.status}/${r.conclusion ?? "-"}  ${r.headSha.slice(0, 8)}`);
   }
   console.log("   → 合并不需要手动部署；部署失败再介入。");
 } else {
-  console.log("\ndeploy.yml  取不到运行记录");
+  console.log("\nci.yml  取不到运行记录");
 }
 
 // ── 4. 建议动作 ───────────────────────────────────────────────
@@ -143,8 +145,9 @@ if (!row.length) {
   const clean = row.filter((r) => r.conflict === "干净");
   const dirty = row.filter((r) => r.conflict !== "干净");
   if (clean.length > 1) {
-    console.log(`  · ${clean.length} 个无冲突 → 可批量同步后合并：`);
-    console.log("      gh workflow run sync-pr-branches.yml   # 一次同步全部（勿逐个 update-branch）");
+    // strict 已关（2026-09-15）→ 不再需要「先同步 base 再合并」这一步。
+    console.log(`  · ${clean.length} 个无冲突 → 可直接合并（strict 已关，无需同步 base）：`);
+    console.log("      gh pr merge <n> --merge     # 或批量：node scripts/audit-merge.mjs --apply");
   }
   if (dirty.length) {
     console.log(`  · ${dirty.length} 个有冲突 → 需人工 rebase：#${dirty.map((d) => d.n).join(" #")}`);

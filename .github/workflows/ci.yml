@@ -24,6 +24,20 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 同一个 ref 上只保留最新一次 build。
+    #
+    # 为什么需要：实测 main 在 1 分钟内连续合并 6 次 → 6 个 build 并行排队，
+    # 而每个都要跑 npm install + tsc + build + 起服务冒烟（约 2 分钟）。
+    # 前面几次的结果**已经过期**（部署的永远是最新那次），占着 runner 只会
+    # 拖慢后面所有 PR 的 CI —— 而「等 CI」正是审计耗时的大头。
+    #
+    # 为什么放在 job 层而不是 workflow 层：workflow 层的 concurrency 会连
+    # deploy 一起取消，可能把部署打断成半成品。这里只取消 build；
+    # build 被取消时依赖它的 deploy 自然不启动，新 build 跑完会带上新 deploy。
+    # deploy 自己有串行 concurrency（见下），两者不冲突。
+    concurrency:
+      group: ci-build-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
