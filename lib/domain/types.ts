@@ -274,6 +274,14 @@ export interface ContributionEvent {
 export interface MeshNode {
   id: string;
   label: string;
+  /**
+   * 未截断的原始文本，供悬停提示与详情面板使用。
+   *
+   * 为什么需要它：主题层的节点是答主的领域词，原文形如「互联网商业模式与资本运作」，
+   * 直接画在节点上会糊成一片；`label` 因此只放首短语（显示名），
+   * 完整原文放这里，信息不丢 —— 鼠标一悬停就能看到原话。
+   */
+  full?: string;
   type: "human" | "skill" | "keyword" | "question" | "answer" | "persona";
   weight: number;
   accent: Accent;
