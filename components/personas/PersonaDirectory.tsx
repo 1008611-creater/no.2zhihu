@@ -44,7 +44,10 @@ export default function PersonaDirectory() {
         ))}
       </div>
 
-      <div className="grid grid-3" style={{ marginTop: 20 }}>
+      {/* persona-grid 这个类只为一件事存在：让「打开浮层的那张卡」压过同网格的
+          其他卡片。见 globals.css 里 .persona-grid > *:has(.persona-popover)
+          的注释 —— 浮层被后面几张卡盖住过，原因不在浮层自己的 z-index。 */}
+      <div className="grid grid-3 persona-grid" style={{ marginTop: 20 }}>
         {PERSONAS.map((p, i) => (
           <motion.div
             key={p.handle}

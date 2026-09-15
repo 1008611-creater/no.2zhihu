@@ -180,6 +180,50 @@ for (const [input, expect] of cases) {
 ok("空串 / 短句 / 超长句 均未越界");
 
 console.log("\n" + "=".repeat(74));
+console.log("⑦ 已踩过的布局/滚动坑（文本级守卫）");
+console.log("=".repeat(74));
+
+/** 取出某个选择器的规则体（够用即可，不写完整 CSS 解析器）。 */
+const ruleBody = (css, selector) => {
+  const i = css.indexOf(selector + " {");
+  if (i < 0) return null;
+  const j = css.indexOf("}", i);
+  return css.slice(i, j + 1);
+};
+
+const v2css = readFileSync(join(here, "..", "app", "frontend-v2.css"), "utf8");
+const globalsCss = readFileSync(join(here, "..", "app", "globals.css"), "utf8");
+const panelTsx = readFileSync(join(here, "..", "components", "square", "BroadcastPanel.tsx"), "utf8");
+const dirTsx = readFileSync(join(here, "..", "components", "personas", "PersonaDirectory.tsx"), "utf8");
+
+// 坑 A：.sq-bleed 曾在视口 > 1240px 时整体右移 (100vw-1240)/2，
+// 把右栏「现场广播」切掉 100–340px（内容显示不全、滚动条跑到视口外）。
+// 守卫：必须用视口相对写法，不许退回固定负 margin。
+const bleed = ruleBody(v2css, ".sq-bleed");
+if (!bleed) bad(".sq-bleed 规则不见了");
+else if (!bleed.includes("calc(50% - 50vw)")) bad(".sq-bleed 未使用 calc(50% - 50vw) —— 宽视口下会再次右移并切掉右栏");
+else if (/(margin-left|margin-right):\s*-\d/.test(bleed)) bad(".sq-bleed 又出现了固定负 margin —— 那正是切掉右栏的写法");
+else ok(".sq-bleed 用视口相对偏移（宽视口不再右移）");
+
+// 坑 B：Lenis 在 window 上 preventDefault 接管滚动，广场页 body 已锁，
+// 于是右栏滚轮完全失效（实测 scrollTop 恒为 0）。必须给它 data-lenis-prevent。
+const listTag = (panelTsx.match(/<div[^>]*className="sq-broadcast-list"[^>]*>/) ?? [])[0];
+if (!listTag) bad("BroadcastPanel 里找不到 .sq-broadcast-list 的容器");
+else if (!listTag.includes("data-lenis-prevent")) bad(".sq-broadcast-list 缺少 data-lenis-prevent —— 右栏会再次滚不动");
+else ok(".sq-broadcast-list 带 data-lenis-prevent（Lenis 放行右栏原生滚动）");
+
+// 坑 C：名册卡片外面的 motion.div 带 transform → 自建 stacking context，
+// 浮层自己的 z-index:60 出不去，被后面几张卡盖住（实测 11/16 张）。
+// 守卫：网格项上的 :has() 提升规则存在，且目录真的用了那个类。
+if (!globalsCss.includes(".persona-grid > *:has(.persona-popover)")) {
+  bad("缺少 .persona-grid > *:has(.persona-popover) 的层级提升规则 —— 浮层会再次被后面的卡片盖住");
+} else if (!dirTsx.includes("persona-grid")) {
+  bad("PersonaDirectory 没有使用 persona-grid 类，上面的规则不会生效");
+} else {
+  ok("名册浮层在网格项上提升层级（不再被后续卡片覆盖）");
+}
+
+console.log("\n" + "=".repeat(74));
 console.log(fail === 0 ? "全部通过（0 处问题）" : "发现 " + fail + " 处问题");
 console.log("=".repeat(74));
 process.exit(fail === 0 ? 0 : 1);

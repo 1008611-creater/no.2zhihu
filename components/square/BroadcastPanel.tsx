@@ -56,7 +56,13 @@ export default function BroadcastPanel({ items, onOpen }: BroadcastPanelProps) {
         <h2 className="sq-broadcast-title">现场广播</h2>
       </div>
 
-      <div className="sq-broadcast-list">
+      {/* data-lenis-prevent 是**必须**的：全站由 MotionProvider 挂了 Lenis
+          平滑滚动，它在 window 上监听 wheel 并 preventDefault，把滚动接管到
+          document 上。广场页 body 已锁滚动（.sq-locked），于是滚轮在右栏
+          什么都不做 —— 实测对这一列滚 600px，scrollTop 恒为 0。
+          加上这个属性后 Lenis 放行，右栏恢复原生滚动（实测 scrollTop=600）。
+          同一个坑 InviteDrawer 已踩过并用了同样的写法，别删。 */}
+      <div className="sq-broadcast-list" data-lenis-prevent>
         {items.map((it) => (
           <button
             key={it.id}

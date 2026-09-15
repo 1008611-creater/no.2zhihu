@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion } from "motion/react";
 import { useMirror } from "@/lib/store/mirror-store";
+import { matchRouteId } from "@/lib/domain/route-id";
 import { SHIFT } from "@/lib/motion/tokens";
 
 /**
@@ -28,9 +29,16 @@ export default function AnswerDetailPage() {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
 
+  /**
+   * ⚠️ 2026-09-15 修（实测事故）：回答 id 形如 `ans-persona:ban-fo-xian-ren`，
+   * 带冒号。放进路径段后 `useParams().id` 拿到的是**编码过的**形态
+   * （实测是 `ans-persona%3Aban-fo-xian-ren`），直接 `===` 比对恒不成立 ——
+   * 点「查看详情与追问」100% 落到「找不到这篇回答」。
+   * 完整成因与对照实验见 lib/domain/route-id.ts 的文件头。
+   */
   const answer = useMemo(
-    () => mirror?.answers.find((a) => a.id === params?.id) ?? null,
-    [mirror, params?.id]
+    () => (mirror ? matchRouteId(mirror.answers, params?.id ?? "", (a) => a.id) : null),
+    [mirror, params?.id],
   );
   const skill = useMemo(
     () => (answer ? mirror?.skills.find((s) => s.id === answer.skillId) ?? null : null),

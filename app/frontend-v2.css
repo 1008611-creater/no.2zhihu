@@ -280,30 +280,38 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
  *
  * 为什么不改 layout.tsx：那会影响全站每个页面，违反复用边界；
  * 也不给 .shell 加例外类 —— 那等于把「广场」这个特例写进通用布局。
- * 这里用「视觉逃逸」的标准写法：负 margin 拉出、width 撑到视口宽。
- *   · margin-inline: 先抵掉 .shell 的左右 padding，再各向外扩 24px；
- *   · width 100vw 让画布量到视口边。
- * 注意顺序：先写 margin-inline 再由 width 决定盒子宽度，
- * 否则 `(100vw - 100%)` 里的 100% 会按新宽度算，导致整体左偏。
- * 实测教训：写成 `calc(-1 * (100vw - 100%) / 2 - 24px)` 时，
- * 画布的 100% 就是 1240-48=1192，于是偏移量算成 -(1240-1192)/2-24 = -48，
- * 画布整体左移 24px。正确写法是只抵 padding，不做「居中补偿」——
- * 因为 .shell 本身已经居中，画布只要往外扩即可。 */
+ *
+ * ⚠️ 2026-09-15 修（实测事故）：原来写的是固定负 margin
+ * （`margin-left/right: -24px`，窄屏覆盖成 -16px）。它只在
+ * **视口宽度 ≤ 1240px** 时恰好正确 —— 因为那时 .shell 撑满视口，
+ * 内容列左缘就是 padding（24px）。
+ * 一旦视口 > 1240px，.shell 变成居中的 1240px 定宽列，内容列左缘
+ * 落到 `(100vw - 1240) / 2 + 24`，而 -24px 只抵掉了 padding，
+ * **没有抵掉居中留白**：
+ *   视口 1440 → 画布从 x=100 起、宽 1440 → 右缘 1540，超出视口 100px
+ *   视口 1920 → 超出 340px（= (1920-1240)/2）
+ * 后果：右栏「现场广播」右侧被裁掉 100–340px（内容显示不全），
+ * 而它的滚动条位于元素右缘、正好落在视口外 —— 看不到也抓不到，
+ * 表现为「右栏滚不动」。body 已锁 overflow:hidden，所以也不会出现
+ * 横向滚动条来提示「还有内容」。
+ *
+ * 正确写法是 `margin-inline: calc(50% - 50vw)`：
+ *   · 50%  = 所在包含块（.shell 内容列）宽度的一半
+ *   · 50vw = 视口宽度的一半
+ * 两者之差正好等于「把 100vw 宽的盒子居中到视口」所需的偏移，
+ * 与 .shell 的 max-width / padding 具体取值全部无关 ——
+ * 视口 ≤1240、>1240、以及 720px 断点 padding 从 24 变 16，三种情况
+ * 实测都精确落在 0…100vw。因此下面 720px 的负 margin 覆盖也可以删掉。 */
 .sq-bleed {
   width: 100vw;
   max-width: none;
-  margin-left: -24px;
-  margin-right: -24px;
+  margin-inline: calc(50% - 50vw);
   margin-bottom: -96px;
   position: relative;
 }
 
-/* 窄屏时 .shell 的内边距变成 16px（见 globals.css 的 720px 断点），
-   这里的负数必须跟着改，否则画布会往左偏 8px、右边露出 8px 白边。 */
 @media (max-width: 720px) {
   .sq-bleed {
-    margin-left: -16px;
-    margin-right: -16px;
     margin-bottom: -72px;
   }
 }
