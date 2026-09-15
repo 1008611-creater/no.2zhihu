@@ -13,6 +13,7 @@ import { buildMesh } from "@/lib/domain/mesh";
 import { PERSONAS } from "@/lib/domain/personas";
 import type { MirrorQuestion } from "@/lib/domain/types";
 import CountUp from '@/components/ui/CountUp';
+import { DUR, EASE } from "@/lib/motion/tokens";
 
 /**
  * 我的 Mesh。
@@ -250,7 +251,7 @@ export default function MeshPage() {
               className="card"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
+              transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.04, 0.4) }}
             >
               <div className={"accent-bar a-" + p.accent} />
               <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
@@ -414,7 +415,7 @@ export default function MeshPage() {
               className="card"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.4) }}
+              transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.05, 0.4) }}
             >
               <div className={"accent-bar a-" + p.accent} />
               <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
@@ -452,7 +453,7 @@ export default function MeshPage() {
                 className="card-flat"
                 initial={{ opacity: 0, y: 12 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3, delay: i * 0.05 }}
+                transition={{ duration: DUR.slow, ease: EASE.out, delay: i * 0.05 }}
               >
                 <div style={{ display: "flex", gap: 9, alignItems: "center" }}>
                   <span className="chip chip-green">真人</span>

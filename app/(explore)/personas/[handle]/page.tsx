@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { motion } from "motion/react";
 import { corpusLabel, personaByHandle } from "@/lib/domain/personas";
 import { Kanshan } from "@/components/kanshan/Kanshan";
+import { SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 单份答主档案。
@@ -86,7 +87,7 @@ export default function PersonaDetailPage() {
         <div className="grid grid-2" style={{ alignItems: "start" }}>
           <motion.div
             className="card"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ type: "spring", stiffness: 260, damping: 26 }}
@@ -105,7 +106,7 @@ export default function PersonaDetailPage() {
 
           <motion.div
             className="card"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.06 }}
@@ -124,7 +125,7 @@ export default function PersonaDetailPage() {
 
           <motion.div
             className="card"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ type: "spring", stiffness: 260, damping: 26 }}
@@ -251,7 +252,7 @@ export default function PersonaDetailPage() {
 
           <motion.div
             className="card"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ type: "spring", stiffness: 260, damping: 26, delay: 0.06 }}

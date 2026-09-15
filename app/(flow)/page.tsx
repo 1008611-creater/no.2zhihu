@@ -14,6 +14,7 @@ import PersonaPicker from "@/components/mirror/PersonaPicker";
 import FeedStream from "@/components/square/FeedStream";
 import { personaCandidates, type PersonaCandidate } from "@/lib/domain/router";
 import { useMirror } from "@/lib/store/mirror-store";
+import { DUR, EASE } from "@/lib/motion/tokens";
 
 /**
  * 首页 = 提问入口 + 广场信息流。
@@ -254,7 +255,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.35 }}
+            transition={{ duration: DUR.slow, ease: EASE.out }}
           >
             <div className="section-head">
               <div>
@@ -299,7 +300,7 @@ export default function Home() {
             initial={{ opacity: 0, y: 18 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
+            transition={{ duration: DUR.slow, ease: EASE.out }}
           >
             <div className="grid grid-2" style={{ alignItems: "start" }}>
               <div className="card" style={{ borderColor: "rgba(77,124,255,0.4)" }}>

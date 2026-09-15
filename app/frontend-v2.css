@@ -185,7 +185,7 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
   text-align: left;
   cursor: pointer;
   padding: 18px 19px 16px;
-  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+  transition: border-color var(--dur-base) ease, transform var(--dur-base) ease, box-shadow var(--dur-base) ease;
 }
 .persona-choice[data-selected="true"] {
   border-color: var(--blue);

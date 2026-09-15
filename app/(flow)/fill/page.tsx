@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { useMirror } from "@/lib/store/mirror-store";
 import { KanshanStage } from "@/components/kanshan/KanshanStage";
+import { SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 真人补充页。
@@ -86,7 +87,7 @@ function FillContent() {
     return (
       <motion.section
         style={{ paddingTop: 56 }}
-        initial={{ opacity: 0, y: 14 }}
+        initial={{ opacity: 0, y: SHIFT.md }}
         animate={{ opacity: 1, y: 0 }}
       >
         <p className="eyebrow">Mesh updated</p>
