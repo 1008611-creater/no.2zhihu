@@ -11,7 +11,12 @@ import { DUR, EASE, STAGGER } from "@/lib/motion/tokens";
  * Human Mesh 可视化。
  *
  * 用确定性的同心布局（不是物理引擎），保证同一份数据每次渲染位置一致，
- * 评委截屏、录视频时结果可复现。真人在外环，Skill 在中环，问题在中心。
+ * 评委截屏、录视频时结果可复现。
+ *
+ * 同心圈的语义（2026-09-15 起）：问题在中心，**关键词在内环（主干）**，
+ * Skill / 回答在中环，答主人格与真人依次在外 —— 因为 `buildMesh` 已改成
+ * 「主题层为主干、答主为注脚」，环序必须跟着换，否则主干被压到最外圈、
+ * 又变回「读答主」而不是「读主题」。
  *
  * 2026-09-15：布局参数改为可覆盖（rings / showLabels / legendLabels）。
  * 「我的 Mesh」要用同一套引擎画另一张网 —— 那张网的节点是
@@ -30,16 +35,23 @@ const ACCENT: Record<string, string> = {
 /** 默认同心圈：一场问答内部的关系图。 */
 const DEFAULT_RING: Record<MeshNode["type"], number> = {
   question: 0,
-  skill: 0.42,
-  keyword: 0.62,
+  // 2026-09-15 结构重做后，图的**主干是关键词**（`buildMesh` 里主题层簇内两两相连），
+  // 所以关键词从原来的外环（0.62）收到内环，Skill 与答主退到外圈。
+  keyword: 0.42,
+  skill: 0.6,
   answer: 0.72,
   // 人格节点：AI 这一侧的完整人格，比真人靠内一环，仍由真人来兜底。
   persona: 0.86,
   human: 1
 };
 
-/** 默认显示标签的节点类型 —— 全显示会糊成一片。 */
-const DEFAULT_LABEL_TYPES: MeshNode["type"][] = ["question", "skill", "persona"];
+/**
+ * 默认显示标签的节点类型 —— 全显示会糊成一片。
+ *
+ * 关键词必须在这里：主干要是没标签，读者只能看到一堆点，
+ * 「这个主题怎么连到那个主题」就完全读不出来了。
+ */
+const DEFAULT_LABEL_TYPES: MeshNode["type"][] = ["question", "keyword", "skill", "persona"];
 
 /** 默认图例：只列真正出现过的类型，没出现的类型不再占一行。 */
 const LEGEND_ORDER: Array<{ type: MeshNode["type"]; c: string; l: string }> = [
@@ -233,7 +245,7 @@ export function MeshGraph({
               style={{ cursor: "pointer", originX: `${p.x}px`, originY: `${p.y}px` }}
             >
               {/* 悬停显示完整标签 —— 截断只影响画面，原文随时可查。 */}
-              <title>{n.label}</title>
+              <title>{n.full ?? n.label}</title>
               <circle cx={p.x} cy={p.y} r={r + (active ? 5 : 0)} fill={ACCENT[n.accent] ?? "#4d7cff"} opacity={active ? 1 : 0.88} />
               <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={ACCENT[n.accent] ?? "#4d7cff"} strokeOpacity={active ? 0.6 : 0.22} />
               {(labelTypes.includes(n.type) || active) && (
@@ -253,7 +265,7 @@ export function MeshGraph({
         </g>
       </svg>
       </div>
-      {detail && <aside className="notice" aria-live="polite"><strong>{detail.label}</strong><p>类型：{legendLabels?.[detail.type] ?? detail.type} · 关联权重：{detail.weight.toFixed(2)} · {graph.edges.filter(e => e.source === detail.id || e.target === detail.id).length} 条关系</p><button className="btn" onClick={() => setSelected(null)}>关闭详情</button></aside>}
+      {detail && <aside className="notice" aria-live="polite"><strong>{detail.full ?? detail.label}</strong><p>类型：{legendLabels?.[detail.type] ?? detail.type} · 关联权重：{detail.weight.toFixed(2)} · {graph.edges.filter(e => e.source === detail.id || e.target === detail.id).length} 条关系</p><button className="btn" onClick={() => setSelected(null)}>关闭详情</button></aside>}
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", padding: "4px 10px 8px" }}>
         {legend.map((k) => (
