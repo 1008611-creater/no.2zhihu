@@ -139,14 +139,30 @@ export async function distillPersona(
     ]);
     let parsed = parseDistill(raw);
     if (!parsed) {
-      // 仅修复格式一次，不重新检索；沿用客户端的消息缓存与并发合并。
+      // 重试一次：**重发原始材料**，而不是把上一次的输出丢回去让它「修格式」。
+      //
+      // 原实现（content: raw.slice(0, 4000)）对实测的失败形态是死路，原因有二：
+      //   ① 失败形态是模型输出了**完全不同的 schema** —— 一份信源评估报告
+      //      （键名是「信源结构」「权威性得分」），里面没有任何人格字段可「修」；
+      //   ② 原提示词要求「缺失信息留空」，而 parseDistill 要求 knows 非空 ——
+      //      两条约束互相矛盾，即使格式修对了也过不了解析。
+      // 重发材料才是真正的第二次机会：模型重新看到原文，且这次带着更强的指令。
+      //
+      // 另：这条失败是上游偶发行为（同一条 messages 时好时坏，实测已确认），
+      // 不是提示词结构问题，所以不要试图从提示词措辞上根治它。
       const repaired = await zhidaText([
-        { role: "system", content: DISTILL_PROMPT + "\n修复下面的输出为指定 JSON；缺失信息留空，禁止补写人物事实。" },
-        { role: "user", content: raw.slice(0, 4000) },
+        {
+          role: "system",
+          content:
+            DISTILL_PROMPT +
+            "\n再次强调：不要评估信源质量、不要打分、不要输出「信源结构」「权威性」这类字段。" +
+            "你只描述这位作者的写作与认知特征。",
+        },
+        { role: "user", content: distillMaterial(sources) },
       ]);
       parsed = parseDistill(repaired);
       if (!parsed) return fallback(handle, name, accent, mine.length, items.length,
-        "模型没有按要求返回人格 JSON（可能把材料当成了要回答的问题），修复一次后仍未成功。来源已保留，可稍后重试。", sources, "invalid_format");
+        "模型两次都没有按要求返回人格 JSON。实测这是上游偶发行为（同一条请求时好时坏），来源已保留，可稍后重试。", sources, "invalid_format");
     }
 
     return {
