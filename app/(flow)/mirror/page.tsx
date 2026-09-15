@@ -1,5 +1,8 @@
 "use client";
 
+import EvidenceOverview from '@/components/mirror/EvidenceOverview';
+import { useInviteUrl } from '@/lib/motion/useInviteUrl';
+
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { motion } from "motion/react";
@@ -29,7 +32,7 @@ export default function MirrorPage() {
   const { mirror, ready, appendInvite, appendReplies } = useMirror();
   const [step, setStep] = useState(FLOW_STATES.length);
   const [invited, setInvited] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useInviteUrl();
   const [inviteNote, setInviteNote] = useState<string | null>(null);
 
   useEffect(() => {
@@ -225,6 +228,7 @@ export default function MirrorPage() {
         onClose={() => setDrawerOpen(false)}
         onInvited={handleInvited}
       />
+      <EvidenceOverview mirror={mirror} />
     </>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { useMirror } from "@/lib/store/mirror-store";
@@ -25,6 +26,12 @@ const QUICK_TEMPLATES = [
 ];
 
 export default function FillPage() {
+  return <Suspense fallback={<p role="status">正在加载补充内容…</p>}><FillContent /></Suspense>;
+}
+
+function FillContent() {
+  const searchParams = useSearchParams();
+  const requestedId = searchParams.get("answerId");
   const { mirror, ready, applyHumanEdit } = useMirror();
   const [mode, setMode] = useState<"quick" | "full">("quick");
   const [author, setAuthor] = useState("");
@@ -34,11 +41,15 @@ export default function FillPage() {
   const [done, setDone] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const activeId = targetId ?? mirror?.answers.find((a) => a.status === "ai")?.id ?? mirror?.answers[0]?.id ?? null;
+  const activeId = targetId ?? requestedId ?? mirror?.answers.find((a) => a.status === "ai")?.id ?? mirror?.answers[0]?.id ?? null;
   const target = useMemo(() => mirror?.answers.find((a) => a.id === activeId) ?? null, [mirror, activeId]);
   const openGap = useMemo(() => mirror?.gaps.find((g) => !g.filledBy) ?? null, [mirror]);
 
   if (!ready) return <div className="skeleton" style={{ height: 340, marginTop: 44 }} />;
+
+  if (requestedId && mirror && !target) {
+    return <section className="route-feedback"><h1>找不到这篇回答</h1><p className="lede">这条链接对应的回答不在当前会话中。请回到工作台选择回答后再补充。</p><Link className="btn" href="/mirror">回工作台</Link></section>;
+  }
 
   if (!mirror || !target) {
     return (
@@ -61,7 +72,7 @@ export default function FillPage() {
         ? target.body + "\n\n【真人补充 · " + name + "】\n" + quickText.trim()
         : fullText.trim();
 
-    if (body.trim().length < 8) {
+    if ((mode === "quick" ? quickText.trim() : fullText.trim()).length < 8) {
       setError("内容太短了，至少写 8 个字，让这一段真的有用。");
       return;
     }
@@ -134,7 +145,7 @@ export default function FillPage() {
                 textAlign: "left", cursor: "pointer", font: "inherit", color: "inherit",
                 ...(a.id === activeId ? { borderColor: "var(--blue)", boxShadow: "0 0 0 1px rgba(77,124,255,0.35)" } : {})
               }}
-              onClick={() => setTargetId(a.id)}
+              onClick={() => { setTargetId(a.id); setFullText(a.body); setQuickText(""); setError(null); }}
             >
               <div style={{ display: "flex", gap: 9, alignItems: "center", marginBottom: 6, flexWrap: "wrap" }}>
                 <strong style={{ fontSize: 14 }}>{a.skillName}</strong>

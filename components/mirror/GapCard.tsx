@@ -1,6 +1,7 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion, useReducedMotion } from "motion/react";
+import { GAP_SPRING, GAP_PAUSE, STAGGER } from "@/lib/motion/tokens";
 import type { Gap } from "@/lib/domain/types";
 
 const KIND_LABEL: Record<Gap["kind"], string> = {
@@ -17,12 +18,13 @@ const KIND_LABEL: Record<Gap["kind"], string> = {
 /** 看山发现的缺口 + 匹配到的真人候选。 */
 export function GapCard({ gap, onInvite, index = 0 }: { gap: Gap; onInvite?: (gap: Gap) => void; index?: number }) {
   const filled = Boolean(gap.filledBy);
+  const reduced = useReducedMotion();
   return (
     <motion.div
       className={`gap ${filled ? "gap-filled" : ""}`}
-      initial={{ opacity: 0, x: -10 }}
+      initial={reduced ? false : { opacity: 0, x: -10 }}
       animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.34, delay: index * 0.08 }}
+      transition={reduced ? { duration: 0 } : { ...GAP_SPRING, delay: GAP_PAUSE + index * STAGGER }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 7, flexWrap: "wrap" }}>
         <span className={`chip ${filled ? "chip-green" : "chip-orange"}`}>{KIND_LABEL[gap.kind]}</span>

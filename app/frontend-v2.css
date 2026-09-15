@@ -1,0 +1,66 @@
+/* Reference19：暗色单色舞台。旧变量仅作为兼容别名，身份色语义保留。 */
+:root {
+  --surface: #0a0a0b;
+  --surface-raised: #141416;
+  --surface-hover: #1d1d20;
+  --foreground: #f0f0f0;
+  --muted: #b4b4bd;
+  --border: #36363d;
+  --action: #3568db;
+  --gap-color: #ff995d;
+  --radius: 24px;
+  --ink-950: var(--surface);
+  --ink-900: #101012;
+  --ink-850: var(--surface-raised);
+  --ink-800: var(--surface-hover);
+  --ink-700: #252529;
+  --ink-600: #414148;
+  --text-100: var(--foreground);
+  --text-300: #d0d0d6;
+  --text-500: var(--muted);
+  --text-700: #a1a1ad;
+  --line: var(--border);
+  --line-soft: #242429;
+  --blue: var(--action);
+  --orange: var(--gap-color);
+  --radius-sm: calc(var(--radius) / 3);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.25);
+}
+body::before {
+  background-image: linear-gradient(125deg, transparent 25%, #ffffff05 26%, transparent 27%, transparent 42%, #ffffff04 43%, transparent 44%), radial-gradient(ellipse at 100% 0%, #ffffff0c, transparent 55%);
+  background-size: cover;
+  mask-image: linear-gradient(#000, transparent 90%);
+}
+body { font-size: clamp(.9375rem, .88rem + .2vw, 1rem); }
+h3 { font-size: clamp(1rem, .95rem + .2vw, 1.125rem); }
+h1 { text-wrap: balance; }
+h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: currentColor; }
+.text-character { display: inline-block; }
+.route-transition { position: fixed; inset: 0; z-index: 90; pointer-events: none; background: var(--surface-hover); clip-path: circle(0% at 100% 0%); }
+.hero { padding-block: clamp(36px, 6vw, 80px); }
+.hero h1 { font-size: clamp(2rem, 3.8vw, 3.8rem); letter-spacing: -.045em; }
+.eyebrow, .brand-sub, .stat-n { font-family: var(--font-mono), monospace; }
+.eyebrow { font-size: clamp(.6875rem, .65rem + .16vw, .8125rem); }
+.stat-n { font-size: clamp(1.625rem, 2.5vw, 2.5rem); font-variant-numeric: tabular-nums; }
+.stat-l, .chip { font-size: clamp(.75rem, .7rem + .15vw, .875rem); }
+.card { background: var(--surface-raised); border-color: var(--border); box-shadow: none; }
+.card-flat { background: var(--ink-900); }
+.btn, button.chip, .nav a { min-height: 44px; }
+.btn-primary { background: var(--action); box-shadow: none; }
+.btn-primary:hover:not(:disabled) { background: #2a58c0; box-shadow: none; }
+.brand-mark { background: var(--foreground); box-shadow: none; }
+.topbar { background: #0a0a0bef; }
+.nav a { position: relative; }
+.nav-active-marker { position: absolute; bottom: 0; left: 10px; right: 10px; height: 2px; background: var(--blue-soft); }
+.section { margin-top: clamp(36px, 5vw, 64px); }
+.card, .card-flat, .btn { transition: border-color 170ms, background-color 170ms, transform 170ms; }
+@media (hover: hover) and (pointer: fine) {
+  .card:hover { border-color: #62626c; }
+  .btn:hover:not(:disabled) { transform: translateY(-2px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-transition { display: none; }
+  *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
+  .rise, .page-enter, [class*="rise-"] { opacity: 1 !important; transform: none !important; }
+}

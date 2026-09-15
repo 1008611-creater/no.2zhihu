@@ -245,7 +245,7 @@ export async function runDebate(
     );
     pair = parseClash(raw, usable);
   } catch {
-    pair = null;
+    return { replies: [], note: "观点冲突识别请求失败或超时，暂时无法判断分歧，请稍后重试。" };
   }
 
   if (!pair) {
@@ -665,11 +665,18 @@ async function mapPool<T, R>(
   return out;
 }
 
-function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
-  return Promise.race([
-    p,
-    new Promise<T>((_, reject) => setTimeout(() => reject(new Error("timeout")), ms)),
-  ]);
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      p,
+      new Promise<T>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("timeout")), ms);
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
 }
 
 function sleep(ms: number): Promise<void> {

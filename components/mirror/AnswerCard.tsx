@@ -3,6 +3,7 @@
 import { motion } from "motion/react";
 import Link from "next/link";
 import type { AnswerDraft } from "@/lib/domain/types";
+import { CARD_SPRING, STAGGER } from "@/lib/motion/tokens";
 
 const STATUS_LABEL: Record<AnswerDraft["status"], string> = {
   ai: "AI 生成",
@@ -25,7 +26,7 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
       className="card"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.34, delay: index * 0.06 }}
+      transition={{ ...CARD_SPRING, delay: index * STAGGER }}
     >
       <div className={"accent-bar a-" + answer.accent} />
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 11, flexWrap: "wrap" }}>

@@ -75,6 +75,7 @@ export interface PersonaCorpus {
 
 /** 一个 Skill 分身：答主型由 Persona 驱动，视角型由公开回答蒸馏出的稳定视角驱动。 */
 export interface Skill {
+  publicFigure?: import("./publicFigures").PublicAttribution;
   id: string;
   /** 分身名。答主型 = 答主昵称；视角型 = 视角名 */
   name: string;
@@ -113,6 +114,8 @@ export interface SkillSource {
 /* ------------------------------ 回答 ------------------------------ */
 
 export interface AnswerDraft {
+  publicFigure?: import("./publicFigures").PublicAttribution;
+  generationIntegrity?: "complete" | "possibly_truncated" | "unknown";
   id: string;
   skillId: string;
   skillName: string;

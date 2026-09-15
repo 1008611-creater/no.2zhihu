@@ -1,14 +1,26 @@
 # AI 会话的执行边界（为什么有些命令「跑不了」，怎么系统性解决）
 
-> 最后更新：2026-09-14
+> 最后更新：2026-09-15
 > 作用：把「AI 说跑不了命令」这件事讲清楚 —— 边界在哪、为什么、以及三条系统性的解法。
 > 结论先行：**这不是你电脑的问题，也不是网络问题；而且其中一部分可以彻底解决。**
 
 ---
 
-## 一、实测出来的确切边界
+## 当前核验补充（2026-09-15，优先于下方历史记录）
 
-在当前这个 AI 会话里，我唯一的执行入口是一个 JavaScript 运行环境。它**无法创建任何子进程**：
+- 当前会话的终端执行入口已可运行 `git status`、`git rev-parse` 与 `gh auth status`。下方 JavaScript 入口的 EPERM 是历史、特定工具限制，不能推广为整台电脑或所有 AI 会话不能执行命令。
+- `gh auth status` 确认账户 `1008611-creater` 已登录，凭据来自系统 keyring，Git 协议为 HTTPS。无需重新登录或把令牌导出成文件。
+- 当前默认 shell 实测为 `5.1.19041.6456`。`C:\Users\lsb\bin\pwsh.exe -NoProfile -Command '$PSVersionTable.PSVersion.ToString()'` 也返回同一版本；标准安装路径 `C:\Program Files\PowerShell\7\pwsh.exe` 不存在。尚不能宣布 PowerShell 7 已安装或默认切换成功。
+- `scripts/fix-powershell-default.ps1` 当前仅按程序名识别 PowerShell 7；运行前必须核验实际主版本大于等于 7。程序存在不等于版本合格。
+- 本地 HEAD 为 `0af1b0f`，工作区有多处并行修改；此前远端核验为 `bb8e235`。发布前重新核验远端，按 CONTRIBUTING 走分支与 PR，禁止以旧本地整棵 tree 覆盖远端，也不要批量提交其他任务的修改。
+- `.env.local` 与 `.git-remote-token` 已通过 `git check-ignore` 验证被忽略；这不等于完成历史凭据审计。
+- 本轮线上浏览器闭环验收未完成：访问 Demo 的自动权限审核两次超时。HTTP 可用及历史 CI 成功不能替代问题输入、选择答主、回答来源和缺口卡片的交互验收。
+
+验证范围：本次仅核验执行环境并补充文档；未重新构建、未完成线上点测、未推送或合并。本文已由 docs/INDEX.md 收录。
+
+## 一、历史 JavaScript 入口的执行边界
+
+此前会话使用的 JavaScript 执行入口**无法创建任何子进程**，当时结果如下（不代表当前终端能力）：
 
 | 尝试 | 结果 |
 |---|---|

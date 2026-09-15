@@ -6,6 +6,7 @@ import { motion } from "motion/react";
 import MeshGraph from "@/components/mesh/MeshGraph";
 import { useMirror } from "@/lib/store/mirror-store";
 import { buildMesh } from "@/lib/domain/mesh";
+import CountUp from '@/components/ui/CountUp';
 
 /**
  * Human Mesh 总览。
@@ -69,7 +70,7 @@ export default function MeshPage() {
             { n: totals.keywords, l: "关键词节点" }
           ].map((s) => (
             <div key={s.l} className="stat">
-              <div className="stat-n">{s.n}</div>
+              <div className="stat-n"><CountUp value={s.n} /></div>
               <div className="stat-l">{s.l}</div>
             </div>
           ))}

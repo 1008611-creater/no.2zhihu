@@ -4,6 +4,7 @@ import { z } from "zod";
 import { collectEvidence, draftAnswer, invitePersona } from "@/lib/server/mirror";
 import { distillPersona, skillFromDistilled } from "@/lib/server/persona";
 import { ZhihuApiError } from "@/lib/zhihu/errors";
+import { invitePublicFigure } from "@/lib/server/publicFigures";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,8 +17,10 @@ const Body = z.object({
   /** 临时指定一位没预置的答主：传名字，走在线蒸馏，如实返回命中条数。 */
   name: z.string().trim().min(1).max(40).optional(),
   topic: z.string().trim().max(60).optional(),
+  publicFigureId: z.string().trim().min(1).max(60).optional(),
   evidencePerSkill: z.number().int().min(1).max(5).optional(),
-});
+}).refine(value => [value.handle, value.name, value.publicFigureId].filter(Boolean).length === 1,
+  { message: "请选择一种邀请方式：知乎答主或公共人物" });
 
 /**
  * 继续邀请一位答主。
@@ -40,6 +43,11 @@ export async function POST(req: Request) {
 
   try {
     // 路径 A：预置答主。
+    if (parsed.publicFigureId) {
+      const result = await invitePublicFigure(parsed.question, parsed.publicFigureId);
+      if (!result) return NextResponse.json({ ok: false, error: "该人物暂无已核验且匹配当前问题的能力。" }, { status: 422 });
+      return NextResponse.json({ ok: true, mode: "public_figure", ...result });
+    }
     if (parsed.handle) {
       const result = await invitePersona(parsed.question, parsed.handle, {
         evidencePerSkill: parsed.evidencePerSkill,

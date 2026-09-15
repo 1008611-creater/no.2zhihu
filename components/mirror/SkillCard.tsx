@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "motion/react";
 import type { Skill } from "@/lib/domain/types";
+import { CARD_SPRING, STAGGER } from "@/lib/motion/tokens";
 
 /**
  * 分身卡片。
@@ -19,7 +21,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
       className="card"
       initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.34, delay: index * 0.06 }}
+      transition={{ ...CARD_SPRING, delay: index * STAGGER }}
     >
       <div className={"accent-bar a-" + skill.accent} />
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9 }}>
@@ -71,7 +73,13 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
             {p.corpus.sources.map((s) => <a key={s.url} className="link" style={{ display: "block", padding: "8px 0" }} href={s.url} target="_blank" rel="noreferrer noopener">{s.author} · {s.title}</a>)}
             {!p.corpus.sources.length && <p className="dim">尚无可核对的人格来源。</p>}
           </details>
-
+          {p.corpus.status !== "unavailable" && !p.corpus.capturedAt && <Link
+            className="link mono"
+            href={"/personas/" + p.handle}
+            style={{ fontSize: 11.5, display: "inline-block", marginBottom: 10 }}
+          >
+            查看完整人格档案 →
+          </Link>}
         </>
       )}
 

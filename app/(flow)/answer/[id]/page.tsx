@@ -234,7 +234,7 @@ export default function AnswerDetailPage() {
               你是这个领域的人？直接进入真人补充页，用最小填空或完整编辑把这一段改成你的版本。
             </p>
           </div>
-          <Link className="btn btn-primary" href="/fill">我来接管</Link>
+          <Link className="btn btn-primary" href={`/fill?answerId=${encodeURIComponent(answer.id)}&from=answer`}>我来接管</Link>
           <Link className="btn btn-ghost" href="/mirror">回工作台</Link>
         </div>
       </section>

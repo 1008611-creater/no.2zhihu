@@ -201,16 +201,17 @@ function isRetryable(err: unknown): boolean {
 function request<T>(
   endpoint: string,
   init: RequestInit = {},
-  opts: { envelope?: boolean; serialize?: boolean } = { envelope: true, serialize: true },
+  opts: { envelope?: boolean; serialize?: boolean; retries?: number } = { envelope: true, serialize: true },
 ): Promise<T> {
   return run<T>(opts.serialize !== false, async () => {
     let lastErr: unknown;
-    for (let attempt = 0; attempt <= RETRY_LIMIT; attempt++) {
+    const retryLimit = opts.retries ?? RETRY_LIMIT;
+    for (let attempt = 0; attempt <= retryLimit; attempt++) {
       try {
         return await requestOnce<T>(endpoint, init, opts);
       } catch (err) {
         lastErr = err;
-        if (attempt === RETRY_LIMIT || !isRetryable(err)) throw err;
+        if (attempt === retryLimit || !isRetryable(err)) throw err;
         await sleep(RETRY_BASE_MS * 2 ** attempt);
       }
     }
@@ -320,6 +321,15 @@ export function questionRecommendations(
 }
 
 /* ------------------------------ 直答 ------------------------------- */
+
+/** 公共人物追加只允许一次生成尝试，失败由用户决定是否再次发起。 */
+export function publicFigureCompletion(messages: ZhidaMessage[]): Promise<ZhidaCompletion> {
+  return request<ZhidaCompletion>(`${API_BASE}/v1/chat/completions`, {
+    method: "POST",
+    headers: authHeaders(),
+    body: JSON.stringify({ model: "zhida-fast-1p5", messages, stream: false }),
+  }, { envelope: false, serialize: false, retries: 0 });
+}
 
 export function zhida(
   messages: ZhidaMessage[],

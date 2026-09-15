@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
 
 import PersonaCard from "@/components/mirror/PersonaCard";
@@ -47,6 +48,28 @@ export function InviteDrawer({
   const [error, setError] = useState<string | null>(null);
   const [customName, setCustomName] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const panel = useRef<HTMLDivElement>(null);
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+  useEffect(() => {
+    if (!open) return;
+    const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    panel.current?.focus();
+    const keydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+      if (event.key !== 'Tab') return;
+      const items = Array.from(panel.current?.querySelectorAll<HTMLElement>('button:not([disabled]), a[href], input:not([disabled]), textarea:not([disabled]), [tabindex="0"]') ?? []).filter(el => el.getClientRects().length > 0);
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (!first) { event.preventDefault(); panel.current?.focus(); return; }
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === panel.current)) { event.preventDefault(); last.focus(); }
+      else if (!event.shiftKey && (document.activeElement === last || document.activeElement === panel.current)) { event.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', keydown);
+    return () => { document.body.style.overflow = overflow; document.removeEventListener('keydown', keydown); previous?.focus(); };
+  }, [open]);
 
   const available = candidates.filter((c) => !presentHandles.includes(c.handle));
 
@@ -74,6 +97,7 @@ export function InviteDrawer({
   }
 
   async function inviteCustom() {
+    if (busy) return;
     const name = customName.trim();
     if (name.length < 2) {
       setError("请填一个答主昵称，至少 2 个字。");
@@ -111,10 +135,12 @@ export function InviteDrawer({
     }
   }
 
-  return (
+  if (typeof document === 'undefined') return null;
+  return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
+          data-lenis-prevent
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -133,6 +159,11 @@ export function InviteDrawer({
           }}
         >
           <motion.div
+            ref={panel}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="invite-title"
+            tabIndex={-1}
             initial={{ opacity: 0, y: 22 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: 14 }}
@@ -144,7 +175,7 @@ export function InviteDrawer({
               <p className="eyebrow" style={{ margin: 0 }}>邀请一个分身回答</p>
               <button className="btn btn-sm btn-ghost" onClick={onClose}>关闭</button>
             </div>
-            <h2 style={{ marginBottom: 8 }}>再加一个人进来看看</h2>
+            <h2 id="invite-title" style={{ marginBottom: 8 }}>再加一个人进来看看</h2>
             <p className="lede" style={{ marginBottom: 20 }}>
               指定一位答主，他会按自己的领域、立场和说话方式回答这个问题 —— 哪怕他从没答过它。
               只生成新来的这一位，已有的回答原样保留。
@@ -199,7 +230,7 @@ export function InviteDrawer({
           </motion.div>
         </motion.div>
       )}
-    </AnimatePresence>
+    </AnimatePresence>, document.body
   );
 }
 
