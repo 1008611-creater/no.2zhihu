@@ -2,6 +2,7 @@
 
 import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
 import { useRef } from 'react';
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 首屏主标题。
@@ -45,8 +46,8 @@ export default function HeroTitle() {
             className="text-character"
             aria-hidden="true"
             key={i}
-            variants={{ hidden: { opacity: 0, y: 14 }, visible: { opacity: 1, y: 0 } }}
-            transition={{ duration: 0.6, ease: 'easeOut' }}
+            variants={{ hidden: { opacity: 0, y: SHIFT.md }, visible: { opacity: 1, y: 0 } }}
+            transition={{ duration: DUR.read, ease: EASE.out }}
           >
             {char}
           </motion.span>

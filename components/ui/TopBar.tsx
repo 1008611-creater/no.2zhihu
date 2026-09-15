@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import ScrollProgress from "./ScrollProgress";
+import { LogoMark } from "./LogoMark";
+import { DUR, SPRING } from "@/lib/motion/tokens";
 import { useSession } from "@/lib/hooks/useSession";
 
 const NAV = [
@@ -72,11 +74,9 @@ export function TopBar() {
       <ScrollProgress />
       <div className="topbar-inner">
         <Link href="/" className="brand" aria-label="影子知乎 · 回到首页">
-          <span className="brand-mark" aria-hidden>
-            {/* 主 logo 与 favicon / apple-icon 用同一形象资源（public/logo.png），
-                保证「标签页图标 = 顶栏品牌」视觉一致。 */}
-            <img src="/logo.png" alt="" width={32} height={32} decoding="async" />
-          </span>
+          {/* 用可动标识：hover/focus 时「分身」会从「真人」上轻轻分离再归位，
+              把产品的核心动作藏进品牌图形里。静态场景（reduced-motion）自动降级。 */}
+          <LogoMark size={32} alt="" className="brand-mark" />
           <span className="brand-text">
             <span className="brand-name">影子知乎</span>
             <span className="brand-sub">Agent 可调用的人类知识网络</span>
@@ -142,7 +142,7 @@ export function TopBar() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              transition={{ duration: 0.18 }}
+              transition={{ duration: DUR.fast }}
               onClick={() => setOpen(false)}
             />
             <motion.nav
@@ -155,7 +155,7 @@ export function TopBar() {
               initial={reducedMotion ? false : { x: "100%" }}
               animate={{ x: 0 }}
               exit={reducedMotion ? { opacity: 0 } : { x: "100%" }}
-              transition={reducedMotion ? { duration: 0 } : { type: "spring", stiffness: 320, damping: 34 }}
+              transition={reducedMotion ? { duration: 0 } : SPRING.light}
             >
               <button className="btn btn-ghost" onClick={() => setOpen(false)}>关闭导航</button>
               {NAV.map((n) => (

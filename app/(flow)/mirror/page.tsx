@@ -19,6 +19,7 @@ import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
 import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
 import MeshGraph from "@/components/mesh/MeshGraph";
 import PersonaPopover from "@/components/mirror/PersonaPopover";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 镜像工作台。
@@ -198,7 +199,7 @@ export default function MirrorPage() {
       {invited && (
         <motion.section
           className="section"
-          initial={{ opacity: 0, y: 14 }}
+          initial={{ opacity: 0, y: SHIFT.md }}
           animate={{ opacity: 1, y: 0 }}
         >
           <div className="card" style={{ borderColor: "rgba(77,124,255,0.4)" }}>
@@ -285,9 +286,9 @@ function DiscoverSection() {
         {PERSONAS.map((p, i) => (
           <motion.div
             key={p.handle}
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
+            transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.04, 0.4) }}
             style={{ display: "flex" }}
           >
             {/* 外层是 div 而不是 Link：卡片里现在有两个动作（看档案 / 带他去提问），
@@ -368,9 +369,9 @@ function DiscoverSection() {
           <motion.div
             key={f.id}
             className="card"
-            initial={{ opacity: 0, y: 14 }}
+            initial={{ opacity: 0, y: SHIFT.md }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
+            transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.04, 0.4) }}
           >
             <div className={"accent-bar a-" + f.accent} />
             <div

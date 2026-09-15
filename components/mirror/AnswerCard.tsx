@@ -3,7 +3,7 @@
 import { motion } from "motion/react";
 import Link from "next/link";
 import type { AnswerDraft } from "@/lib/domain/types";
-import { CARD_SPRING, STAGGER } from "@/lib/motion/tokens";
+import { CARD_SPRING, SHIFT, STAGGER } from "@/lib/motion/tokens";
 
 const STATUS_LABEL: Record<AnswerDraft["status"], string> = {
   ai: "AI 生成",
@@ -24,7 +24,7 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
   return (
     <motion.article
       className="card"
-      initial={{ opacity: 0, y: 14 }}
+      initial={{ opacity: 0, y: SHIFT.md }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ ...CARD_SPRING, delay: index * STAGGER }}
     >

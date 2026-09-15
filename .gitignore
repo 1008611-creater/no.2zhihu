@@ -44,3 +44,6 @@ tsconfig.tsbuildinfo
 
 # build-library.mjs 运行时自动生成的 loader hook（不入库）
 .library-resolver.mjs
+
+# 拆层脚本的合成核对图（运行时产物，不入库）
+public/logo-layers/_preview.png

@@ -15,6 +15,7 @@ import type {
   Skill,
   SkillKind,
 } from "@/lib/domain/types";
+import { DUR, EASE } from "@/lib/motion/tokens";
 
 /**
  * 虚拟广场信息流 —— 首页与 /square 共用同一条流。
@@ -323,7 +324,7 @@ export function FeedStream({
           initial={{ opacity: 0, y: 10 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
-          transition={{ duration: 0.26, delay: Math.min(i * 0.015, 0.3) }}
+          transition={{ duration: DUR.base, ease: EASE.out, delay: Math.min(i * 0.015, 0.3) }}
         >
           <span className={KIND_CHIP[entry.kind]}>{KIND_LABEL[entry.kind]}</span>
 

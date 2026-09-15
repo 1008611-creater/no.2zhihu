@@ -3,6 +3,7 @@
 import { AnimatePresence, motion } from "motion/react";
 import { Kanshan } from "./Kanshan";
 import { FLOW_STATES, flowStateAt } from "./states";
+import { DUR } from "@/lib/motion/tokens";
 
 /**
  * 看山主持舞台：把产品流程的每一步映射成看山的一个状态。
@@ -28,7 +29,7 @@ export function KanshanStage({ step, size = 190, running = false }: KanshanStage
         <span className={`chip ${running ? "chip-blue" : "chip-green"}`}>
           <motion.span
             animate={running ? { opacity: [1, 0.25, 1] } : { opacity: 1 }}
-            transition={{ duration: 1.1, repeat: running ? Infinity : 0 }}
+            transition={{ duration: DUR.slower, repeat: running ? Infinity : 0 }}
             style={{ width: 6, height: 6, borderRadius: 999, background: "currentColor", display: "inline-block" }}
           />
           {running ? "处理中" : "就绪"}
@@ -43,7 +44,7 @@ export function KanshanStage({ step, size = 190, running = false }: KanshanStage
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
-          transition={{ duration: 0.24 }}
+          transition={{ duration: DUR.base }}
           style={{ textAlign: "center", minHeight: 52 }}
         >
           <div className="mono" style={{ color: "var(--blue-soft)", marginBottom: 5 }}>{label}</div>

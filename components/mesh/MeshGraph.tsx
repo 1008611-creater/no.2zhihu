@@ -5,6 +5,7 @@ import { forceCollide, forceLink, forceManyBody, forceRadial, forceSimulation, t
 import { scaleSqrt } from 'd3-scale';
 import { motion } from "motion/react";
 import type { MeshGraph as Graph, MeshNode } from "@/lib/domain/types";
+import { DUR, EASE, STAGGER } from "@/lib/motion/tokens";
 
 /**
  * Human Mesh 可视化。
@@ -129,7 +130,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
               strokeWidth={active ? 1.8 : 1}
               initial={{ pathLength: 0, opacity: 0 }}
               animate={{ pathLength: 1, opacity: active ? 1 : 0.7 }}
-              transition={{ duration: 0.7, delay: Math.min(i * 0.012, 0.5) }}
+              transition={{ duration: DUR.slower, delay: Math.min(i * STAGGER, 0.5) }}
             />
           );
         })}
@@ -147,7 +148,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
               onPointerDown={e => { e.stopPropagation(); drag.current = { id: n.id, x: e.clientX, y: e.clientY }; svgRef.current?.setPointerCapture(e.pointerId); }}
               initial={{ opacity: 0, scale: 0.4 }}
               animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.34, delay: Math.min(i * 0.02, 0.6) }}
+              transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.02, 0.6) }}
               onMouseEnter={() => setHover(n.id)}
               onMouseLeave={() => setHover(null)}
               style={{ cursor: "pointer", originX: `${p.x}px`, originY: `${p.y}px` }}

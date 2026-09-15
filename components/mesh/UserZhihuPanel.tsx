@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { motion } from "motion/react";
+import { DUR, EASE } from "@/lib/motion/tokens";
 
 /**
  * 登录后：把这位用户自己的知乎数据接进 Mesh。
@@ -166,7 +167,7 @@ export default function UserZhihuPanel({ userId }: { userId: string }) {
             className="card"
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.3, delay: Math.min(i * 0.05, 0.3) }}
+            transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.05, 0.3) }}
           >
             <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
               <span className="eyebrow" style={{ marginBottom: 0 }}>{it.name}</span>

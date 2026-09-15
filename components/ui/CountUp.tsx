@@ -2,6 +2,7 @@
 
 import { animate, useInView, useReducedMotion } from 'motion/react';
 import { useEffect, useRef } from 'react';
+import { DUR, EASE } from "@/lib/motion/tokens";
 
 export default function CountUp({ value }: { value: number }) {
   const ref = useRef<HTMLSpanElement>(null);
@@ -9,7 +10,7 @@ export default function CountUp({ value }: { value: number }) {
   const reduced = useReducedMotion();
   useEffect(() => {
     if (!visible || reduced) return;
-    const animation = animate(0, value, { duration: 0.6, ease: 'easeOut', onUpdate: n => {
+    const animation = animate(0, value, { duration: DUR.read, ease: EASE.out, onUpdate: n => {
       if (ref.current) ref.current.textContent = Math.round(n).toLocaleString('zh-CN');
     } });
     return () => animation.stop();

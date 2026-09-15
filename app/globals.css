@@ -32,6 +32,36 @@
 
   --shadow-lift: 0 18px 44px -22px rgba(0, 0, 0, 0.9);
   --shadow-glow-blue: 0 0 0 1px rgba(77, 124, 255, 0.28), 0 22px 60px -30px rgba(77, 124, 255, 0.55);
+
+  /* ── 动效：时长阶梯 ──────────────────────────────────────────────
+     按「人感知时间的粒度」分层，而不是按组件分。同一层级的交互无论
+     出现在哪个组件里，都必须取同一个值——这是「手感一致」的唯一来源。
+     数值依据：<100ms 被感知为「瞬时」，100–200ms 是「响应」，200–400ms
+     是「过渡」，>400ms 才有「演出感」。超过 600ms 的交互会显得迟钝。 */
+  --dur-instant: 90ms;    /* 按压、hover 变色：几乎无感，只为消除生硬跳变 */
+  --dur-fast: 160ms;      /* 按钮、chip、输入框焦点：即时反馈 */
+  --dur-base: 240ms;      /* 卡片展开、浮层出现：主力过渡时长 */
+  --dur-slow: 400ms;      /* 面板滑入、抽屉：需要被看见的动作 */
+  --dur-slower: 680ms;    /* 入场编排、页面转场：演出层 */
+  --dur-cinematic: 1200ms;/* 仅用于 IP 形象的呼吸与循环，不用于交互反馈 */
+
+  /* ── 动效：缓动曲线 ──────────────────────────────────────────────
+     四条曲线覆盖四类语义。默认不要用浏览器内置的 ease——它太软，
+     在中短时长里会显得「没力」。 */
+  /* 标准：绝大多数状态变化。起步快、收尾缓，像有质量的物体 */
+  --ease-standard: cubic-bezier(0.32, 0.72, 0, 1);
+  /* 出场（元素进入视野）：从静止加速，最后轻轻落定 */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* 入场（元素离开视野）：起步缓、加速离场，比出场更快更干脆 */
+  --ease-in: cubic-bezier(0.7, 0, 0.84, 0);
+  /* 强调：带一点点过冲，用于「这个变化值得注意」，克制使用 */
+  --ease-emphasis: cubic-bezier(0.34, 1.4, 0.64, 1);
+
+  /* 动效：间距与位移 ────────────────────────────────────────────
+     位移量比时长更容易被做过头。小元素小位移，大元素大位移。 */
+  --shift-sm: 6px;   /* 文字、图标级微动 */
+  --shift-md: 14px;  /* 卡片级入场 */
+  --shift-lg: 28px;  /* 区块级入场 */
 }
 
 * { box-sizing: border-box; }
@@ -114,18 +144,28 @@ body::before {
 .brand { display: flex; align-items: center; gap: 11px; text-decoration: none; color: inherit; }
 .brand-mark {
   width: 32px; height: 32px; border-radius: 10px;
-  background: linear-gradient(140deg, var(--blue), var(--violet) 62%, var(--green));
-  display: grid; place-items: center;
-  box-shadow: 0 0 24px -6px rgba(77, 124, 255, 0.8);
-  flex: none;
+  overflow: hidden; flex: none;
+  /* logo 自带暖白底砖，容器只负责裁圆角与隔离，不再叠加渐变和光晕，
+     否则会和 logo 自身的暖白底色打架。 */
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.28);
 }
+/* 品牌整体是链接，热区比 32px 的图标大得多。整块 brand 悬停 / 键盘聚焦
+   时都放大一点，配合 LogoMark 内部的分离动效，让「进站入口」有明确反馈。
+   缩放只做 1.04，品牌标识的第一职责始终是稳定可辨认。 */
+.brand { transition: transform var(--dur-fast) var(--ease-out); }
+.brand:hover,
+.brand:focus-within { transform: scale(1.04); }
+.brand-mark img { display: block; width: 100%; height: 100%; object-fit: cover; }
+/* 品牌文字是两行：主名 + 副标。缺了 display:grid 会退化成行内并排，
+   「影子知乎」和「Agent」会直接粘在一起。 */
+.brand-text { display: grid; gap: 1px; line-height: 1.15; }
 .brand-name { font-weight: 800; font-size: 15.5px; letter-spacing: -0.01em; }
 .brand-sub { color: var(--text-700); font-size: 11.5px; }
 
 .nav { display: flex; gap: 3px; margin-left: auto; flex-wrap: wrap; }
 .nav a {
   color: var(--text-500); text-decoration: none; font-size: 13px; font-weight: 600;
-  padding: 7px 13px; border-radius: 999px; transition: color 0.18s, background 0.18s;
+  padding: 7px 13px; border-radius: 999px; transition: color var(--dur-fast), background var(--dur-fast);
   white-space: nowrap;
 }
 .nav a:hover { color: var(--text-100); background: var(--ink-800); }
@@ -208,7 +248,7 @@ p { margin: 0; }
   font: inherit; font-weight: 700; font-size: 14px;
   padding: 12px 20px; border-radius: 999px; border: 1px solid var(--line);
   background: var(--ink-800); color: var(--text-100); cursor: pointer;
-  transition: transform 0.16s, background 0.18s, border-color 0.18s, opacity 0.18s;
+  transition: transform var(--dur-fast), background var(--dur-fast), border-color var(--dur-fast), opacity var(--dur-fast);
 }
 .btn:hover:not(:disabled) { transform: translateY(-1px); border-color: var(--ink-600); }
 .btn:disabled { opacity: 0.45; cursor: not-allowed; }
@@ -457,7 +497,7 @@ h1 em {
       color-mix(in srgb, var(--ks-accent) 34%, transparent),
       transparent 68%);
   filter: blur(16px);
-  transition: background 0.5s ease;
+  transition: background var(--dur-slow) ease;
 }
 .kanshan-ring {
   position: absolute;
@@ -508,15 +548,15 @@ h1 em {
    这里定义入场关键帧。
    ============================================================ */
 .page-enter {
-  animation: page-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: page-in var(--dur-slower) var(--ease-out) both;
 }
 @keyframes page-in {
-  from { opacity: 0; transform: translateY(14px); }
+  from { opacity: 0; transform: translateY(var(--shift-md)); }
   to   { opacity: 1; transform: translateY(0); }
 }
 
 /* 首屏错峰入场：不依赖 JS，页面一渲染就有节奏 */
-.rise { animation: rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.rise { animation: rise var(--dur-slower) var(--ease-out) both; }
 .rise-1 { animation-delay: 0.04s; }
 .rise-2 { animation-delay: 0.10s; }
 .rise-3 { animation-delay: 0.16s; }
@@ -546,7 +586,7 @@ button.chip {
   font: inherit;
   font-size: 11.5px;
   cursor: pointer;
-  transition: border-color 0.16s, color 0.16s, background 0.16s, transform 0.16s;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast), transform var(--dur-fast);
 }
 button.chip:hover { transform: translateY(-1px); border-color: var(--ink-600); color: var(--text-100); }
 button.chip[aria-pressed="true"],
@@ -570,14 +610,14 @@ button.chip[data-on="true"] {
   align-items: start;
   padding: 7px 10px;
   border-radius: 10px;
-  transition: background 0.2s, opacity 0.2s;
+  transition: background var(--dur-base), opacity var(--dur-base);
   opacity: 0.42;
 }
 .rail-step[data-on="true"] { opacity: 1; background: rgba(255, 255, 255, 0.035); }
 .rail-dot {
   width: 9px; height: 9px; margin-top: 6px; border-radius: 999px;
   background: var(--ink-600); justify-self: center;
-  transition: background 0.25s, box-shadow 0.25s;
+  transition: background var(--dur-base), box-shadow var(--dur-base);
 }
 .rail-step[data-on="true"] .rail-dot {
   background: linear-gradient(120deg, var(--blue), var(--violet));
@@ -648,7 +688,7 @@ button.chip[data-on="true"] {
 .persona-tile {
   text-decoration: none;
   color: inherit;
-  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s;
+  transition: transform var(--dur-base) var(--ease-out), border-color var(--dur-base);
 }
 .persona-tile:hover {
   transform: translateY(-3px);
@@ -681,7 +721,7 @@ button.chip[data-on="true"] {
   font-style: italic;
   line-height: 1;
   cursor: pointer;
-  transition: border-color 0.16s, color 0.16s, background 0.16s;
+  transition: border-color var(--dur-fast), color var(--dur-fast), background var(--dur-fast);
 }
 .persona-info-btn:hover,
 .persona-info-btn[aria-expanded="true"] {
