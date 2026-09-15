@@ -17,16 +17,23 @@
 
 ## 二、按任务查
 
+前端 v2 当前实现、验证及并发分支问题见 [frontend-v2-progress.md](frontend-v2-progress.md)。
+
+公共人物 / 名人能力蒸馏：先看 [女娲生产与产品接入规范](public-figure-skills.md)，生产任务命中 [女娲适配入口](skills/nuwa/SKILL.md)。工程路由已接入，人物内容和运行时启用需分别验收。
+
+v1 最新收尾证据与构建阻塞见 [v1-closeout-review.md](v1-closeout-review.md)。
+
 | 我要做的事 | 去看 |
 |---|---|
 | 加入项目、配环境、提 PR | [../CONTRIBUTING.md](../CONTRIBUTING.md) |
 | 了解仓库配置、角色权限、分支保护 | [repo-collaboration.md](repo-collaboration.md) |
 | 确认比赛规则、截止时间、还缺什么材料 | [prerequisites.md](prerequisites.md) |
 | 了解赛道定位、评审权重、答辩话术 | [prd.md](prd.md) |
+| 浏览答主名册 / 单个答主档案 | 页面 `/personas` 与 `/personas/<handle>`，数据源 `lib/domain/personas/` |
 | 加一个接口 / 改数据流 | [architecture.md](architecture.md) |
 | 提交前代码审查 / 找 bug | [skill-engineering.md](skill-engineering.md) §3 #1 → code-review-skill |
 | 调样式、加动效、配色 | [design-system.md](design-system.md) |
-| 做看山的形象与动效 | [character-engine.md](character-engine.md) |
+| 做看山的形象与动效（官方素材映射） | [character-engine.md](character-engine.md) |
 | 处理「不能直接发布到知乎」这件事 | [publish-path.md](publish-path.md) |
 | 看还剩哪些活、验收标准是什么 | [roadmap.md](roadmap.md) |
 | 本地跑起来 / 部署 / 出错 | [runbook.md](runbook.md) |
@@ -80,8 +87,9 @@
 ```
 app/                 Next.js App Router 页面与 API 路由
   api/zhihu/*        知乎能力代理（服务端，唯一能碰凭证的地方）
+  personas/          答主名册与答主档案（嵌套子页面）
 components/          UI 组件
-  kanshan/           看山角色引擎（Motion 驱动，10 状态）
+  kanshan/           看山角色引擎（官方素材映射，10 状态）
   mirror/            分身卡 / 回答卡 / 缺口卡 / 搬运面板
   mesh/              Human Mesh 关系图
   ui/                TopBar / QuotaBadge 等通用件

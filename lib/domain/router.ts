@@ -72,6 +72,68 @@ function keywordMatch(k: string, text: string): boolean {
   return hits.length >= 2;
 }
 
+/**
+ * 主题线索表：把「用户的口语提问」映射到最相关的答主。
+ *
+ * 为什么单靠 knows 不够：knows 写的是领域名词，用户提问常用生活口语。
+ * 例如「推荐几本适合入门的书」，陈章鱼 knows 里是「读书方法」，
+ * 两者没有共同的二字切片，纯字符串匹配会把 6 位答主全部打平，
+ * 默认推荐的 3 位就退化成名册顺序。
+ *
+ * 这张表是一层**可解释的加分层**：命中即加分并在卡片上写明理由，
+ * 仍然是零模型、零额度、同输入同输出。它只覆盖名册里真实存在的领域。
+ */
+const TOPIC_HINTS: Array<{ match: RegExp; handles: string[]; reason: string; weight: number }> = [
+  {
+    match: /(读书|书单|看书|阅读|荐书|选书|学习方法|知识管理|科普|入门)/,
+    handles: ["chen-zhang-yu"],
+    reason: "问题指向读书、学习与知识整理",
+    weight: 0.3,
+  },
+  {
+    match: /(焦虑|抑郁|失眠|情绪|心理|原生家庭|亲子|叛逆|亲密关系|婚姻|夫妻|自我)/,
+    handles: ["li-song-wei"],
+    reason: "问题落在心理与家庭关系上",
+    weight: 0.3,
+  },
+  {
+    match: /(职场|上司|领导|同事|内耗|讨好|边界|PUA|霸凌|打压|沟通|关系)/,
+    handles: ["li-song-wei"],
+    reason: "问题涉及职场关系与心理边界",
+    weight: 0.28,
+  },
+  {
+    match: /(结婚|离婚|相亲|彩礼|生育|催婚|单身|恋爱|分手|婚姻)/,
+    handles: ["li-song-wei"],
+    reason: "问题涉及亲密关系与家庭",
+    weight: 0.26,
+  },
+  {
+    match: /(物理|力学|电磁|相对论|量子|竞赛|科研|论文|读博|学术|考研|大学)/,
+    handles: ["splitter"],
+    reason: "问题涉及物理、科研或高校",
+    weight: 0.3,
+  },
+  {
+    match: /(工厂|车间|机械|加工|制造|技工|蓝领|流水线|设备|生产|招工|中小企业)/,
+    handles: ["da-meng"],
+    reason: "问题涉及制造业一线",
+    weight: 0.3,
+  },
+  {
+    match: /(创业|融资|商业模式|营销|流量|变现|资本|割韭菜|智商税|贷款|分期|生意|老板|大厂|转行|副业|裁员|独立开发)/,
+    handles: ["ban-fo-xian-ren"],
+    reason: "问题指向商业与资本逻辑",
+    weight: 0.3,
+  },
+  {
+    match: /(文学|小说|作家|写作|翻译|饮食|美食|做饭|篮球|足球|历史|旅行|巴黎|江南)/,
+    handles: ["zhang-jia-wei"],
+    reason: "问题落在文学、饮食或球赛",
+    weight: 0.3,
+  },
+];
+
 function scorePersona(persona: Persona, text: string): { score: number; reasons: string[] } {
   let score = 0.25;
   const reasons: string[] = [];
@@ -98,6 +160,15 @@ function scorePersona(persona: Persona, text: string): { score: number; reasons:
   if (stanceHits.length > 0) {
     score += 0.12;
     reasons.push("立场可能形成有价值的判断");
+  }
+
+  // 主题线索加分：把口语提问映射到最相关的答主，并把理由写进卡片。
+  for (const hint of TOPIC_HINTS) {
+    if (hint.handles.includes(persona.handle) && hint.match.test(text)) {
+      score += hint.weight;
+      reasons.push(hint.reason);
+      break;
+    }
   }
 
   if (PERSONAL.test(text) && persona.voice.sentenceLength === "short") {

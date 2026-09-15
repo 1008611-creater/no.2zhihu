@@ -1,0 +1,11 @@
+{
+  "note": "官方看山素材：anim/*.gif 为动态，still/*.png 为静态首帧（prefers-reduced-motion 兜底）",
+  "map": {
+    "待机_5秒_320x320_20fps_透明.gif": "idle.gif",
+    "打招呼_4秒_320x320_20fps_透明.gif": "greet.gif",
+    "晃悠_320x320_3秒_20fps_透明.gif": "sway.gif",
+    "电脑_6秒_320x320_20fps_透明.gif": "computer.gif",
+    "瞌睡_5秒_320x320_20fps_透明.gif": "sleepy.gif",
+    "运球_4秒_320x320_20fps_透明.gif": "ball.gif"
+  }
+}

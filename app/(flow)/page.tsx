@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import HeroTitle from '@/components/ui/HeroTitle';
+import { useInviteUrl } from '@/lib/motion/useInviteUrl';
 import { AnimatePresence, motion } from "motion/react";
 
 import { Kanshan } from "@/components/kanshan/Kanshan";
@@ -48,13 +50,15 @@ export default function Home() {
   const { mirror, setMirror, ready, appendInvite, appendReplies } = useMirror();
 
   const [question, setQuestion] = useState("");
+  // 从答主档案页「带他去提问」过来时带 ?persona=handle，用于预选这位答主。
+  const [preferred, setPreferred] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("ask");
   const [selected, setSelected] = useState<string[]>([]);
   const [running, setRunning] = useState(false);
   const [step, setStep] = useState(-1);
   const [error, setError] = useState<string | null>(null);
   const [invited, setInvited] = useState<string | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useInviteUrl();
   const [inviteNote, setInviteNote] = useState<string | null>(null);
 
   const resultRef = useRef<HTMLDivElement | null>(null);
@@ -66,9 +70,13 @@ export default function Home() {
   }, []);
 
   // 从虚拟广场点热榜条目过来时带 ?q=，直接填进输入框，省一步操作。
+  // 从答主档案页过来时带 ?persona=handle，记下这位答主，进选人步骤时优先选中。
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get("q");
+    const sp = new URLSearchParams(window.location.search);
+    const q = sp.get("q");
     if (q) setQuestion(q);
+    const p = sp.get("persona");
+    if (p) setPreferred(p);
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
@@ -106,10 +114,15 @@ export default function Home() {
     }
     setError(null);
     // 默认勾选推荐的前 3 位 —— 用户想直接开始就点确认，想换人就点卡片。
-    const top = personaCandidates(q).slice(0, DEFAULT_PICKS).map((c) => c.handle);
-    setSelected(top);
+    const ranked = personaCandidates(q).map((c) => c.handle);
+    // 从档案页带过来的答主排在第一位，保证「带他去提问」真的带上他。
+    const withPreferred =
+      preferred && ranked.includes(preferred)
+        ? [preferred, ...ranked.filter((h) => h !== preferred)]
+        : ranked;
+    setSelected(withPreferred.slice(0, Math.max(DEFAULT_PICKS, preferred ? 1 : 0)));
     setPhase("pick");
-  }, [question]);
+  }, [question, preferred]);
 
   const toggle = useCallback((handle: string) => {
     setSelected((cur) =>
@@ -203,11 +216,7 @@ export default function Home() {
         <div className="hero-grid">
           <div>
             <p className="eyebrow">HUMAN MESH · 0 级入口</p>
-            <h1>
-              让知乎上任何一个答主
-              <br />
-              <em>先替你把这个问题答一遍。</em>
-            </h1>
+            <HeroTitle />
             <p className="lede">
               输入问题，指定你想听谁回答 —— 哪怕他从没答过这个问题。看山会按这位答主的
               领域、立场和说话方式生成一份分身回答，再指出
@@ -521,15 +530,7 @@ export default function Home() {
               查看答主分身参与过的问题、证据和文风。当虚拟回答遇到真实世界的判断，邀请你接管。
             </p>
           </div>
-          <div className="meshmap">
-            <div className="orbit o1" />
-            <div className="orbit o2" />
-            <div className="node center">你</div>
-            <div className="node n1">答主</div>
-            <div className="node n2">问题</div>
-            <div className="node n3">证据</div>
-            <div className="node n4">缺口</div>
-          </div>
+          <div className="notice">提出第一个问题后，这里会生成真实的知识关系图。当前尚无关系数据。</div>
           {ready && (
             <div style={{ marginTop: 18, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Link className="btn btn-ghost" href="/square">

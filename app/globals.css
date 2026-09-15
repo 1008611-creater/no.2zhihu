@@ -36,12 +36,38 @@
 
 * { box-sizing: border-box; }
 
-html, body { padding: 0; margin: 0; }
+html, body { padding: 0; margin: 0; overscroll-behavior: none; }
+html { scroll-padding-top: 100px; }
+* { scrollbar-width: thin; scrollbar-color: var(--ink-600) transparent; }
+.skip-link { position: fixed; top: 8px; left: 8px; z-index: 100; padding: 12px 20px; background: var(--ink-950); color: var(--text-100); transform: translateY(-180%); }
+.skip-link:focus { transform: translateY(0); }
+.route-feedback { padding-block: clamp(40px, 8vw, 100px); display: grid; gap: 24px; }
+.route-feedback > .btn { justify-self: start; }
+.route-skeleton { min-height: 160px; }
+.feedback-actions { display: flex; flex-wrap: wrap; gap: 12px; }
+.journey-nav { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding-top: 20px; font-size: clamp(.75rem, 1vw, .875rem); color: var(--text-300); }
+.journey-nav a { display: inline-flex; align-items: center; min-height: 44px; padding: 8px 12px; color: inherit; border-bottom: 1px solid var(--line); text-decoration: none; }
+.journey-nav a[aria-current] { color: var(--blue-soft); border-color: var(--blue); }
+.flow-layout, .explore-layout { min-width: 0; }
+.mesh-interactive { touch-action: none; cursor: grab; }
+.chart-frame { height: 240px; min-width: 0; }
+.chart-values { padding-left: 20px; font-size: clamp(.8rem, 1vw, .95rem); }
+.evidence-details { margin-top: 24px; }
+.evidence-details summary { cursor: pointer; min-height: 44px; padding-block: 10px; }
+.evidence-timeline { display: flex; overflow-x: auto; gap: 24px; padding: 24px 0; list-style: none; }
+.evidence-timeline li { flex: 0 0 min(260px, 80vw); display: grid; gap: 12px; border-top: 2px solid var(--blue); padding-top: 16px; }
+.evidence-timeline time, .evidence-timeline span { color: var(--text-300); font-size: clamp(.75rem, 1vw, .875rem); }
+.mesh-interactive [role="button"]:focus { outline: none; }
+.mesh-interactive [role="button"]:focus circle { stroke: var(--text-100); stroke-width: 3px; }
+html.lenis, html.lenis body { height: auto; }
+.lenis.lenis-smooth { scroll-behavior: auto !important; }
+.lenis.lenis-stopped { overflow: clip; }
+.lenis-smooth iframe { pointer-events: none; }
 
 body {
   background: var(--ink-950);
   color: var(--text-100);
-  font-family: "Manrope", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, "Segoe UI", sans-serif;
+  font-family: var(--font-display), "PingFang SC", "HarmonyOS Sans", "Microsoft YaHei", system-ui, sans-serif;
   font-feature-settings: "ss01" 1, "cv01" 1;
   -webkit-font-smoothing: antialiased;
   line-height: 1.6;
@@ -67,7 +93,7 @@ body::before {
 }
 
 .mono {
-  font-family: "DM Mono", "SFMono-Regular", "JetBrains Mono", ui-monospace, "Menlo", monospace;
+  font-family: var(--font-mono), "SFMono-Regular", ui-monospace, monospace;
   font-size: 0.78em;
   letter-spacing: 0.02em;
 }
@@ -367,6 +393,252 @@ h1 em {
   .nav { gap: 0; }
   .nav a { padding: 6px 10px; font-size: 12px; }
 }
+
+
+
+/* ============================================================
+   看山舞台（官方素材版）
+   ------------------------------------------------------------
+   素材是 320×320 透明底成品动画，直接贴到深色舞台上会「浮」，
+   所以下面用一层柔光 + 一圈虚线装饰环把它按进画面里。
+   光晕颜色跟随状态色（--ks-accent），全站唯一的状态视觉语言。
+   ============================================================ */
+.kanshan {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  --ks-accent: var(--blue);
+}
+.kanshan[data-accent="violet"] { --ks-accent: var(--violet); }
+.kanshan[data-accent="green"]  { --ks-accent: var(--green); }
+.kanshan[data-accent="orange"] { --ks-accent: var(--orange); }
+
+.kanshan-glow {
+  position: absolute;
+  inset: 6%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 42% 34%,
+      color-mix(in srgb, var(--ks-accent) 34%, transparent),
+      transparent 68%);
+  filter: blur(16px);
+  transition: background 0.5s ease;
+}
+.kanshan-ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--ks-accent) 46%, transparent);
+  opacity: 0.55;
+  animation: ks-spin 44s linear infinite;
+}
+@keyframes ks-spin { to { transform: rotate(360deg); } }
+
+.kanshan-img {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.55));
+  animation: ks-float 5.4s ease-in-out infinite;
+}
+@keyframes ks-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+/* 舞台容器：把看山和流程文案收进一张卡 */
+.kanshan-stage { position: relative; overflow: hidden; }
+.kanshan-stage::after {
+  content: "";
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 42%;
+  background: linear-gradient(180deg, transparent, rgba(7, 8, 15, 0.55));
+  pointer-events: none;
+}
+
+/* ============================================================
+   页面过渡：用 View Transitions + 入场动画双保险。
+   Next App Router 里 template.tsx 负责每次导航重新挂载，
+   这里定义入场关键帧。
+   ============================================================ */
+.page-enter {
+  animation: page-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 首屏错峰入场：不依赖 JS，页面一渲染就有节奏 */
+.rise { animation: rise 0.62s cubic-bezier(0.22, 1, 0.36, 1) both; }
+.rise-1 { animation-delay: 0.04s; }
+.rise-2 { animation-delay: 0.10s; }
+.rise-3 { animation-delay: 0.16s; }
+.rise-4 { animation-delay: 0.22s; }
+.rise-5 { animation-delay: 0.30s; }
+@keyframes rise {
+  from { opacity: 0; transform: translateY(18px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   交互反馈：焦点环 + 按压 + 可点 chip
+   ============================================================ */
+:focus-visible {
+  outline: 2px solid var(--blue-soft);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+.btn:active:not(:disabled) { transform: translateY(0) scale(0.985); }
+.btn-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+  box-shadow: 0 18px 42px -18px rgba(77, 124, 255, 1);
+}
+.btn-ghost:hover:not(:disabled) { background: var(--ink-800); }
+
+button.chip {
+  font: inherit;
+  font-size: 11.5px;
+  cursor: pointer;
+  transition: border-color 0.16s, color 0.16s, background 0.16s, transform 0.16s;
+}
+button.chip:hover { transform: translateY(-1px); border-color: var(--ink-600); color: var(--text-100); }
+button.chip[aria-pressed="true"],
+button.chip[data-on="true"] {
+  border-color: color-mix(in srgb, var(--blue) 60%, transparent);
+  color: var(--blue-soft);
+  background: rgba(77, 124, 255, 0.12);
+}
+
+/* 卡片作为按钮时（答主选择）也要有按压反馈 */
+.card[role="button"]:active, button.card:active { transform: scale(0.994); }
+
+/* ============================================================
+   流程轨道：首页把 8 步收成一条可读的轨道，替代长列表
+   ============================================================ */
+.rail { display: grid; gap: 8px; }
+.rail-step {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  align-items: start;
+  padding: 7px 10px;
+  border-radius: 10px;
+  transition: background 0.2s, opacity 0.2s;
+  opacity: 0.42;
+}
+.rail-step[data-on="true"] { opacity: 1; background: rgba(255, 255, 255, 0.035); }
+.rail-dot {
+  width: 9px; height: 9px; margin-top: 6px; border-radius: 999px;
+  background: var(--ink-600); justify-self: center;
+  transition: background 0.25s, box-shadow 0.25s;
+}
+.rail-step[data-on="true"] .rail-dot {
+  background: linear-gradient(120deg, var(--blue), var(--violet));
+  box-shadow: 0 0 12px -1px rgba(77, 124, 255, 0.9);
+}
+.rail-step[data-done="true"] .rail-dot { background: var(--green); box-shadow: none; }
+.rail-label { font-weight: 700; font-size: 13px; }
+.rail-caption { font-size: 12px; color: var(--text-500); }
+
+/* ============================================================
+   移动端导航：折叠成抽屉
+   ============================================================ */
+.nav-toggle {
+  display: none;
+  margin-left: auto;
+  width: 40px; height: 40px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--ink-850);
+  color: var(--text-100);
+  cursor: pointer;
+  place-items: center;
+}
+.nav-toggle:hover { border-color: var(--ink-600); }
+.nav-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(4, 5, 12, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 45;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.nav-drawer {
+  position: fixed;
+  top: 0; right: 0; bottom: 0;
+  width: min(300px, 82vw);
+  z-index: 50;
+  background: linear-gradient(180deg, var(--ink-900), var(--ink-950));
+  border-left: 1px solid var(--line);
+  padding: 22px 18px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+}
+.nav-drawer a {
+  display: block;
+  padding: 12px 14px;
+  border-radius: 12px;
+  color: var(--text-300);
+  text-decoration: none;
+  font-weight: 650;
+  font-size: 15px;
+}
+.nav-drawer a:hover { background: var(--ink-800); color: var(--text-100); }
+.nav-drawer a[data-active="true"] { background: var(--ink-700); color: var(--text-100); }
+
+@media (max-width: 860px) {
+  .nav { display: none; }
+  .nav-toggle { display: grid; }
+}
+
+
+/* ============================================================
+   答主名册卡片：整卡可点，hover 抬升，不堆阴影
+   ============================================================ */
+.persona-tile {
+  text-decoration: none;
+  color: inherit;
+  transition: transform 0.2s cubic-bezier(0.22, 1, 0.36, 1), border-color 0.2s;
+}
+.persona-tile:hover {
+  transform: translateY(-3px);
+  border-color: var(--ink-600);
+}
+.persona-tile .link { border-bottom: 0; }
+.persona-tile:hover .link { border-bottom: 1px solid rgba(147, 176, 255, 0.45); }
+
+/* ============================================================
+   答主详情页
+   ============================================================ */
+.persona-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 200px;
+  gap: 28px;
+  align-items: center;
+}
+.persona-mono {
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  color: var(--text-700);
+}
+@media (max-width: 720px) {
+  .persona-hero { grid-template-columns: 1fr; }
+  .persona-hero .kanshan { order: -1; justify-self: start; }
+}
+
+/* ============================================================
+   骨架屏更克制：只在真正等待时出现
+   ============================================================ */
+.skeleton { border: 1px solid var(--line-soft); }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

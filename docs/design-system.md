@@ -31,10 +31,13 @@
 
 | 状态色 | 主 | 浅 | 语义 |
 |---|---|---|---|
-| blue | `#4d7cff` | `#93b0ff` | 亲历者 / 一手经验 |
-| violet | `#8b5cf6` | `#c0a4ff` | 拆解者 / 结构分析 |
-| green | `#2fbf8f` | `#86e5c4` | 实操派 / 可执行方法 |
-| orange | `#ff8a4c` | `#ffbb92` | 反驳者 + 风险审计 / 缺口 |
+| blue | `#4d7cff` | `#93b0ff` | 答主 A 组（贱贱 / 陈章鱼）+ 视角型补充层 |
+| violet | `#8b5cf6` | `#c0a4ff` | 答主 B 组（张佳玮）+ 拆解者 |
+| green | `#2fbf8f` | `#86e5c4` | 答主 C 组（李松蔚）+ 实操派 |
+| orange | `#ff8a4c` | `#ffbb92` | 答主 D 组（半佛仙人 / 大猛）+ 缺口 |
+
+> v1 起状态色按**答主人格**分配（见 `lib/domain/personas/` 里各 `accent`），
+> 视角型补充层沿用旧映射。**orange 仍是缺口专用色**。
 
 文字层级：`--text-100` 正文主色 → `--text-300` 次要 → `--text-500` 辅助 → `--text-700` 极弱（仅标签）。
 
@@ -102,6 +105,11 @@
 | `.notice` | 虚线描边，用于降级/错误提示。`notice-warn` / `notice-info` 两种语气 |
 | `.btn-primary` | 蓝紫渐变，无描边。**全页面最多一处主按钮** |
 | `.stat-n` | DM Mono，26px，用于统计数字 |
+| `.kanshan` | 看山舞台：状态色光晕 + 缓慢旋转装饰环 + 官方 GIF/PNG。`data-accent` 决定配色 |
+| `.persona-tile` | 答主名册卡片，整卡可点，hover 上移 3px，不做阴影堆叠 |
+| `.rail / .rail-step` | 流程轨道：8 步收成一条可读竖列，当前步高亮、已完成转绿 |
+| `.nav-drawer` | 窄屏（≤860px）导航抽屉，弹簧滑入，Esc / 点击遮罩关闭 |
+| `.page-enter / .rise-1..5` | 页面入场与首屏错峰入场，纯 CSS 关键帧，不依赖 JS |
 
 ## 七、页面节奏（首页）
 
@@ -119,6 +127,6 @@
 
 ## 八、产出状态
 
-- [x] 项目 icon —— `app/icon.svg`（矢量，几何化看山，随 `app/manifest.ts` 注册）
-- [x] 项目封面图 —— `docs/assets/cover.svg`（1600×900，大标题 + 原创几何看山 + 坐标纸网格）
+- [x] 项目 icon —— `app/icon.svg`（矢量几何标记，随 `app/manifest.ts` 注册；角色形象本身用官方素材）
+- [x] 项目封面图 —— `docs/assets/cover.svg`（1600×900，大标题 + 坐标纸网格；看山形象以官方素材为准）
 - [x] 缺口动效与分镜说明 —— `docs/demo-video-script.md`
