@@ -2,8 +2,8 @@
 
 - **工作区**：`E:\codex\_dev2`（clone；`node_modules` 是指向主工作区的 junction，
   删这个目录会连带删掉主工作区的 `node_modules`）
-- **分支**：`fix/square-source-attribution` @ 基线 `529df3f`（PR #53）
-  ｜`docs/submission-persona-facts` @ 基线 `1a5bd3a`（PR #61，纯文档）
+- **分支**：`fix/square-source-attribution` @ 基线 `529df3f`（PR #53，**已合并** `c474450`）
+  ｜`docs/submission-persona-facts` @ 基线 `1a5bd3a`（PR #61，**已合并** `4f4cdfd`）
 - **正在改**：
   - `lib/domain/evidence.ts`（新增：来源可用性判定，纯函数，供 domain 与展示层共用）
   - `lib/domain/library.ts`（`evidenceTitles` → `sources`；按「可展示」口径统计）
@@ -14,8 +14,11 @@
   - `components/square/FeedStream.tsx`（死文件，同步类型，已标注）
   - `public/square-library.json`（数据：195 条来源，190 条可取回署名，97.4%）
   - `docs/submission.md`（PR #61：提交物改称「15 位蒸馏 + 蒋校长预置」，原写 16 位全部蒸馏）
-- **状态**：已提 PR #53（广场来源署名）与 PR #61（提交物事实对齐），均等审计上线线程合并
-- **最后更新**：2026-09-15 20:40
+- **状态**：**本线程收工** —— 两个 PR 均已合并
+  ｜PR #53（广场来源署名）`c474450`；线上核对：22 场 / 66 回答、195 条来源、190 条可核对（97.4%）
+  ｜PR #61（提交物事实对齐）`4f4cdfd`；`docs/submission.md` 改称「15 位蒸馏 + 蒋校长预置」
+  ｜下面两条待办已移交审计线程（两个 PR 的描述里也各写了一份）
+- **最后更新**：2026-09-15 21:05
 - **备注**：修 `/square` 来源署名缺失 —— `slim()` 过去只留标题，导致 22 场 / 66 篇的
   `sources` 全空、广场回答点不到原文（违反铁律 3）。回填走的是「标题全等」再检索，
   没有重跑 66 次直答。
