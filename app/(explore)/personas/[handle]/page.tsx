@@ -37,8 +37,8 @@ export default function PersonaDetailPage() {
         <p className="lede" style={{ marginTop: 14 }}>
           这个 handle 不在当前答主名册里。可能是链接写错了，或者名册已经更新。
         </p>
-        <Link className="btn btn-primary" href="/personas" style={{ marginTop: 20 }}>
-          回答主名册
+        <Link className="btn btn-primary" href="/discover" style={{ marginTop: 20 }}>
+          回分身发现
         </Link>
       </section>
     );
@@ -73,8 +73,8 @@ export default function PersonaDetailPage() {
               <Link className="btn btn-primary" href={"/?persona=" + p.handle}>
                 让他来答一个问题
               </Link>
-              <Link className="btn btn-ghost" href="/personas">
-                回答主名册
+              <Link className="btn btn-ghost" href="/discover">
+                回分身发现
               </Link>
             </div>
           </div>
@@ -354,8 +354,8 @@ export default function PersonaDetailPage() {
             <Link className="btn btn-primary" href={"/?persona=" + p.handle}>
               带他去提问
             </Link>
-            <Link className="btn btn-ghost" href="/personas">
-              看看别人
+            <Link className="btn btn-ghost" href="/discover">
+              看看别的分身
             </Link>
           </div>
         </div>

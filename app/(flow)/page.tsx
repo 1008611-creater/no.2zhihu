@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import HeroTitle from '@/components/ui/HeroTitle';
 import { useInviteUrl } from '@/lib/motion/useInviteUrl';
 import { AnimatePresence, motion } from "motion/react";
@@ -11,29 +12,34 @@ import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import { FLOW_STATES, flowStateAt } from "@/components/kanshan/states";
 import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDrawer";
 import PersonaPicker from "@/components/mirror/PersonaPicker";
-import FeedStream from "@/components/square/FeedStream";
+// 只取「争议题」清单当提问灵感 —— 首页不再渲染整条广场信息流（那是 /square 的职责）。
+import { DISCUSSION_TOPICS } from "@/components/square/FeedStream";
 import { personaCandidates, type PersonaCandidate } from "@/lib/domain/router";
 import { useMirror } from "@/lib/store/mirror-store";
 import { DUR, EASE } from "@/lib/motion/tokens";
 
 /**
- * 首页 = 提问入口 + 广场信息流。
+ * 首页 = 提问主线唯一入口。
  *
  * v1 主叙事（2026-09-14 重构）：不是「抽象视角」，而是「具体知乎答主的分身」。
  * 提问 → 选答主 → 每位答主按自己的领域/立场/说话方式作答。
  *
- * 2026-09-15 收敛（评委反馈）：
- *   · 首页不再铺开全部结果 —— 答主阵容、回答群组、缺口、Mesh 都与 /mirror 重复，
- *     现在统一由 /mirror（首页的子级页面）承载，生成完成后直接跳过去。
- *   · 空闲态不再是一块说明文字，而是**广场信息流**：主体是已经做完的
- *     镜像讨论组，后面跟知乎热榜，点任意一条就能变成新的镜像问题。
+ * 2026-09-15 收敛（评委反馈）：首页不再铺开全部结果 —— 答主阵容、回答群组、缺口、
+ * Mesh 都与 /mirror 重复，统一由 /mirror（提问流程的第二站）承载，生成完直接跳过去。
+ *
+ * 2026-09-15 两条主线重构：首页**只管提问**。
+ *   · 原先空闲态铺的是整条广场信息流（已完成的镜像讨论组 + 热榜），与 `/square`
+ *     完全是同一条流 —— 同一份内容出现在两个 Tab 里，而且它展示的是「哪些分身答过
+ *     什么」，属于「分身发现」那条主线，长在提问页上正是「两条主线混在一起」的来源。
+ *     现在整条流只留在 `/square`，首页只留「不知道问什么」时用得上的争议题快填。
+ *   · 另起一块把两条主线各自去哪儿说清楚，用户不用猜「这里还有没有别的东西」。
  *
  * 文案约定（req 10）：大字后面不加解释性小字，大字末尾不加句号。
  *   HeroTitle 与各 section 标题统一走 `className="no-tail"`，
  *   配套的 `.no-tail + .lede / .no-tail + .dim { display: none }` 兜住残留小字。
  *
  * 三步状态机（phase）：
- *   ask   —— 输入问题（下方是广场信息流）
+ *   ask   —— 输入问题
  *   pick  —— 选答主（默认勾选推荐 3 位）
  *   run   —— 生成中，完成后跳转到 /mirror#answers
  */
@@ -45,7 +51,7 @@ type Phase = "ask" | "pick" | "run";
 
 export default function Home() {
   const router = useRouter();
-  const { mirror, setMirror, ready, appendInvite } = useMirror();
+  const { mirror, setMirror, appendInvite } = useMirror();
 
   const [question, setQuestion] = useState("");
   // 从答主档案页「带他去提问」过来时带 ?persona=handle，用于预选这位答主。
@@ -323,17 +329,70 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* ------------------------------ 广场信息流 ------------------------------ */}
+      {/* ------------------------------ 两条主线 ------------------------------ */}
       {phase === "ask" && (
         <section className="section">
           <div className="section-head">
             <div>
-              <p className="eyebrow">Virtual square · 虚拟广场</p>
-              <h2 className="no-tail">这座虚拟知乎里已经讨论过的事</h2>
+              <p className="eyebrow">Two tracks · 两条主线</p>
+              <h2 className="no-tail">提问在这里，逛人在分身发现</h2>
             </div>
           </div>
-          {ready && <FeedStream hotLimit={20} />}
-          {!ready && <div className="skeleton" style={{ height: 260 }} />}
+
+          <div className="grid grid-2">
+            <div className="card" style={{ borderColor: "rgba(77,124,255,0.4)" }}>
+              <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>主线一 · 提问</h3>
+                <span className="chip chip-blue">你在这里</span>
+              </div>
+              <p className="dim" style={{ fontSize: 13, marginTop: 10 }}>
+                提一个问题，挑几位答主，他们各自取证据、各自作答；看山把分歧和缺口一并标出来。
+              </p>
+              <div className="mono dimmer" style={{ fontSize: 11.5, marginTop: 12 }}>
+                提问 → 查看回答 → 真人补充（子页面）
+              </div>
+            </div>
+
+            <Link
+              className="card"
+              href="/discover"
+              style={{ display: "block", textDecoration: "none", color: "inherit" }}
+            >
+              <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>主线二 · 分身发现</h3>
+                <span className="chip chip-violet">另一个 Tab</span>
+              </div>
+              <p className="dim" style={{ fontSize: 13, marginTop: 10 }}>
+                先看看这座虚拟知乎里住着谁 —— 每位答主的领域、立场、说话方式，以及他明确不装懂的范围。
+              </p>
+              <span className="link mono" style={{ fontSize: 11.5, display: "inline-block", marginTop: 12 }}>
+                去看这座虚拟知乎里住着谁 →
+              </span>
+            </Link>
+          </div>
+
+          <div className="mono dimmer" style={{ fontSize: 11.5, marginTop: 14 }}>
+            其他入口：
+            <Link className="link" href="/square">虚拟广场</Link>
+            （已经跑完的讨论组）
+            {" · "}
+            <Link className="link" href="/mesh">我的 Mesh</Link>
+            （我的分身答过什么、把回答搬回知乎）
+          </div>
+
+          <div className="section-head" style={{ marginTop: 30 }}>
+            <div>
+              <p className="eyebrow">Starter · 没想好问什么</p>
+              <h2 className="no-tail">从这些争议题开始</h2>
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+            {DISCUSSION_TOPICS.slice(0, 6).map((t) => (
+              <button key={t} className="chip" style={{ cursor: "pointer" }} onClick={() => setQuestion(t)}>
+                {t}
+              </button>
+            ))}
+          </div>
         </section>
       )}
 

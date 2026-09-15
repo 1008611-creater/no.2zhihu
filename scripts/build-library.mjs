@@ -2,7 +2,7 @@
 /**
  * 广场镜像问题库 —— 把「已完成的镜像讨论组」预生成成一份静态 JSON。
  *
- * 消费端：components/square/FeedStream.tsx（首页与 /square 共用）。
+ * 消费端：components/square/FeedStream.tsx（只服务 `/square`，见 2026-09-15 两条主线重构）。
  *   它 fetch `/square-library.json`，把条目还原成可载入工作台的镜像问题。
  *   改本文件的 slim() 必须同步改那边的 hydrate()，否则广场会出现空条目。
  *

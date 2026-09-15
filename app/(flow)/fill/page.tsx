@@ -9,7 +9,11 @@ import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import { SHIFT } from "@/lib/motion/tokens";
 
 /**
- * 真人补充页。
+ * 真人补充页 —— 提问流程下的子页面。
+ *
+ * 2026-09-15 两条主线重构：它原先在流程条里与「提问 / 查看回答」并列成第三步，
+ * 读起来像每个人都要走的阶段。实际上它只发生在看山标出缺口、或你决定接管某一篇
+ * 回答之后，因此降级为 `/mirror` 下面的子页面（流程条上以 `↳` 出现）。
  *
  * 两种模式对应两类真人：
  *   - 最小填空：只补一句最关键的事实（最新价格、上个月排期、只有内部人知道的坑），
@@ -99,7 +103,7 @@ function FillContent() {
         <div className="grid grid-3" style={{ marginTop: 24 }}>
           <Link className="btn btn-primary" href="/mirror">回工作台看搬运</Link>
           <Link className="btn" href="/mesh">查看 Mesh 变化</Link>
-          <Link className="btn btn-ghost" href="/feed">分身动态</Link>
+          <Link className="btn btn-ghost" href="/square">虚拟广场</Link>
         </div>
         <div style={{ marginTop: 26, maxWidth: 420 }}>
           <KanshanStage step={8} running={false} size={170} />
@@ -111,7 +115,10 @@ function FillContent() {
   return (
     <>
       <section style={{ paddingTop: 44 }}>
-        <p className="eyebrow">Human fill</p>
+        {/* 真人补充是提问流程的子页面：从「看山标出的缺口」或单篇回答的「我来接管」进来，
+            不是每个人都要走的第三步，所以顶部给一条明确的回程。 */}
+        <Link className="link mono" href="/mirror">← 回本场回答</Link>
+        <p className="eyebrow" style={{ marginTop: 18 }}>Human fill · 提问流程 · 真人补充</p>
         <h1 style={{ maxWidth: "22ch" }}>补上 AI 答不了的那一段</h1>
         <p className="lede" style={{ marginTop: 16 }}>
           你不需要重写整篇。只要补上 AI 拿不到的那一块 —— 一个最新数字、一处被忽略的成本、

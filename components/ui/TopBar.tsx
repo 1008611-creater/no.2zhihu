@@ -9,11 +9,25 @@ import { LogoMark } from "./LogoMark";
 import { DUR, SPRING } from "@/lib/motion/tokens";
 import { useSession } from "@/lib/hooks/useSession";
 
-const NAV = [
-  { href: "/", label: "首页" },
+/**
+ * 主导航 = 两条主线 + 两个支撑区。
+ *
+ * 2026-09-15 两条主线重构：原先「分身发现」指向 `/mirror`，而 `/mirror` 是
+ * 提问流程的第二站（本场结果），于是点「分身发现」进来看到的却是自己那一场
+ * 讨论的回答 —— 名实不符。现在 `/discover` 是真正的名册页，两条主线各归各位：
+ *
+ *   提问主线   `/` → `/mirror` → `/fill`（子页面）→ `/answer/[id]`（子页面）
+ *   发现主线   `/discover` → `/personas/[handle]`
+ *
+ * `also` 是「同属这个 Tab 但不以它开头」的路由前缀，用于高亮与移动端抽屉。
+ */
+type NavItem = { href: string; label: string; also?: string[] };
+
+const NAV: NavItem[] = [
+  { href: "/", label: "提问", also: ["/mirror", "/fill", "/answer"] },
+  { href: "/discover", label: "分身发现", also: ["/personas"] },
   { href: "/square", label: "虚拟广场" },
-  { href: "/mirror", label: "分身发现" },
-  { href: "/mesh", label: "我的 Mesh" }
+  { href: "/mesh", label: "我的 Mesh" },
 ];
 
 /**
@@ -85,9 +99,9 @@ export function TopBar() {
 
         <nav className="nav" aria-label="主导航">
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} data-active={isActive(path, n.href)} aria-current={isActive(path, n.href) ? 'page' : undefined}>
+            <Link key={n.href} href={n.href} data-active={isActive(path, n)} aria-current={isActive(path, n) ? 'page' : undefined}>
               {n.label}
-              {isActive(path, n.href) && <motion.span aria-hidden="true" className="nav-active-marker" layoutId={reducedMotion ? undefined : 'nav-active'} transition={{ type: 'spring', stiffness: 260, damping: 26 }} />}
+              {isActive(path, n) && <motion.span aria-hidden="true" className="nav-active-marker" layoutId={reducedMotion ? undefined : 'nav-active'} transition={{ type: 'spring', stiffness: 260, damping: 26 }} />}
             </Link>
           ))}
         </nav>
@@ -159,7 +173,7 @@ export function TopBar() {
             >
               <button className="btn btn-ghost" onClick={() => setOpen(false)}>关闭导航</button>
               {NAV.map((n) => (
-                <Link key={n.href} href={n.href} data-active={isActive(path, n.href)}>
+                <Link key={n.href} href={n.href} data-active={isActive(path, n)}>
                   {n.label}
                 </Link>
               ))}
@@ -178,10 +192,11 @@ export function TopBar() {
   );
 }
 
-/** 子路由也算激活（例如 /personas/xxx 时「分身发现」保持高亮）。 */
-function isActive(path: string, href: string): boolean {
-  if (href === "/") return path === "/";
-  return path === href || path.startsWith(href + "/");
+/** 子路由也算激活（例如 /personas/xxx 时「分身发现」保持高亮，/mirror 时「提问」保持高亮）。 */
+function isActive(path: string, item: NavItem): boolean {
+  return [item.href, ...(item.also ?? [])].some((p) =>
+    p === "/" ? path === "/" : path === p || path.startsWith(p + "/"),
+  );
 }
 
 export default TopBar;
