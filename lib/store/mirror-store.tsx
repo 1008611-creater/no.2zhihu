@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { normalizeMirror, normalizeMirrorList, normalizeAnswer, type StoredAnswer } from "@/lib/domain/mirror-normalize";
 import type { AnswerDraft, ContributionEvent, MirrorQuestion, Skill } from "@/lib/domain/types";
 
 /**
@@ -41,9 +42,22 @@ interface Store extends Persisted {
 
 const Ctx = createContext<Store | null>(null);
 
+/**
+ * 落盘。
+ *
+ * ⚠️ 出盘前统一过一遍 `normalizeMirror` —— 这是**所有写入的唯一收口**，
+ * 放在这里等于一条不变量：**磁盘上永远不存在结构残缺的镜像**。
+ * 起因见 lib/domain/mirror-normalize.ts 的文件头（互相回应缺 evidence
+ * 导致 /mirror 白屏，而且已经写进了用户 localStorage）。
+ * 只补结构、不编内容，所以对正常数据是恒等变换，代价是一次浅拷贝。
+ */
 function persist(state: Persisted): void {
   try {
-    localStorage.setItem(KEY, JSON.stringify({ mirror: state.mirror, history: state.history.slice(0, MAX_HISTORY) }));
+    const clean: Persisted = {
+      mirror: state.mirror ? normalizeMirror(state.mirror) : null,
+      history: normalizeMirrorList(state.history.slice(0, MAX_HISTORY)),
+    };
+    localStorage.setItem(KEY, JSON.stringify(clean));
   } catch {
     /* 存储不可用时只保留内存状态 */
   }
@@ -58,7 +72,18 @@ export function MirrorProvider({ children }: { children: React.ReactNode }) {
       const raw = localStorage.getItem(KEY);
       if (raw) {
         const parsed = JSON.parse(raw) as Partial<Persisted>;
-        setState({ mirror: parsed.mirror ?? null, history: parsed.history ?? [] });
+        // 读盘也过一遍：修复**已经**落盘的残缺数据（用户不必手动清缓存）。
+        // 与 persist 里的那次是同一函数，幂等，正常数据无变化。
+        const clean: Persisted = {
+          mirror: parsed.mirror ? normalizeMirror(parsed.mirror) : null,
+          history: normalizeMirrorList(parsed.history ?? []),
+        };
+        setState(clean);
+        // 只有真的改动了才写回 —— 让「磁盘上不留残缺数据」这条不变量成立，
+        // 又不在每次打开页面时白写一遍（15KB 级别，虽然不贵但没必要）。
+        // 比较用的是序列化结果：normalize 保留键顺序，没改动时两者逐字节相同。
+        const next = JSON.stringify(clean);
+        if (next !== raw) localStorage.setItem(KEY, next);
       }
     } catch {
       /* 忽略损坏的本地数据 */
@@ -205,9 +230,15 @@ export function MirrorProvider({ children }: { children: React.ReactNode }) {
 
   const appendReplies = useCallback((replies: AnswerDraft[]) => {
     if (replies.length === 0) return;
+    // 服务端响应在进内存之前先补齐结构（缺 evidence 会让下游 for..of 抛错）。
+    // 这一层是「服务端漏字段」与「用户界面」之间的最后一道闸。
+    const incoming = replies
+      .map((r) => normalizeAnswer(r as unknown as StoredAnswer))
+      .filter((r): r is AnswerDraft => r !== null);
+    if (incoming.length === 0) return;
     commit((m) => {
       const seen = new Set(m.answers.map((a) => a.id));
-      const fresh = replies.filter((r) => !seen.has(r.id));
+      const fresh = incoming.filter((r) => !seen.has(r.id));
       if (fresh.length === 0) return m;
       return { ...m, answers: [...m.answers, ...fresh] };
     });

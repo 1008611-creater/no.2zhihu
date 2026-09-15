@@ -294,18 +294,24 @@ export interface DebateEntry {
   body: string;
 }
 
-export interface DebateReply {
-  id: string;
-  skillId: string;
-  skillName: string;
-  accent: Skill["accent"];
-  handle?: string;
-  body: string;
+/**
+ * 一轮互相回应产出的「回答」。
+ *
+ * ⚠️ 2026-09-15 修（实测事故）：原先这个接口**只有** replyTo/生成的几个字段，
+ * 缺 `evidence` / `status` / `round`。前端 `appendReplies` 把它按 `AnswerDraft`
+ * 直接追加进 `mirror.answers`，于是下游三个纯函数立刻炸：
+ *   · lib/domain/handoff.ts  `for (const e of a.evidence)` → TypeError:
+ *     `a.evidence is not iterable`（实测线上真实堆栈，整页白屏）
+ *   · lib/domain/gap.ts      `answers.flatMap((a) => a.evidence)` 同理
+ *   · components/mirror/page `(a.round ?? 0) === 0` 把回应误判成首轮作答
+ * 修法是让服务端产出的对象**本身就是合法的 AnswerDraft** —— 缺字段靠
+ * 类型系统挡住，而不是靠调用方逐个补 `?? []`（那会把 bug 藏起来）。
+ */
+export type DebateReply = AnswerDraft & {
   replyTo: string;
   replyToName: string;
-  createdAt: number;
-  generatedBy: "zhida" | "retrieval";
-}
+  round: 1;
+};
 
 /**
  * 一轮互相回应：找出这组回答里最尖锐的一处冲突，让双方各回一段。
@@ -1114,6 +1120,11 @@ function parseReplies(raw: string, left: DebateEntry, right: DebateEntry): Debat
       accent: accentOfHandle(speaker.handle),
       handle: speaker.handle,
       body: hit.body.slice(0, 400),
+      // 回应不引入新证据：它只针对对方已经说过的内容，所以 evidence 必须是空数组
+      // 而不是「缺席」。缺席会让下游 `for (const e of a.evidence)` 抛错（见上方注释）。
+      evidence: [],
+      status: "ai",
+      round: 1,
       replyTo: opponent.id,
       replyToName: opponent.name,
       createdAt: Date.now(),

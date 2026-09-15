@@ -798,6 +798,28 @@ button.chip[data-on="true"] {
   cursor: default;
 }
 .persona-popover:focus { outline: none; }
+
+/* 浮层必须压过同网格里的其他卡片。
+ *
+ * ⚠️ 2026-09-15 修（实测事故）：.persona-popover 自己写了 z-index: 60，
+ * 但那**没用** —— 名册的每张卡都包在一个 motion.div 里做入场动画
+ * （`y: 14 → 0`），动画结束后 motion 把 `transform: translateY(0px)` 留在
+ * 内联样式上；**有 transform 的元素会自建 stacking context**。
+ * 于是那个 z-index:60 只有「在这张卡内部」的意义，跨卡片比较时
+ * 所有卡片都是 z-index:auto，只能按 DOM 顺序绘画 —— DOM 靠后的卡片
+ * 直接盖在浮层上面。
+ * 实测（1440 宽、16 张卡）：tile 0/1/2/3/5/6/7/9/10/11 共 11 张的浮层，
+ * 中心与四角采样点全部被**下一张卡的 .persona-info-cover 按钮**挡住；
+ * 只有最后一行与最后一列（后面没有兄弟卡了）是好的。
+ *
+ * 为什么修在**网格项**而不是 .persona-popover 或 .card：stacking context
+ * 是那个 motion.div 建的，只有把 z-index 提到它身上才能跨卡片比较。
+ * :has() 让这件事只在「浮层真的打开时」发生（AnimatePresence 关闭时会
+ * 卸载浮层），平时网格项仍是普通文档流，不影响其它页面的层级。 */
+.persona-grid > *:has(.persona-popover) {
+  position: relative;
+  z-index: 70;
+}
 .persona-popover .lbl { margin-top: 0; }
 .persona-popover summary {
   cursor: pointer;
