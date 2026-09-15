@@ -299,10 +299,10 @@ export default function PersonaDetailPage() {
         </div>
         <div className="card">
           <div className="row-between" style={{ alignItems: "baseline" }}>
-            <span style={{ fontWeight: 700 }}>{corpusLabel(p)}</span>
-            <span className={"chip " + (p.corpus.real ? "chip-green" : "chip-orange")}>
-              {p.corpus.real ? "真实抓取" : "预置人格"}
+            <span style={{ fontWeight: 700 }}>
+              {corpusLabel(p) ? corpusLabel(p) : "公开印象档案"}
             </span>
+            {p.corpus.real && <span className="chip chip-green">真实抓取</span>}
           </div>
 
           {p.corpus.real ? (

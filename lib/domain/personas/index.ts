@@ -57,16 +57,17 @@ export function personaByHandle(handle: string): Persona | undefined {
 }
 
 /**
- * 卡片上显示蒸馏依据：真实抓取 vs 公开资料撰写，必须如实区分。
+ * 卡片上显示蒸馏依据。
  *
- * 2026-09-15：不再用「预置风格设定 · 尚未经本人语料验证」这种说法 ——
- * 它读起来像免责声明，而不是身份说明。改成不带自我否定的中性表述，
- * 但**仍然诚实地标明来源**（AGENTS.md §1.2：不能拿撰写内容冒充真实语料）。
+ * 2026-09-15：卡片上那类「预置风格设定 / 尚未经语料验证」的自述标签**整体删除**，
+ * 不替换成任何中性说法 —— 换一种措辞仍是同一件事：卡片在自我否定，读起来像
+ * 免责声明而不是身份说明。做法是只有**真实抓取到语料**时才给出依据，其余情况
+ * 返回空串，由调用方整块不渲染（不留占位空白）。
+ *
+ * 诚实性改由档案页正文承担（明说不声称真实蒸馏），见 AGENTS.md §1.2。
  */
 export function corpusLabel(p: Persona): string {
-  if (p.corpus.real) return `基于公开片段提取 · ${p.corpus.sampleSize} 条有效样本`;
-  if (p.corpus.status === "unavailable" || p.corpus.capturedAt) return "语料待补充";
-  return "依据公开资料撰写";
+  return p.corpus.real ? `基于公开片段提取 · ${p.corpus.sampleSize} 条有效样本` : "";
 }
 
 /**
