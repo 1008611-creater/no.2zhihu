@@ -77,7 +77,7 @@ v1 主线是「**具体知乎答主的分身**」。分身分两类，评价标�
 
 **问题**：四要素里的 `voice` 全是**形容词**——「毒舌」「口语」「节奏快」「短句为主」。
 形容词无法落地：任何人格都能认领同一批形容词，模型读完后仍然按通用文风输出，
-于是 15 位答主的回答拉不开差距，整体像 GPT 直答。
+于是 16 位答主的回答拉不开差距，整体像 GPT 直答。
 
 **方案**：在 `voice` 下新增四个**可执行 / 可核对**的字段（`lib/domain/types.ts` 的 `PersonaVoice`）：
 
@@ -88,7 +88,7 @@ v1 主线是「**具体知乎答主的分身**」。分身分两类，评价标�
 | `avoid` | `string[]` | 反面例句：绝不写出来的具体句子 | 给出**具体句子**而非「不要公式化」这种口号 |
 | `exemplars` | `string[]` | 语感范例（构造，**不是**抓取到的原话） | 提供 few-shot 锚点；不改变 `corpus.real` 语义，不冒充真实引文 |
 
-15 位答主全部补齐，每位 `avoid` 4 条、`exemplars` 3 条。
+16 位答主全部补齐，每位 `avoid` 4 条、`exemplars` 3 条。
 
 **三处重复钉住**（模型「读了但没照做」是常态，单处注入不够）：
 
@@ -194,8 +194,7 @@ lib/
     publicFigures.ts            公共人物研究
   domain/                       纯业务逻辑（无 IO、无 process.env）
     types.ts                    领域模型（含 Persona 四要素与 PersonaVoice）
-    personas/                   答主人格名册（15 位真实答主，一人一文件 + index.ts；
-                                另有 splitter.ts 是「分身分离」机制，不是答主）
+    personas/                   答主人格名册（16 位答主，一人一文件 + index.ts）
     skills.ts                   答主型主体（由 personas 派生）+ 视角型补充层
     router.ts                   Human Router：手动指定优先，自动推荐补位
     gap.ts                      ★ 缺口识别
