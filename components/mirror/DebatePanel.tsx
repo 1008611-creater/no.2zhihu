@@ -11,7 +11,21 @@ import type { AnswerDraft } from "@/lib/domain/types";
  * 上限 2 次直答：1 次识别冲突，1 次让双方各写一段回应。
  * 只跑一轮，不循环 —— 这个产品要的是「他们真的不是同一个人」的证据，
  * 不是无限辩论。识别不出冲突时如实返回空结果，不强行制造对立。
+ *
+ * ⚠️ 下面三个常数与 `/api/mirror/debate` 的 zod 上限**必须成对**。
+ * 客户端先裁，是为了让「一场讨论里回答特别多/特别长」这种正常情况
+ * 不会换回一个 400（服务端那道拦截仍然留着，两道都留）。
  */
+const MAX_ENTRIES = 24;
+const MAX_BODY = 8000;
+/**
+ * 这一步串行跑两次直答，实测 30–120 秒。
+ *
+ * 不加超时的话，请求一旦卡住，按钮会永远停在「正在识别冲突…」——
+ * 用户只能得出「点了没用」的结论。加了之后至少能如实说「等太久了，再试一次」。
+ */
+const TIMEOUT_MS = 120_000;
+
 export function DebatePanel({
   question,
   answers,
@@ -34,19 +48,22 @@ export function DebatePanel({
     setBusy(true);
     setError(null);
     setNote(null);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const res = await fetch("/api/mirror/debate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           question,
-          entries: firstRound.map((a) => ({
+          entries: firstRound.slice(0, MAX_ENTRIES).map((a) => ({
             id: a.id,
             name: a.skillName,
             handle: a.handle,
-            body: a.body,
+            body: a.body.slice(0, MAX_BODY),
           })),
         }),
+        signal: controller.signal,
       });
       const data = await res.json();
       if (!data.ok) {
@@ -60,9 +77,14 @@ export function DebatePanel({
       }
       setNote(data.note ?? null);
       onReplies(replies);
-    } catch {
-      setError("网络连接失败，请检查后重试。");
+    } catch (e) {
+      setError(
+        (e as { name?: string })?.name === "AbortError"
+          ? "等了 2 分钟还没有结果。这一步要跑两次直答，通常 30–60 秒，可以再点一次试试。"
+          : "网络连接失败，请检查后重试。",
+      );
     } finally {
+      clearTimeout(timer);
       setBusy(false);
     }
   }
@@ -77,9 +99,18 @@ export function DebatePanel({
           </div>
         </div>
         <button className="btn btn-sm btn-ghost" onClick={run} disabled={!canRun}>
-          {busy ? "正在识别冲突…" : "开始一轮互相回应 →"}
+          {busy ? "正在生成回应…（约 30–60 秒）" : "开始一轮互相回应 →"}
         </button>
       </div>
+
+      {/* 解释「为什么点了要等」。
+          缺了这一段，界面上只有按钮文案在变、几十秒没有任何别的反馈，
+          读起来就像卡死 —— 「点了没反应/报错」的体感有一半来自这里。 */}
+      {busy && (
+        <div className="mono dimmer" style={{ fontSize: 11.5, marginTop: 10 }}>
+          先识别分歧最尖锐的一对，再让双方各写一段 —— 两次直答串行，请先别关页面。
+        </div>
+      )}
 
       {note && <div className="notice notice-info" style={{ marginTop: 12 }}>{note}</div>}
       {error && <div className="notice notice-warn" style={{ marginTop: 12 }}>{error}</div>}
