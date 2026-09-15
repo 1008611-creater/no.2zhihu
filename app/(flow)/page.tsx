@@ -14,7 +14,7 @@ import PersonaPicker from "@/components/mirror/PersonaPicker";
 import FeedStream from "@/components/square/FeedStream";
 import { personaCandidates, type PersonaCandidate } from "@/lib/domain/router";
 import { useMirror } from "@/lib/store/mirror-store";
-import { DUR, EASE } from "@/lib/motion/tokens";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 首页 = 提出问题。
@@ -286,7 +286,7 @@ export default function Home() {
         {phase === "pick" && (
           <motion.section
             className="section"
-            initial={{ opacity: 0, y: 18 }}
+            initial={{ opacity: 0, y: SHIFT.lg }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out }}
@@ -331,7 +331,7 @@ export default function Home() {
         {phase === "run" && (
           <motion.section
             className="section"
-            initial={{ opacity: 0, y: 18 }}
+            initial={{ opacity: 0, y: SHIFT.lg }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out }}

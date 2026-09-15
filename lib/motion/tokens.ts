@@ -49,13 +49,24 @@ export const EASE = {
 
 // ── 位移量（对应 globals.css 的 --shift-*）──────────────────────────
 // 位移比时长更容易做过头。小元素小位移，大元素大位移。
+//
+// 为什么是 4 档而不是 3 档：收敛前全站实际用到了 7 种位移
+// （6/8/10/12/14/18/22px）。只给 3 档的话，落在档位之间的值没处安放，
+// 结果是「收敛了一半」——剩下的原样硬编码，尺度形同虚设。
+// 4 档按 ~1.5 倍递进，能覆盖实测分布：
+//   6, 8            → sm
+//   10, 12, 14      → md
+//   18, 22          → lg
+//   （28 留给首屏级别的整块位移）
 export const SHIFT = {
   /** 6px — 文字、图标级微动 */
   sm: 6,
-  /** 14px — 卡片级入场 */
-  md: 14,
-  /** 28px — 区块级入场 */
-  lg: 28,
+  /** 12px — 卡片级入场的主力位移 */
+  md: 12,
+  /** 18px — 区块级入场、面板展开 */
+  lg: 18,
+  /** 28px — 首屏级别的整块位移 */
+  xl: 28,
 } as const;
 
 // ── 弹簧参数 ────────────────────────────────────────────────────────
@@ -103,4 +114,24 @@ export const FADE = {
   initial: { opacity: 0 },
   animate: { opacity: 1 },
   transition: { duration: DUR.fast, ease: EASE.standard },
+} as const;
+
+/**
+ * 滚动揭示：**全站统一的那一套**。
+ *
+ * 为什么必须有这个预设：收敛前全站有 28 处揭示动画，却分成两种互不兼容的写法——
+ * 5 处用 `whileInView`（滚到才播，正确），其余用挂载即播的 `animate`。
+ * 后者对首屏之下的内容是白做的：动画在用户滚到之前就已经播完了，
+ * 用户看到的是静止的终态，等于没有动效，还白付一次合成开销。
+ *
+ * 用法（整份展开，不要只挑一半）：
+ *   <motion.div {...REVEAL}>…</motion.div>
+ *
+ * 首屏以上的元素**不要**用它——那些本来就该挂载即播，用 `FADE_UP`。
+ */
+export const REVEAL = {
+  initial: { opacity: 0, y: SHIFT.md },
+  whileInView: { opacity: 1, y: 0 },
+  viewport: { once: true, margin: "-20%" },
+  transition: { duration: DUR.read, ease: EASE.out },
 } as const;

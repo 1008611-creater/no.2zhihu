@@ -202,7 +202,7 @@ function FillContent() {
 
           <AnimatePresence mode="wait">
             {mode === "quick" ? (
-              <motion.div key="quick" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+              <motion.div key="quick" initial={{ opacity: 0, y: SHIFT.sm }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -SHIFT.sm }}>
                 <label className="lbl" htmlFor="quick">只补最关键的一句或几句</label>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
                   {QUICK_TEMPLATES.map((t) => (
@@ -224,7 +224,7 @@ function FillContent() {
                 </p>
               </motion.div>
             ) : (
-              <motion.div key="full" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+              <motion.div key="full" initial={{ opacity: 0, y: SHIFT.sm }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -SHIFT.sm }}>
                 <label className="lbl" htmlFor="full">在草稿上直接改写</label>
                 <textarea
                   id="full"

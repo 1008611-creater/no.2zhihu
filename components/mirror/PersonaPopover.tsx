@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 
 import type { Persona } from "@/lib/domain/types";
 import { corpusLabel } from "@/lib/domain/personas";
+import { SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 答主框上的详情浮层。
@@ -105,7 +106,7 @@ export function PersonaPopover({ persona }: { persona: Persona }) {
             aria-label={`${persona.displayName} 的分身档案`}
             tabIndex={-1}
             className="persona-popover"
-            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            initial={{ opacity: 0, y: SHIFT.sm, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}

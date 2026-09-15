@@ -17,7 +17,7 @@ import type {
   Skill,
   SkillKind,
 } from "@/lib/domain/types";
-import { DUR, EASE } from "@/lib/motion/tokens";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 虚拟广场信息流 —— 首页与 /square 共用同一条流。
@@ -348,7 +348,7 @@ export function FeedStream({
         <motion.div
           key={entry.key}
           className="card-flat feed-row"
-          initial={{ opacity: 0, y: 10 }}
+          initial={{ opacity: 0, y: SHIFT.md }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: DUR.base, ease: EASE.out, delay: Math.min(i * 0.015, 0.3) }}
