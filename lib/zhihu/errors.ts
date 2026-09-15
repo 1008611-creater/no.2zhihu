@@ -43,11 +43,23 @@ export class ZhihuApiError extends Error {
 
   /** 面向用户的降级文案，前端可直接展示。 */
   get userMessage(): string {
-    // OAuth 换 token 失败要单独说清楚 —— 20001 在 OAuth 场景下几乎总是
-    // 「app_id 还没被知乎侧开通」，而不是 Access Secret 过期。混用同一句
-    // 文案会把「等平台审批」误导成「去改密钥」。
+    // OAuth 换 token 失败要单独说清楚 —— 泛泛一句「请检查 Access Secret」
+    // 会把好几种完全不同的原因混为一谈。
+    //
+    // 2026-09-15 线上实测定下三种语义（都在 `message` 里，格式 `... msg=...`）：
+    //   - `code is expired`        → 授权码超时（用户来回折腾太久），重登即可
+    //   - `not exists`             → 授权码不存在 / 已被用过，重登即可
+    //   - `missing parameter: xxx` → 我们请求少传了字段，是代码问题
+    //   - `Invalid ...` 其它       → 按上游原话展示
+    // **不要再写「app_id 未开通」**：实测真实授权码返回的是 `code is expired`
+    // 而非 `not exists`，证明 app_id 是有效的（无效 app_id 根本发不出 code）。
     if (this.endpoint === "oauth.token" && this.kind === "auth") {
-      return `知乎 OAuth 登录未开通：平台未识别当前 app_id（code=${this.code ?? "?"}）。请确认应用是否已在 openplatform@zhihu.com 申请通过、且回调地址与登记值完全一致。`;
+      const raw = this.message.replace(/^token exchange rejected:\s*/, "");
+      const detail = raw.includes("msg=") ? raw.slice(raw.indexOf("msg=") + 4) : raw;
+      if (/expired/i.test(detail)) return "登录授权码已过期（授权过程太久）。请再点一次「知乎登录」。";
+      if (/not exists/i.test(detail)) return "这次登录的授权码已失效或已使用过。请再点一次「知乎登录」。";
+      if (/missing parameter/i.test(detail)) return `知乎拒绝了换 token 请求：${detail}。这是本站的配置问题，可直接反馈。`;
+      return `知乎 OAuth 换 token 失败：${detail || `code=${this.code ?? "?"}`}。请把这句话截图反馈。`;
     }
     switch (this.kind) {
       case "config":
