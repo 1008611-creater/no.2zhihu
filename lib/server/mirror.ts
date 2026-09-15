@@ -9,11 +9,14 @@ import { routeQuestion } from "@/lib/domain/router";
 import { PERSONA_SKILLS } from "@/lib/domain/skills";
 import type { AnswerDraft, MirrorQuestion, Persona, Skill, SkillSource } from "@/lib/domain/types";
 import {
+  antiAiGuidance,
   checkVoice,
   needsRewrite,
   resolveParagraphRange,
   parseSentencesPerParagraph,
   splitParagraphs,
+  stripAiCliches,
+  stripClosing,
   unrelatedEvidenceNotice,
   voiceDirectives,
 } from "@/lib/domain/voice";
@@ -105,6 +108,29 @@ const FETCH_LIMIT = 8;
 /** 短于这个长度的摘要没有引用价值，宁可少一条也不展示噪音。 */
 const MIN_EXCERPT = 40;
 
+/**
+ * 单场问答里最多重写几次（跨答主共享的预算）。
+ *
+ * 为什么要显式封顶（2026-09-15，随 voice.ts 判据扩容一起加）：
+ * `checkVoice` 的判据从「25 个词汇级套话」扩到「词汇 + 结构两层」后，触发率必然上升。
+ * 用归档语料实测（`node scripts/voice-selftest.mjs` 会打印当前快照的数字）：
+ *   旧判据约 88% → 新判据 100%，上升约 12 个百分点。
+ *   （归档每次重生成数字都会变，所以这里只写量级，不写死篇数。）
+ * 按「每位答主都重写一次」算，单场 4 位答主的额外直答调用会到 4 次，
+ * 日额度 100 次只剩 25 场。
+ *
+ * 判据该严就严（那是本 PR 的目的），但**额度必须可预算**：所以这里把单场
+ * 重写次数封在 2 次 —— 日额度仍可支撑约 50 场，同时保住最需要重写的那两篇
+ * （mapPool 按答主顺序推进，先到先得）。超出预算的答主走第 ③ 步：
+ * **如实保留原稿并记录问题**，不做「假装合格」的掩盖（AGENTS.md §1.2）。
+ */
+const MAX_REWRITES_PER_RUN = 2;
+
+/** 跨答主共享的重写预算。用对象而不是数字，才能在 mapPool 里被并发消费。 */
+export interface RewriteBudget {
+  left: number;
+}
+
 export interface MirrorOptions {
   /** 是否调用直答生成正文。关闭时用证据摘要拼装，零直答额度消耗。 */
   useZhida?: boolean;
@@ -174,8 +200,10 @@ async function buildMirror(
   ).filter((s): s is Skill => s !== null);
 
   // 限并发作答：并发 4 会触发上游 429，全串行又太慢，并发 2 是实测的稳定点。
+  // 重写预算跨答主共享，见 MAX_REWRITES_PER_RUN。
+  const rewriteBudget: RewriteBudget = { left: MAX_REWRITES_PER_RUN };
   const answers = await mapPool(skills, ZHIDA_CONCURRENCY, (skill) =>
-    draftAnswer(skill, question, opts.useZhida, skills),
+    draftAnswer(skill, question, opts.useZhida, skills, rewriteBudget),
   );
 
   // 缺口识别是本作品的核心创新点：纯函数、零额度、可复现。
@@ -239,7 +267,9 @@ export async function invitePersona(
     confidence: confidenceOf(sources),
     evidenceStats: { dropped, scanned },
   } as Skill;
-  const answer = await draftAnswer(skill, question, useZhida);
+  const answer = await draftAnswer(skill, question, useZhida, [], {
+    left: MAX_REWRITES_PER_RUN,
+  });
 
   return { skill, answer };
 }
@@ -451,6 +481,9 @@ function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
       "5. 不要在开头客套，第一句就是观点本身。",
       "6. 如果证据不足以支撑一个结论，就用一句话说明「这一点需要真人补充」。",
       "7. 不要在结尾总结（不写「总之」「综上」），说完就走。",
+      "8. 不要写「不是…而是…」「不只是…更是…」这类对举句式，直接说结论。",
+      "9. 不要在段末补「这才是关键。」这类盖章短句，也不要用「本质上」「说到底」。",
+      "10. 不要用「研究表明」「业内普遍认为」却不给出处；给不出处就用第一人称经验。",
       "",
       "直接输出正文，不要任何前后缀。",
     ].join("\n");
@@ -558,6 +591,21 @@ function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
     "在当今社会、随着……的发展、综合来看、一方面……另一方面、总而言之、",
     "需要注意的是、建议您、从……的角度来看、让我们一起、归根结底、",
     "总的来说有几点、以下是我的看法、希望可以帮到你、需要从多个角度来分析。",
+    "",
+    /**
+     * 结构级 AI 痕迹（2026-09-15 补）。
+     *
+     * 为什么光有上面那张词表不够：词表只能抓「词」，抓不到「构造」。
+     * 「不是…而是…」「这才是关键。」「更高效、更精准、更可靠」这些一个词表都命中不了，
+     * 但它们恰恰是读者一眼看出 AI 的地方。这一段把**构造**写成禁令，
+     * 并逐条给出「那该怎么说」——只给禁令时模型会从一个 AI 腔换到另一个。
+     */
+    "【结构级 AI 痕迹 · 这几类构造比单个词更容易露馅】",
+    ...antiAiGuidance().flatMap((line) => line.split("\n")),
+    "另外：不要在段末补一句「这才是关键。」这类盖章式的短句；",
+    "不要连着三个极短句排比（「不解释。不铺垫。不妥协。」）；",
+    "不要用「研究表明」「业内普遍认为」却不给出处 —— 给不出处就写「我见过」「我碰到过」；",
+    "不要写「本质上」「说到底」「核心在于」，用具体动作或数字替代。",
     "",
     "【落笔前自检 · 逐条打勾】",
     "① 字数和段数，是不是落在上面给的区间里？",
@@ -697,39 +745,13 @@ function buildRewritePrompt(
 }
 
 /**
- * 结尾套话黑名单。
+ * 清理模型偶尔带出的 Markdown 痕迹，并按该人格的字数上限收尾。
  *
- * 为什么要在后处理里兜底，而不只靠提示词：模型即使整篇都守住了人格，
- * 也极容易在最后一句滑回自己的默认收尾（「总之」「综上」「希望……」）。
- * 而这些收尾恰恰是「一眼就看得出是 AI」的位置 —— 真人写知乎很少正经收尾。
- * 这里只删**位于末尾**的那一句，中间出现的不动，避免误伤正文。
- *
- * ⚠️ 判据：只有**整句就是一个纯套话**时才删（2026-09-15 审计修正）。
- *
- * 早期版本写成 `/(?:总之|...)[^\n]{0,80}[。！？]?\s*$/`，实测会误伤：
- * 「总之我劝你别碰这个，去年我朋友就亏了六十万。」是一句**有实质信息**的
- * 结论，只因为以「总之」开头就被整句删掉了。而这些答主恰恰爱用「总之」
- * 起句说硬话 —— 删掉它等于删掉回答里最有价值的一句。
- *
- * 所以这里把每个模式收紧成「起手词 + 最多一句空泛收束」，并在
- * `stripClosing` 里再加一道「删完不能伤到信息量」的兜底校验。
+ * 与 `lib/domain/voice.ts` 的分工：**规则**（`stripClosing` / `stripAiCliches` 及其模式表）
+ * 全部住在 domain 层 —— 它们是纯文本处理，本就不该依赖服务端环境，
+ * 而且放在那边才能被 `scripts/voice-selftest.mjs` 直接覆盖。
+ * 这里只负责「按什么顺序、在哪个位置应用这些规则」。
  */
-const CLOSING_PATTERNS: RegExp[] = [
-  // ⚠️ 长度上限只有 14 字（早期版本给到 80 字）：
-  // 实测 `[^\n]{0,80}` 会把「总之我劝你别碰这个，去年我朋友就亏了六十万。」
-  // 这种**有实质信息的结论**整句删掉 —— 而这几位答主恰恰爱用「总之」起句
-  // 说硬话，删掉它等于删掉回答里最有价值的一句，且用户完全看不出来。
-  // 收紧到 14 字后，只剩「总之，未来可期。」这类真正的空泛收束会被命中。
-  /^(?:总之|综上(?:所述)?|总而言之|总的来说)[，,：:]?[^\n]{0,14}[。！？]?\s*$/,
-  /^(?:希望|祝愿)(?:以上|这些|这)[^\n]{0,40}[。！？]?\s*$/,
-  /^(?:希望(?:能|可以)?(?:对|给)你?[^\n]{0,40}(?:帮助|参考|启发))[。！？]?\s*$/,
-  /^(?:以上(?:就是|便是|是)我[^\n]{0,40})[。！？]?\s*$/,
-  /^(?:仅供参考)[^\n]{0,20}[。！？]?\s*$/,
-  // 「如果觉得有用，欢迎点赞关注」这类求互动收尾，也是典型 AI 腔。
-  /^(?:如果|若)?(?:觉得|认为)?(?:有用|有帮助|感兴趣)?[，,]?\s*(?:欢迎|可以|请)\s*(?:点赞|关注|收藏|转发|评论)[^\n]{0,20}[。！？]?\s*$/,
-];
-
-/** 清理模型偶尔带出的 Markdown 痕迹，并按该人格的字数上限收尾。 */
 function sanitizeAnswer(raw: string, skill: Skill): string {
   const t = raw
     .replace(/^#{1,6}\s*/gm, "")
@@ -797,109 +819,14 @@ function sanitizeAnswer(raw: string, skill: Skill): string {
   return safe;
 }
 
-/**
- * 删掉末段里的总结句。
- *
- * 只在**最后一段**上做：真人也会在中间用「总之」引出下一层意思，
- * 全局替换会毁掉正文。末尾是套话高发位，且删掉它不会影响信息完整性。
- */
-function stripClosing(text: string): string {
-  const blocks = text.split(/\n{2,}/);
-  if (blocks.length === 0) return text;
-  const last = blocks[blocks.length - 1];
-
-  let out = last;
-  // 反复剥离：模型有时会连写两句收尾。
-  for (let i = 0; i < 2; i++) {
-    const before = out;
-    for (const re of CLOSING_PATTERNS) out = out.replace(re, "").trim();
-    if (out === before) break;
-  }
-
-  // 剥完如果这段空了，就整段丢掉（说明最后一段本来就是一句收尾）。
-  if (out.trim().length === 0) {
-    const rest = blocks.slice(0, -1).join("\n\n").trim();
-    return rest.length > 0 ? rest : text;
-  }
-
-  /**
-   * 兜底：剥离不能把末段削得太狠。
-   *
-   * 上面每个正则都要求「整句就是套话」，但**正则总有漏网的可能**。
-   * 真人的实质结论恰恰爱用「总之/综上」起句说硬话，一旦误删，
-   * 丢的是整篇最有价值的一句，而且用户看不出来（不是报错，是内容没了）。
-   * 所以这里做一次量的校验：末段被削掉超过一半且剩下的不足 30 字，
-   * 就认为这次剥离「伤到肉了」，回退保留原文 —— 宁可留一句套话，
-   * 也不要丢掉作者的结论。
-   */
-  if (last.trim().length > 0 && out.length < last.trim().length * 0.5 && out.length < 30) {
-    return text;
-  }
-
-  blocks[blocks.length - 1] = out;
-  return blocks.join("\n\n").trim();
-}
-
-/**
- * 删掉句首的 AI 套话连接词。
- *
- * 为什么必须做后处理：实测 66 篇里 5 篇仍然带出「没有标准答案」「因人而异」，
- * 说明**光靠提示词拦不住**——提示词是概率性约束，模型偶尔会滑回去。
- *
- * 与 stripClosing 的分工：stripClosing 处理末尾的总结句，这里处理句首的
- * 报幕词。两者都是「删掉不影响信息完整性」的位置。
- *
- * 关键纪律：**只删连接词本身，不删整句**。删掉「总的来说，」之后
- * 「这个生意赚的是信息差。」仍然是一句完整的话，语义无损；
- * 而删掉整句会留下结构性空洞，读起来更假 —— 那是另一处 AI 腔。
- * 同理，只处理**句首**位置：句中出现的「首先」可能是正文的一部分
- * （「首先要算启动成本」），删掉会破句。
- */
-function stripAiCliches(text: string): string {
-  let out = text;
-  for (const re of LEADING_CLICHE_PATTERNS) {
-    // 用 "$1" 而不是空串：每条规则的第一个捕获组是「句首锚点」
-    // （行首，或前一句的句末标点）。若替换成空串，那个句号会被一起吃掉 ——
-    // 实测 "首先，算启动成本。其次，算时间成本。" 会变成
-    // "算启动成本算时间成本。"，两句被粘成一句。
-    // 保留 $1 就等于「只删连接词，不动标点」。
-    out = out.replace(re, "$1");
-  }
-  return out;
-}
-
-/**
- * 句首套话黑名单。
- *
- * 每一条都要求「出现在句首（行首或句末标点之后）」且「后面紧跟逗号或直接接内容」，
- * 这样才不会误伤正文里的正常用词。
- */
-const LEADING_CLICHE_PATTERNS: RegExp[] = [
-  // 「总的来说，」/「综上所述，」—— 各种总结词做句首状语
-  /(^|[。！？\n])\s*(?:总的来说|综上所述|总而言之|综合来看|归根结底|需要注意的是|值得注意的是|由此可见|不难看出|需要从多个角度来分析)[，,：:]\s*/g,
-  /(^|[。！？\n])\s*(?:首先|其次|最后|再者|另外)[，,]\s*/g,
-  // 「一方面……另一方面」是成对的，删前半会破句 → 整对清掉
-  /(^|[。！？\n])\s*一方面[，,][^。！？\n]{0,80}?另一方面[，,]\s*/g,
-  // 从句首独立成句的免责声明（「这取决于个人情况。」）—— 这一句整个删掉
-  /(^|[。！？\n])\s*(?:这取决于个人情况|因人而异|没有标准答案|这是一个复杂的问题)[。！？]\s*/g,
-  /(^|[。！？\n])\s*(?:在当今社会|随着(?:时代|社会)的发展)[，,]\s*/g,
-  /(^|[。！？\n])\s*(?:作为一个人工智能|我们应该辩证地看|让我们一起)[，,]?\s*/g,
-];
-
-/**
- * 对外入口：真实生成结果 + 一次「无据断言」核对。
- *
- * 做成薄包装而不是在下面每个 return 点各写一遍 —— draftAnswerRaw 有 5 个返回分支
- * （凭证缺失 / 未开直答 / 生成成功 / 上游报错 / 兜底直引），逐个改容易漏，
- * 而漏掉的那条恰好就是最可能出问题的那条。
- */
 export async function draftAnswer(
   skill: Skill,
   question: string,
   useZhida: boolean,
   siblings: Skill[] = [],
+  budget?: RewriteBudget,
 ): Promise<AnswerDraft> {
-  const draft = await draftAnswerRaw(skill, question, useZhida, siblings);
+  const draft = await draftAnswerRaw(skill, question, useZhida, siblings, budget);
   // 用 draft.evidence 而不是 skill.sources：证据字段才是这次回答真正引用的那批。
   return { ...draft, claimCheck: checkClaims(draft.body, draft.evidence) };
 }
@@ -909,6 +836,7 @@ async function draftAnswerRaw(
   question: string,
   useZhida: boolean,
   siblings: Skill[] = [],
+  budget?: RewriteBudget,
 ): Promise<AnswerDraft> {
   const base = {
     id: "ans-" + skill.id,
@@ -940,7 +868,7 @@ async function draftAnswerRaw(
       const cleaned = sanitizeAnswer(text, skill);
       if (cleaned.length > 0) {
         // 生成成功 → 做一次确定性的文风体检，不合格就定点重写一次。
-        return await finalizeAnswer(base, skill, question, cleaned, siblings);
+        return await finalizeAnswer(base, skill, question, cleaned, siblings, budget);
       }
       break;
     } catch (err) {
@@ -986,6 +914,7 @@ async function finalizeAnswer(
   question: string,
   cleaned: string,
   siblings: Skill[],
+  budget?: RewriteBudget,
 ): Promise<AnswerDraft> {
   const persona = skill.persona;
   if (!persona) {
@@ -997,6 +926,13 @@ async function finalizeAnswer(
   if (!needsRewrite(check)) {
     return { ...base, generatedBy: "zhida", body: cleaned, generationIntegrity: "complete" };
   }
+
+  // 单场重写预算已用完 → 走第 ③ 步：如实保留原稿，不假装合格。
+  // 判据更严不等于额度失控，见 MAX_REWRITES_PER_RUN。
+  if (budget && budget.left <= 0) {
+    return { ...base, generatedBy: "zhida", body: cleaned, generationIntegrity: "complete" };
+  }
+  if (budget) budget.left -= 1;
 
   // 定点重写一次。
   try {
