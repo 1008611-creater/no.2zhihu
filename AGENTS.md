@@ -40,7 +40,7 @@ app/api/ (路由)  → lib/server/ → lib/domain/
 ```
 
 - `lib/domain/` **不得** import `lib/zhihu/`，也不得读 `process.env`——它必须是纯函数。
-- 需要同时用到「上游 IO」与「领域规则」的逻辑，**只能**写在 `lib/server/`（目前唯一文件是 `mirror.ts`）。
+- 需要同时用到「上游 IO」与「领域规则」的逻辑，**只能**写在 `lib/server/`（当前：`mirror.ts` / `persona.ts` / `publicFigures.ts`）。
 - `lib/zhihu/` 首行必须 `import "server-only"`。
 
 ### 查知乎接口资料

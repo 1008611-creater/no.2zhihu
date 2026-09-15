@@ -159,8 +159,26 @@ export async function getSessionWithToken(): Promise<
   return { user: parsed.u, stateVerified: parsed.sv === true, accessToken };
 }
 
-/** 读当前登录用户。签名不对、过期、结构不对一律返回 null。 */
-export async function getSession(): Promise<{ user: ZhihuUser; stateVerified: boolean } | null> {
+/**
+ * 读当前登录用户。签名不对、过期、结构不对一律返回 null。
+ *
+ * 除了「谁登录过」，还如实回报 `tokenValid`（现在是否还能取到数据）。
+ * 这两件事必须分开说，因为 cookie 只能证明前者：
+ *   · cookie 有效期 7 天，签名自证，服务重启不影响；
+ *   · access_token 只活在进程内存，**服务一重启就没了**。
+ * 不回报它的话，前端会显示「已登录」而每个取数请求都 401 ——
+ * 用户看到的是一个自己解释不了的错误（实测踩过：一天重启 22 次，
+ * 出现「/api/auth/session 200 带 user，但 /api/auth/user-data 401」）。
+ * 所以这里如实回报，让 UI 能说清「登录已过期，请重新登录」。
+ *
+ * 为什么不把 token 持久化来解决：知乎**不支持 refresh_token**（官方文档 0 处提及），
+ * access_token 本身只有 1 小时有效期。落盘只能把可用窗口从「到下次重启」
+ * 延到「1 小时」，却要把用户的钥匙写进硬盘。收益有限、代价是安全边界，
+ * 不值得 —— 宁可让他重新点一次登录。
+ */
+export async function getSession(): Promise<
+  { user: ZhihuUser; stateVerified: boolean; tokenValid: boolean } | null
+> {
   const store = await cookies();
   const raw = store.get(COOKIE_NAME)?.value;
   if (!raw) return null;
@@ -183,7 +201,11 @@ export async function getSession(): Promise<{ user: ZhihuUser; stateVerified: bo
     return null;
   }
   if (!parsed.u || typeof parsed.exp !== "number" || parsed.exp < Date.now()) return null;
-  return { user: parsed.u, stateVerified: parsed.sv === true };
+  return {
+    user: parsed.u,
+    stateVerified: parsed.sv === true,
+    tokenValid: readToken(parsed.sid) !== null,
+  };
 }
 
 /* ---------------------------------------------------------------------------
