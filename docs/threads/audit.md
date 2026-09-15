@@ -2,9 +2,11 @@
 
 - **工作区**：`E:\codex\heikesong3\.tools\rel-20260915`（审计 clone，只读 main）
 - **分支**：无常驻分支；只在需要时建临时分支（如 `fix/audit-status-workflow`）
-- **正在改**：**只改 `scripts/audit-*.mjs` 这三个审计工具**，不改任何业务代码
+- **正在改**：**只改审计工具与协作护栏** —— `scripts/audit-*.mjs`、
+  `scripts/check-thread-declaration.mjs`、`.github/workflows/thread-declaration.yml`。
+  **不改任何业务代码**（`app/` `components/` `lib/`）
 - **状态**：常驻
-- **最后更新**：2026-09-15 21:00
+- **最后更新**：2026-09-15 21:45
 - **职责**：审计内容 → 合并 → 线上复验。**唯一的合并与上线决策者**；
   开发线程只提 PR，不合并、不部署。
 - **不做什么**：不替开发线程改业务代码；不机械解语义冲突（会在 PR 上写清成因与建议解法）
