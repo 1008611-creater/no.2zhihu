@@ -8,11 +8,9 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 const NAV = [
   { href: "/", label: "首页" },
   { href: "/square", label: "虚拟广场" },
-  { href: "/mirror", label: "镜像工作台" },
+  { href: "/mirror", label: "分身发现" },
   { href: "/personas", label: "答主名册" },
-  { href: "/mesh", label: "Human Mesh" },
-  { href: "/feed", label: "分身动态" },
-  { href: "/about", label: "说明与审计" }
+  { href: "/mesh", label: "Human Mesh" }
 ];
 
 /**
@@ -67,10 +65,11 @@ export function TopBar() {
       <div className="topbar-inner">
         <Link href="/" className="brand" aria-label="二号知乎 · 回到首页">
           <span className="brand-mark" aria-hidden>
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none">
-              <circle cx="8.5" cy="10" r="3.1" fill="#0b0d17" />
-              <circle cx="15.5" cy="10" r="3.1" fill="#0b0d17" />
-              <path d="M9 16.4h6" stroke="#0b0d17" strokeWidth="1.8" strokeLinecap="round" />
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+              {/* 左环＝真人，右环＝分身，交汇点＝两者重合处生成的回答 */}
+              <circle cx="9.3" cy="12" r="6.1" stroke="#0b0d17" strokeWidth="1.9" />
+              <circle cx="14.7" cy="12" r="6.1" stroke="#0b0d17" strokeWidth="1.9" />
+              <circle cx="12" cy="12" r="2.2" fill="#3568db" />
             </svg>
           </span>
           <span>

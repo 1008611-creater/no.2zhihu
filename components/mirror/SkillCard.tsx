@@ -85,26 +85,7 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
 
       {!p && (
         <div className="mono dimmer" style={{ marginBottom: 6 }}>
-          {skill.sources.length} 条真实来源 · 检索词「{skill.query.slice(0, 22)}」
-        </div>
-      )}
-
-      <div className="lbl">回答证据 · 观点依据什么</div>
-      {skill.sources.slice(0, 2).map((s) => (
-        <a
-          key={s.url}
-          href={s.url}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="link"
-          style={{ display: "block", fontSize: 12.5, marginBottom: 4, lineHeight: 1.5 }}
-        >
-          {s.author}：{s.title.slice(0, 34)}
-        </a>
-      ))}
-      {skill.sources.length === 0 && (
-        <div className="notice notice-warn" style={{ fontSize: 12 }}>
-          这一位没有检索到真实来源，正文可能缺少可核对的依据。
+          检索词「{skill.query.slice(0, 22)}」
         </div>
       )}
     </motion.article>

@@ -47,18 +47,7 @@ export function AnswerCard({ answer, index = 0 }: { answer: AnswerDraft; index?:
         </div>
       )}
 
-      <hr className="divider" />
-      <div className="mono dimmer" style={{ marginBottom: 7 }}>证据 · {answer.evidence.length} 条</div>
-      <div style={{ display: "grid", gap: 5 }}>
-        {answer.evidence.map((e) => (
-          <a key={e.url} href={e.url} target="_blank" rel="noreferrer noopener" className="link" style={{ fontSize: 12.5 }}>
-            {e.author} · 赞同 {e.voteUp} · {e.title.slice(0, 40)}
-          </a>
-        ))}
-        {answer.evidence.length === 0 && <span className="dimmer mono">无来源</span>}
-      </div>
-
-      <div style={{ marginTop: 14, display: "flex", gap: 8 }}>
+      <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
         <Link className="btn btn-sm btn-ghost" href={"/answer/" + answer.id}>查看详情与追问</Link>
       </div>
     </motion.article>

@@ -129,7 +129,7 @@ async function buildMirror(
 
   // 限并发作答：并发 4 会触发上游 429，全串行又太慢，并发 2 是实测的稳定点。
   const answers = await mapPool(skills, ZHIDA_CONCURRENCY, (skill) =>
-    draftAnswer(skill, question, opts.useZhida),
+    draftAnswer(skill, question, opts.useZhida, skills),
   );
 
   // 缺口识别是本作品的核心创新点：纯函数、零额度、可复现。
@@ -331,7 +331,7 @@ function sentenceLengthLabel(len: Persona["voice"]["sentenceLength"]): string {
  * 结果六个人写出来是同一个人。现在字数区间、句长、分段习惯、情绪强度
  * 全部由这位答主自己的 voice 决定 —— 半佛仙人和张佳玮必须明显不是一个人。
  */
-function systemPromptFor(skill: Skill): string {
+function systemPromptFor(skill: Skill, siblings: Skill[] = []): string {
   const p = skill.persona;
 
   if (!p) {
@@ -352,6 +352,31 @@ function systemPromptFor(skill: Skill): string {
   }
 
   const [lo, hi] = p.voice.wordRange;
+
+  // 「几个回答看着像一个人写的」是这个产品最致命的失败。
+  // 光靠形容词约束不够，必须把同场其他人的风格明确写出来当反面参照。
+  const others = siblings.filter((s) => s.id !== skill.id);
+  const rivalLines: string[] = [];
+  if (others.length > 0) {
+    rivalLines.push(
+      "",
+      "【同场还有这些人在回答同一个问题 —— 你必须写得和他们明显不同】",
+      ...others.map((s) => {
+        const op = s.persona;
+        if (!op) return "· " + s.name + "：" + s.lens;
+        const [olo, ohi] = op.voice.wordRange;
+        return (
+          "· " + op.displayName + "：" + op.headline +
+          "。语气是「" + op.voice.tone.join("、") + "」，" +
+          op.voice.sentenceLength +
+          "句为主，" + olo + "–" + ohi + " 字，" +
+          op.catchphrases.slice(0, 2).join("、") + " 是他的口头禅。"
+        );
+      }),
+      "读的人会把你们几段放在一起看。如果遮住名字分不出谁写的，这次就算失败。",
+      "具体说：句长节奏要和他不一样，常用词要和他不一样，看问题的入口也要和他不一样。",
+    );
+  }
 
   return [
     "你正在扮演知乎答主「" + p.displayName + "」，回答一个具体问题。",
@@ -377,8 +402,29 @@ function systemPromptFor(skill: Skill): string {
     "1. 事实只能来自【知乎证据】。不允许引入证据之外的数字、机构名、年份、案例。",
     "2. 观点可以片面、可以有情绪、可以直接下结论 —— 不要写成四平八稳的 AI 腔。",
     "3. 不要写任何 Markdown 标记：不要 # 标题、不要 ** 加粗、不要分隔线。",
+    "3b. 不要写任何形式的小标题、引导句或分段标签 —— 单独成行的「先算启动这笔账」",
+    "「成本拆解」「风险在哪」这类短语一律不要。整篇就是连贯的段落，直接从内容往下写。",
     "4. 不要在开头客套（不要「这个问题很好」「先说结论」这类铺垫），第一句就进入状态。",
     "5. 如果证据不足以支撑某个结论，就用一句话说「这一点需要真人补充」，不要编。",
+    "6. 用第一人称「我」说话，像本人在知乎上随手敲出来的，不是在写报告。",
+    "7. 不要用「先说这一点」「再讲那一点」这种自我报幕的句子，直接说事。",
+    "",
+    "【以下都是 AI 腔，出现任何一个，这段回答就算失败】",
+    "首先/其次/最后、总的来说、综上所述、值得注意的是、不难看出、由此可见、",
+    "这取决于个人情况、因人而异、没有标准答案、这是一个复杂的问题、",
+    "希望以上回答对你有帮助、作为一个人工智能、我们应该辩证地看、值得一提、",
+    "在当今社会、随着……的发展、综合来看、一方面……另一方面、总而言之、",
+    "需要注意的是、建议您、从……的角度来看、让我们一起、归根结底、",
+    "总的来说有几点、以下是我的看法、希望可以帮到你。",
+    "",
+    "【落笔前自检】",
+    "第一句是不是直接给了判断或亲身经历？有没有出现上面的 AI 套话？",
+    "把这段读一遍，像不像「" + p.displayName + "」本人会在知乎上写出来的？",
+    others.length > 0
+      ? "把这段和同场其他人放在一起，遮住名字还能不能认出是你写的？不能就重写。"
+      : "句子长度是不是他习惯的那种节奏？",
+    "",
+    ...rivalLines,
     "",
     "直接输出正文，不要任何前后缀。",
   ].join("\n");
@@ -404,7 +450,19 @@ function buildUserPrompt(skill: Skill, question: string): string {
     lines.push("关注的关键词：" + skill.keywords.join("、"));
   }
 
-  lines.push("", "【知乎证据】", evidence || "（没有取到证据）", "", "请按你的身份和说话方式写一段回答。");
+  lines.push("", "【知乎证据】", evidence || "（没有取到证据）");
+
+  // 语气的关键不是形容词，而是范例。优先拿这位答主本人的原话片段做语感锚点。
+  if (p && skill.sources.length > 0) {
+    const own = skill.sources.filter(
+      (s) => s.author && (s.author.includes(p.displayName) || p.displayName.includes(s.author)),
+    );
+    const samples = (own.length > 0 ? own : skill.sources).slice(0, 2);
+    lines.push("", "【这是他自己写过的话 · 只模仿语感节奏，不要抄内容】");
+    samples.forEach((s) => lines.push("· " + s.excerpt.slice(0, 150)));
+  }
+
+  lines.push("", "请按你的身份和说话方式写一段回答。第一句就进入状态，不要铺垫。");
   return lines.join("\n");
 }
 
@@ -416,6 +474,9 @@ function sanitizeAnswer(raw: string, skill: Skill): string {
     .replace(/^\s*[-*+]\s+/gm, "")
     .replace(/^\s*\d+\.\s+/gm, "")
     .replace(/^-{3,}$/gm, "")
+    // 模型很爱写「先算启动这笔账」这种独立成行的小标题。它没有句读、长度短，
+    // 与正文段落可区分 —— 直接删掉，否则回答一眼就是 AI 分节的腔调。
+    .replace(/^\s*[^\n。！？，、；：「」（）()]{2,14}\s*$/gm, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
@@ -433,6 +494,7 @@ export async function draftAnswer(
   skill: Skill,
   question: string,
   useZhida: boolean,
+  siblings: Skill[] = [],
 ): Promise<AnswerDraft> {
   const base = {
     id: "ans-" + skill.id,
@@ -452,7 +514,7 @@ export async function draftAnswer(
   }
 
   const messages = [
-    { role: "system" as const, content: systemPromptFor(skill) },
+    { role: "system" as const, content: systemPromptFor(skill, siblings) },
     { role: "user" as const, content: buildUserPrompt(skill, question) },
   ];
 

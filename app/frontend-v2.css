@@ -64,3 +64,57 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
   .rise, .page-enter, [class*="rise-"] { opacity: 1 !important; transform: none !important; }
 }
+
+/* ---------------- 虚拟广场信息流 ---------------- */
+.feed-stream { display: grid; gap: 10px; }
+.feed-row { display: flex; gap: 14px; align-items: flex-start; padding: 15px 17px; }
+.feed-row > .chip { flex: none; margin-top: 1px; white-space: nowrap; }
+.feed-body { min-width: 0; flex: 1; }
+.feed-title { font-weight: 700; font-size: 14.5px; line-height: 1.55; }
+.feed-sum { font-size: 12.5px; margin-top: 5px; line-height: 1.6; }
+.feed-actions { display: flex; gap: 16px; flex-wrap: wrap; margin-top: 9px; }
+.feed-actions .link { background: none; border: 0; padding: 0; cursor: pointer; font: inherit; font-size: 12px; color: var(--blue-soft); }
+.feed-actions .link:hover { border-bottom: 1px solid var(--blue-soft); }
+@media (max-width: 640px) {
+  .feed-row { flex-direction: column; gap: 8px; }
+}
+
+/* ---------------- 选答主卡片（简化版） ----------------
+   只保留「这是谁 + 他聊什么」。名字必须是一屏里最显眼的元素。 */
+.persona-choice {
+  display: block;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  padding: 18px 19px 16px;
+  transition: border-color .2s ease, transform .2s ease, box-shadow .2s ease;
+}
+.persona-choice[data-selected="true"] {
+  border-color: var(--blue);
+  box-shadow: 0 0 0 1px var(--blue) inset;
+}
+.persona-choice:hover { transform: translateY(-2px); }
+.persona-choice-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 7px;
+}
+.persona-choice-name > span:first-child {
+  font-size: 21px;
+  font-weight: 750;
+  letter-spacing: -0.01em;
+  line-height: 1.25;
+  color: var(--text-100);
+}
+.persona-choice-mark { margin-left: auto; flex: none; }
+.persona-choice-headline {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-500);
+  margin: 0 0 12px;
+}
+.persona-choice-tags { display: flex; gap: 6px; flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .persona-choice-name > span:first-child { font-size: 19px; }
+}

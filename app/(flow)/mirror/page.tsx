@@ -1,6 +1,5 @@
 "use client";
 
-import EvidenceOverview from '@/components/mirror/EvidenceOverview';
 import { useInviteUrl } from '@/lib/motion/useInviteUrl';
 
 import { useEffect, useMemo, useState } from "react";
@@ -8,7 +7,6 @@ import Link from "next/link";
 import { motion } from "motion/react";
 import { useMirror } from "@/lib/store/mirror-store";
 import { KanshanStage } from "@/components/kanshan/KanshanStage";
-import SkillCard from "@/components/mirror/SkillCard";
 import AnswerCard from "@/components/mirror/AnswerCard";
 import DebatePanel from "@/components/mirror/DebatePanel";
 import GapCard from "@/components/mirror/GapCard";
@@ -17,6 +15,8 @@ import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDraw
 import { FLOW_STATES } from "@/components/kanshan/states";
 import { buildMesh } from "@/lib/domain/mesh";
 import { personaCandidates } from "@/lib/domain/router";
+import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
+import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
 import MeshGraph from "@/components/mesh/MeshGraph";
 
 /**
@@ -43,6 +43,21 @@ export default function MirrorPage() {
     return () => { timers.forEach(clearTimeout); clearTimeout(done); };
   }, [mirror?.id]);
 
+  /**
+   * 从首页生成完跳过来时带 #answers。
+   *
+   * 浏览器原生锚点跳转在这一页不可靠：首屏要先等 ready 才渲染出结果区，
+   * 锚点在 DOM 出现之前就已经尝试过滚动了。所以这里自己补一次。
+   */
+  useEffect(() => {
+    if (!ready || !mirror) return;
+    if (window.location.hash !== "#answers") return;
+    const id = requestAnimationFrame(() => {
+      document.getElementById("answers")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [ready, mirror]);
+
   const mesh = useMemo(() => (mirror ? buildMesh(mirror) : null), [mirror]);
 
   const presentHandles = useMemo(
@@ -54,13 +69,17 @@ export default function MirrorPage() {
     return <div className="skeleton" style={{ height: 320, marginTop: 40 }} />;
   }
 
+  // 「分身发现」是这个 Tab 的核心，与是否生成过镜像问题无关 —— 先让人看到这里住着谁。
   if (!mirror) {
     return (
-      <section style={{ paddingTop: 56 }}>
-        <h1>还没有镜像问题</h1>
-        <p className="lede" style={{ marginTop: 14 }}>先去首页输入一个问题，指定你想听谁回答。</p>
-        <Link className="btn btn-primary" href="/" style={{ marginTop: 20 }}>回到首页</Link>
-      </section>
+      <div className="page-enter">
+        <DiscoverSection />
+        <section className="section">
+          <div className="notice">
+            还没有镜像问题。点上面任意一位分身，直接带着他去提问；也可以回首页自己输入一个问题。
+          </div>
+        </section>
+      </div>
     );
   }
 
@@ -76,8 +95,10 @@ export default function MirrorPage() {
 
   return (
     <>
-      <section style={{ paddingTop: 40 }}>
-        <p className="eyebrow">Mirror workspace</p>
+      <DiscoverSection />
+
+      <section className="section">
+        <p className="eyebrow">Mirror workspace · 本场结果</p>
         <h1 style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "24ch" }}>{mirror.title}</h1>
 
         <div className="grid grid-4" style={{ marginTop: 22 }}>
@@ -120,20 +141,10 @@ export default function MirrorPage() {
         </div>
       </section>
 
-      <section className="section">
-        <div className="section-head">
-          <h2>答主阵容</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>领域、立场与说话方式都来自这位答主的公开表达。</p>
-        </div>
-        <div className="grid grid-3">
-          {mirror.skills.map((s, i) => <SkillCard key={s.id} skill={s} index={i} />)}
-        </div>
-      </section>
-
-      <section className="section">
+      <section className="section" id="answers">
         <div className="section-head">
           <h2>首轮作答</h2>
-          <p className="dim" style={{ fontSize: 13.5 }}>每位答主各写一篇，正文只允许引用他自己的真实来源。</p>
+          <p className="dim" style={{ fontSize: 13.5 }}>每位答主各写一篇，正文只使用他自己对应的真实公开来源。</p>
         </div>
         <div className="grid grid-3">
           {firstRound.map((a, i) => <AnswerCard key={a.id} answer={a} index={i} />)}
@@ -196,7 +207,8 @@ export default function MirrorPage() {
             <p className="eyebrow">Human invite</p>
             <h2>真人邀请已生成</h2>
             <p className="lede" style={{ marginTop: 12 }}>
-              已按公开回答匹配到具体的人。请进入补充页，用「最小填空」或「完整编辑」把这一段补完。
+              这个缺口 AI 补不了。进入补充页，用「最小填空」或「完整编辑」把这一段补完，
+              看山会把这一段接到 Human Mesh 上。
             </p>
             <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Link className="btn btn-primary" href="/fill">进入真人补充页</Link>
@@ -228,7 +240,119 @@ export default function MirrorPage() {
         onClose={() => setDrawerOpen(false)}
         onInvited={handleInvited}
       />
-      <EvidenceOverview mirror={mirror} />
     </>
+  );
+}
+
+/**
+ * 分身发现 —— 这个 Tab 的核心。
+ *
+ * 旧版一进来就是「本场会话的工作台数据」，没生成过镜像问题时甚至只剩一句提示，
+ * 完全看不到这座虚拟知乎里到底住着谁。现在把「人」提到最前面：
+ * 答主名册 + 公共人物分身，点任意一位直接带他进入提问流程。
+ */
+function DiscoverSection() {
+  return (
+    <section style={{ paddingTop: 32 }}>
+      <Link className="link mono" href="/" style={{ fontSize: 12 }}>
+        ← 返回首页
+      </Link>
+      <p className="eyebrow" style={{ marginTop: 14 }}>Discover · 分身发现</p>
+      <h1 style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "26ch" }}>
+        这里住着 {PERSONAS.length} 位知乎答主，
+        <br />
+        和 {PUBLIC_FIGURES.length} 位公共人物的思维分身。
+      </h1>
+      <p className="lede" style={{ marginTop: 14, maxWidth: "62ch" }}>
+        每一位都不是「换一种语气的同一个模型」：他知道什么、怎么看问题、怎么说话、
+        明确不装懂什么，这四件事都不一样。点一位，直接带着他去提问。
+      </p>
+
+      <div className="grid grid-3" style={{ marginTop: 24 }}>
+        {PERSONAS.map((p, i) => (
+          <motion.div
+            key={p.handle}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
+            style={{ display: "flex" }}
+          >
+            <Link
+              href={"/?persona=" + p.handle}
+              className="card persona-tile"
+              style={{ display: "flex", flexDirection: "column", width: "100%" }}
+            >
+              <div className={"accent-bar a-" + p.accent} />
+              <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
+                <h3 style={{ margin: 0, fontSize: 16 }}>{p.displayName}</h3>
+                <span className="persona-mono">@{p.handle}</span>
+              </div>
+              <p className="dim" style={{ fontSize: 13, margin: "8px 0 10px" }}>
+                {p.headline}
+              </p>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {p.voice.tone.slice(0, 3).map((t) => (
+                  <span key={t} className="chip">
+                    {t}
+                  </span>
+                ))}
+              </div>
+              <div className="row-between" style={{ marginTop: "auto" }}>
+                <span className="mono dimmer" style={{ fontSize: 11.5 }}>
+                  {corpusLabel(p)}
+                </span>
+                <span className="link mono" style={{ fontSize: 11.5 }}>
+                  带他去提问 →
+                </span>
+              </div>
+            </Link>
+          </motion.div>
+        ))}
+      </div>
+
+      <div className="section-head" style={{ marginTop: 34 }}>
+        <div>
+          <h2>公共人物 · 思维分身</h2>
+        </div>
+        <span className="mono dimmer" style={{ marginLeft: "auto" }}>
+          {PUBLIC_FIGURE_LABEL}
+        </span>
+      </div>
+
+      <div className="grid grid-3">
+        {PUBLIC_FIGURES.map((f, i) => (
+          <motion.div
+            key={f.id}
+            className="card"
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: Math.min(i * 0.04, 0.4) }}
+          >
+            <div className={"accent-bar a-" + f.accent} />
+            <div
+              className="row-between"
+              style={{ alignItems: "baseline", gap: 10, marginBottom: 10 }}
+            >
+              <h3 style={{ margin: 0, fontSize: 16 }}>{f.name}</h3>
+              <span className="mono dimmer" style={{ fontSize: 11 }}>
+                研究草案
+              </span>
+            </div>
+            <div style={{ display: "grid", gap: 5 }}>
+              {f.capabilities.map((c) => (
+                <div key={c.id} className="dim" style={{ fontSize: 12.5 }}>
+                  · {c.name}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <p className="dim" style={{ fontSize: 12.5, marginTop: 14 }}>
+        公共人物分身的推理路径来自公开资料，正在逐项核验 —— 核验通过的能力才会进入作答链路。
+        这里如实标注，不把「按公开资料推演」写成「本人原话」。
+      </p>
+    </section>
   );
 }
