@@ -18,6 +18,7 @@ import { personaCandidates } from "@/lib/domain/router";
 import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
 import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
 import MeshGraph from "@/components/mesh/MeshGraph";
+import MineHandoffPanel from "@/components/mesh/MineHandoffPanel";
 
 /**
  * 镜像工作台。
@@ -217,6 +218,10 @@ export default function MirrorPage() {
           </div>
         </motion.section>
       )}
+
+      <section className="section">
+        <MineHandoffPanel mirror={mirror} answers={mirror.answers} />
+      </section>
 
       <section className="section">
         <HandoffPanel />
