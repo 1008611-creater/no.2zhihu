@@ -51,12 +51,19 @@ const LEGEND_ORDER: Array<{ type: MeshNode["type"]; c: string; l: string }> = [
   { type: "answer", c: "#ff8a4c", l: "回答" },
 ];
 
+/** 环上标签按字数截断 —— 长标题横跨小半个圆，同环相邻两个必然叠在一起。 */
+function truncateLabel(label: string, max: number): string {
+  return label.length > max ? `${label.slice(0, max)}…` : label;
+}
+
 export function MeshGraph({
   graph,
   height = 460,
   rings,
   showLabels,
   legendLabels,
+  labelMaxChars = 16,
+  layout = "organic",
 }: {
   graph: Graph;
   height?: number;
@@ -66,6 +73,23 @@ export function MeshGraph({
   showLabels?: MeshNode["type"][];
   /** 覆盖图例里的类型名（例如把 question 叫「我提过的问题」）。 */
   legendLabels?: Partial<Record<MeshNode["type"], string>>;
+  /**
+   * 标签最长字数，超出截断补省略号。
+   *
+   * 同心圈上的标签是水平居中排的，一条 20 字的问题标题能横跨小半个圆 ——
+   * 同一环上相邻两个节点必然叠在一起。截断保证「一眼读得出是哪件事」，
+   * 完整原文仍在悬停提示与点击详情里，信息没有丢。
+   */
+  labelMaxChars?: number;
+  /**
+   * 布局模式：
+   *   organic —— 同心圆起手，再跑力导向微调（默认；节点少、想要一点自然感时用）。
+   *   radial  —— 严格落在同心圆上，不跑力导向（节点多、要读「结构」时更规整）。
+   *
+   * 力导向会把连边两端的节点互相拉近，节点一多，同心圆就会被拉成偏心椭圆 ——
+   * 「我的 Mesh」要读的恰恰是「哪一圈、多密」，所以那边显式选 radial。
+   */
+  layout?: "organic" | "radial";
 }) {
   const [hover, setHover] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
@@ -109,6 +133,8 @@ export function MeshGraph({
       });
     }
     type Point = SimulationNodeDatum & { id: string; type: MeshNode['type'] };
+    // radial：同心圆即最终位置，不再让力导向把环拉变形。
+    if (layout === "radial") return map;
     const nodes: Point[] = graph.nodes.map(n => ({ id: n.id, type: n.type, ...map.get(n.id) }));
     const links = graph.edges.map(e => ({ source: e.source, target: e.target }));
     const simulation = forceSimulation(nodes).stop()
@@ -120,7 +146,7 @@ export function MeshGraph({
     simulation.stop();
     nodes.forEach(n => map.set(n.id, { x: n.x ?? cx, y: n.y ?? cy }));
     return map;
-  }, [graph.nodes, graph.edges, cx, cy, RING]);
+  }, [graph.nodes, graph.edges, cx, cy, RING, layout]);
   const radius = scaleSqrt().domain([0, Math.max(1, ...graph.nodes.map(n => n.weight))]).range([6, 16]);
   const point = (id: string) => offsets[id] ?? pos.get(id);
   const activeId = hover ?? selected;
@@ -206,6 +232,8 @@ export function MeshGraph({
               onMouseLeave={() => setHover(null)}
               style={{ cursor: "pointer", originX: `${p.x}px`, originY: `${p.y}px` }}
             >
+              {/* 悬停显示完整标签 —— 截断只影响画面，原文随时可查。 */}
+              <title>{n.label}</title>
               <circle cx={p.x} cy={p.y} r={r + (active ? 5 : 0)} fill={ACCENT[n.accent] ?? "#4d7cff"} opacity={active ? 1 : 0.88} />
               <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={ACCENT[n.accent] ?? "#4d7cff"} strokeOpacity={active ? 0.6 : 0.22} />
               {(labelTypes.includes(n.type) || active) && (
@@ -216,7 +244,7 @@ export function MeshGraph({
                   fill={active ? "#f2f4fb" : "#8b93ad"}
                   fontWeight={n.type === "question" ? 700 : 600}
                 >
-                  {n.label}
+                  {truncateLabel(n.label, labelMaxChars)}
                 </text>
               )}
             </motion.g>
