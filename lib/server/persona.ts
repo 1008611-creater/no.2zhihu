@@ -135,12 +135,7 @@ export async function distillPersona(
   try {
     const raw = await zhidaText([
       { role: "system", content: DISTILL_PROMPT },
-      {
-        role: "user",
-        content: sources
-          .map((s, i) => "[" + (i + 1) + "] " + s.title + "\n" + s.excerpt)
-          .join("\n\n"),
-      },
+      { role: "user", content: distillMaterial(sources) },
     ]);
     let parsed = parseDistill(raw);
     if (!parsed) {
@@ -151,7 +146,7 @@ export async function distillPersona(
       ]);
       parsed = parseDistill(repaired);
       if (!parsed) return fallback(handle, name, accent, mine.length, items.length,
-        "人格返回格式无法解析，修复一次后仍未成功。来源已保留，可稍后重试。", sources, "invalid_format");
+        "模型没有按要求返回人格 JSON（可能把材料当成了要回答的问题），修复一次后仍未成功。来源已保留，可稍后重试。", sources, "invalid_format");
     }
 
     return {
@@ -242,8 +237,36 @@ function fallback(
   };
 }
 
+/**
+ * 把待分析的回答片段包成「材料」，并在末尾重申输出格式。
+ *
+ * 为什么必须这么写（2026-09-15 线上实测，同一输入复现 2/2）：
+ *   原实现把 `[n] 标题 + 摘要` 直接拼起来当 user message 发出去，模型把
+ *   **标题当成了要回答的问题**、把材料当成了「要作答的内容」，
+ *   于是输出了一篇针对该话题的分析文章 —— 全文**一个花括号都没有**，
+ *   `parseDistill` 只能判 invalid_format。
+ *   这不是抽 JSON 不够健壮的问题，是提示词没把「材料」与「任务」分开。
+ *
+ * 三处修正：① 用分隔标记把材料框住；② 明说「这是材料，不是要你回答的问题」；
+ *   ③ 在材料**之后**重申输出格式 —— 离输出最近的位置，模型最不容易忽略。
+ */
+function distillMaterial(sources: SkillSource[]): string {
+  const body = sources
+    .map((s, i) => "[" + (i + 1) + "] " + s.title + "\n" + s.excerpt)
+    .join("\n\n");
+  return [
+    "【待分析的原文片段 · 开始】",
+    body,
+    "【待分析的原文片段 · 结束】",
+    "",
+    "以上只是**分析材料**，不是要你回答的问题。不要解释、不要评论、不要总结这些内容讨论的话题。",
+    "你的唯一输出是一个 JSON 对象：第一个字符是 {，最后一个字符是 }，中间不要有任何其他文字或 Markdown 标记。",
+  ].join("\n");
+}
+
 const DISTILL_PROMPT = [
-  "你是一个写作风格分析器。下面是一位知乎答主自己的公开回答片段。",
+  "你是一个写作风格分析器。你的唯一任务：从待分析的原文片段里提取**这位答主的写作与认知特征**。",
+  "⚠️ 不要回答、不要评论、不要总结片段里讨论的话题 —— 那些内容只是分析材料，不是问题。",
   "只输出一行严格 JSON，不要 Markdown 代码块，不要解释：",
   "{",
   '  "headline": "一句话身份，20 字以内",',
@@ -275,14 +298,59 @@ interface ParsedDistill {
   catchphrases: string[];
 }
 
+/**
+ * 从模型输出里抽出第一个**括号配平**的 JSON 对象。
+ *
+ * 不能用 `indexOf("{")` + `lastIndexOf("}")`：提示词本身含一份 JSON 模板，
+ * 模型一旦先复述模板再给答案（或前后带一段说明），首尾各取一个括号就会把
+ * 多段内容一起截进来，`JSON.parse` 必失败。
+ * 先剥围栏代码块，再按括号配平扫描 —— 字符串内部的括号（含转义）不参与计数。
+ */
+function extractJsonObject(raw: string): string | null {
+  const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const text = fenced ? fenced[1] : raw;
+  const start = text.indexOf("{");
+  if (start < 0) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') inString = true;
+    else if (ch === "{") depth++;
+    else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
+/** 提示词里的占位符文本。模型偶尔会把模板原样复述回来，那不是人格数据。 */
+const TEMPLATE_MARKERS = [
+  "他熟悉的领域/经历",
+  "一句话身份",
+  "他明确不装懂的范围",
+  "short|medium|long|mixed",
+  "他怎么举例",
+];
+
 function parseDistill(raw: string): ParsedDistill | null {
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
+  const json = extractJsonObject(raw);
+  if (!json) return null;
+  // 复述模板比解析失败更危险 —— 它会静默造出一个由占位符组成的人格。
+  if (TEMPLATE_MARKERS.some((m) => json.includes(m))) return null;
 
   let obj: Record<string, unknown>;
   try {
-    obj = JSON.parse(raw.slice(start, end + 1)) as Record<string, unknown>;
+    obj = JSON.parse(json) as Record<string, unknown>;
   } catch {
     return null;
   }
