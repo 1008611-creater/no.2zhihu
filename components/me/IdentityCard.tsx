@@ -24,6 +24,8 @@ interface Props {
     user: SessionUser | null;
     available: boolean;
     stateVerified: boolean;
+    /** cookie 没过期 ≠ 还能取数据：服务端 token 会随进程重启消失。 */
+    tokenValid: boolean;
     loading: boolean;
     login: () => void;
     logout: () => void | Promise<void>;
@@ -31,7 +33,7 @@ interface Props {
 }
 
 export default function IdentityCard({ notice, session }: Props) {
-  const { user, available, stateVerified, loading, login, logout } = session;
+  const { user, available, stateVerified, tokenValid, loading, login, logout } = session;
   /** 未登录时的本机昵称 —— 数据本来就全在本机，不必强制登录。 */
   const [fallbackName, setFallbackName] = useState("");
 
@@ -122,6 +124,16 @@ export default function IdentityCard({ notice, session }: Props) {
         <p className="dimmer mono" style={{ fontSize: 11.5, marginTop: 8 }}>
           知乎授权回调当前不回传 state 参数，因此本次登录未完成标准的 CSRF 校验。
           如实标注，不把它当作「生产级安全登录」。
+        </p>
+      )}
+
+      {/* cookie 还在、服务端 token 已经没了（服务重启，或满 1 小时）。
+          这时「已登录」是个空壳 —— 任何取数请求都会 401，而用户看不出原因。
+          如实说清，并给一次点击就能重新授权的入口。 */}
+      {!loading && user && !tokenValid && (
+        <p className="dimmer mono" style={{ fontSize: 11.5, marginTop: 8 }}>
+          登录已过期：知乎 access_token 只保存在服务端内存（有效期 1 小时，且平台不提供
+          refresh_token），服务重启后即失效。请重新登录以继续读取你的知乎数据。
         </p>
       )}
     </>

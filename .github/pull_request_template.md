@@ -1,3 +1,18 @@
+<!--
+提交前先跑一遍队列体检，它决定你这个 PR 会不会把队列堵住：
+    node scripts/pr-queue.mjs
+在途 PR 已经 2 个时，先把别人的合掉再提 —— 队列越长，每个 PR 的返工次数越多
+（main 开了 strict: true，每合并 1 个 PR，其余所有在途 PR 全部失效要 rebase）。
+规则见 docs/branch-flow-rules.md
+-->
+
+## 队列自检（提交前做完，缺一项就先别提）
+
+- [ ] `node scripts/pr-queue.mjs` → 在途 PR 未超上限（≤ 2）
+- [ ] 已同步最新 main（`git fetch origin main && git rebase origin/main`，或点 PR 页面的 Update branch）
+- [ ] 已查重：没有别的在途 PR 在改**同一批文件**（重叠 ≥3 个文件 ≈ 同一件事的两个版本）
+- [ ] `node scripts/verify-merge.mjs <本分支>` 退出码为 0
+
 ## 改了什么
 
 <!-- 一句话说清这个 PR 做了什么 -->
