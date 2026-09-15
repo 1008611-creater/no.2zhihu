@@ -1,6 +1,7 @@
 import "server-only";
 
 import { findGaps } from "@/lib/domain/gap";
+import { voiceFingerprintGaps } from "@/lib/domain/personas";
 import { routeQuestion } from "@/lib/domain/router";
 import { PERSONA_SKILLS } from "@/lib/domain/skills";
 import type { AnswerDraft, MirrorQuestion, Persona, Skill, SkillSource } from "@/lib/domain/types";
@@ -29,6 +30,28 @@ import type { SearchItem } from "@/lib/zhihu/types";
  */
 
 const MIRROR_TTL_MS = 30 * 60_000;
+
+/**
+ * 启动自检：答主语言指纹是否齐全。
+ *
+ * 为什么放在这一层、而不是 lib/domain：AGENTS.md §2 规定 lib/domain 必须是纯函数层、
+ * 不得读 process.env。而「指纹缺失要不要致命」是**运行环境**的决策，所以纯计算留在
+ * domain（voiceFingerprintGaps），env 判断留在 server（这里）。
+ *
+ * 为什么值得自检：指纹缺失不会让任何页面报错，只会让生成的回答**悄悄退回 AI 腔**
+ * —— 而这正是评委反复指出的那个问题。让它可见，好过让它静默发生。
+ * 开发期直接抛错（早失败），生产期只警告（不能因为一个人格资产没写完就让整个服务起不来）。
+ */
+{
+  const gaps = voiceFingerprintGaps();
+  if (gaps.length > 0) {
+    const detail = gaps.map((g) => `· ${g.name}：缺少 ${g.missing.join("、")}`).join("\n");
+    if (process.env.NODE_ENV !== "production") {
+      throw new Error("答主语言指纹不完整（会导致生成文风退回 AI 腔）：\n" + detail);
+    }
+    console.warn("[personas] 答主语言指纹不完整，生成文风会退回 AI 腔：\n" + detail);
+  }
+}
 
 /**
  * 降级结果的缓存时长。

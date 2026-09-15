@@ -95,16 +95,15 @@ export function missingVoiceFingerprint(p: Persona): string[] {
   });
 }
 
-// 模块加载时自检一次：开发环境缺字段直接抛错，生产环境只在控制台警告
-// （生产不能因为一个人格资产没写完就整站 500）。
-if (process.env.NODE_ENV !== "production") {
-  const incomplete = PERSONAS.map((p) => ({ p, miss: missingVoiceFingerprint(p) })).filter(
-    (x) => x.miss.length > 0,
+/**
+ * 全量体检：返回所有指纹不全的答主（空数组 = 都齐）。
+ *
+ * 这里刻意**只做纯计算** —— 不读 `process.env`、不抛错、不产生副作用。
+ * AGENTS.md §2 要求 lib/domain 必须是纯函数层；「要不要因此让进程起不来」
+ * 是运行环境的决策，交给 lib/server 去判断（见 lib/server/mirror.ts 的加载自检）。
+ */
+export function voiceFingerprintGaps(): Array<{ name: string; missing: string[] }> {
+  return PERSONAS.map((p) => ({ name: p.displayName, missing: missingVoiceFingerprint(p) })).filter(
+    (x) => x.missing.length > 0,
   );
-  if (incomplete.length > 0) {
-    throw new Error(
-      "答主语言指纹不完整（会导致生成文风退回 AI 腔）：\n" +
-        incomplete.map((x) => `· ${x.p.displayName}：缺少 ${x.miss.join("、")}`).join("\n"),
-    );
-  }
 }
