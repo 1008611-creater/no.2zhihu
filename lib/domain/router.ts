@@ -1,4 +1,4 @@
-import { PERSONA_SKILLS, SKILL_SEEDS } from "./skills";
+import { PERSONA_SKILLS, SKILL_SEEDS, skillFromSeed } from "./skills";
 import { corpusLabel } from "./personas";
 import type { Persona, RoutingDecision, Skill } from "./types";
 
@@ -16,6 +16,27 @@ import type { Persona, RoutingDecision, Skill } from "./types";
 
 const MIN_SKILLS = 3;
 const MAX_SKILLS = 6;
+
+/**
+ * 零信号底分。**答主只要没有任何领域/立场/线索命中，得分就恰好等于它。**
+ *
+ * 为什么要把这个数字显式命名：自动推荐过去是无条件 `slice(0, 3)`，
+ * 而 16 位答主在零信号时全部同分 0.25，稳定排序会让「名册前两位」
+ * 恒定入选 —— 问半导体也会推来一位商业毒舌和一位文学作家。
+ * 三位答主里两位与问题无关，产品「多视角作答」的承诺当场塌掉。
+ * 现在凡等于底分者一律视为**未命中**，不再参与推荐。
+ */
+const BASE_SCORE = 0.25;
+
+/**
+ * 通用视角兜底顺序。
+ *
+ * 用于「关键词一个都不命中」的提问（如「半导体国产替代走到哪一步了」——
+ * 既无「为什么」也无「怎么做」）。这两个视角对任何实质问题都成立：
+ * 拆解者讲结构与因果，反驳者挑共识里最脆的一环。
+ * **刻意只留两个**，且都标记 supplementary，不伪装成真人答主。
+ */
+const GENERIC_SUPPLEMENTARY = ["structural-analysis", "contrarian"];
 
 const FACT_ANCHOR = /(\d{2,}|一年|两年|三年|个月|万|千|亿|％|%|大学|公司|行业|专业|城市|国家)/;
 const JUDGEMENT = /(评价|值得|该不该|是不是|争议|看法|好坏|优劣|骗局|智商税)/;
@@ -163,6 +184,15 @@ const TOPIC_HINTS: Array<{ match: RegExp; handles: string[]; reason: string; wei
     weight: 0.3,
   },
   {
+    // AI 与认知类问题。放在这里是因为本产品本身就在知乎 AI 赛道，
+    // 评委最可能问的就是这一类；而原来的线索表对「AI / 大模型 / 变笨 /
+    // 认知」完全无覆盖，导致这类问题一个答主都匹配不上。
+    match: /(AI|人工智能|大模型|算法|机器学习|ChatGPT|GPT|智能体|Agent|变笨|认知|脑子|思考能力|注意力|依赖)/,
+    handles: ["cai-tong"],
+    reason: "问题涉及 AI 与人的认知、学习能力之间的关系",
+    weight: 0.28,
+  },
+  {
     match: /(焦虑|抑郁|失眠|情绪|心理|原生家庭|亲子|内向|自卑|孤独|意义|内耗|压力|EMO|emo|自我怀疑|羞耻)/,
     handles: ["dong-ji-zai-hang-zhou"],
     reason: "问题涉及情绪与心理处境",
@@ -243,7 +273,58 @@ function scorePersona(persona: Persona, text: string): { score: number; reasons:
   return { score: Math.min(Number(score.toFixed(2)), 1), reasons };
 }
 
-/** 自动推荐：不指定答主时，从名册里挑 3 位最相关的。 */
+/**
+ * 视角型补位：问题没有对口答主时，用「稳定视角」把席位补齐。
+ *
+ * 为什么必须走这条路而不是硬凑答主：视角型分身（拆解者 / 反驳者 / 亲历者…）
+ * 带 `triggers`，问「为什么」时「拆解者」必然对口，问「是不是」时「反驳者」
+ * 必然对口 —— 它们**永远与问题相关**。而拿一位零信号的答主凑数，
+ * 三位里就有两位在自说自话，多视角直接退化成噪音。
+ *
+ * 返回的 Skill 标记 `supplementary: true`，前端会以补充层的样式呈现，
+ * 不会伪装成真人答主。
+ */
+function pickSupplementarySkills(text: string, need: number): Skill[] {
+  const topic = extractTopic(text);
+  const scored = SKILL_SEEDS.map((seed) => ({
+    seed,
+    hits: seed.triggers.filter((t) => text.includes(t)).length,
+  }))
+    .filter((s) => s.hits > 0)
+    .sort((a, b) => b.hits - a.hits);
+
+  const out = scored
+    .slice(0, need)
+    .map(({ seed }) =>
+      skillFromSeed(seed, [], seed.queryTemplate.replace("{topic}", topic), 0),
+    );
+
+  // 通用视角兜底：问题太短、或问法不在任何 triggers 里（例如
+  // 「半导体国产替代走到哪一步了」既没有「为什么」也没有「怎么做」）时，
+  // 触发器会一个都不命中。此时用「拆解者」「反驳者」这类对**任何实质问题**
+  // 都站得住的视角补齐 —— 它们仍然是对口的角度，只是不靠关键词触发。
+  // 这一步之后仍不足，就如实少给，绝不再退回「拿无关答主凑数」。
+  const used = new Set(out.map((s) => s.id));
+  for (const id of GENERIC_SUPPLEMENTARY) {
+    if (out.length >= need) break;
+    if (used.has(id)) continue;
+    const seed = SKILL_SEEDS.find((s) => s.id === id);
+    if (seed) out.push(skillFromSeed(seed, [], seed.queryTemplate.replace("{topic}", topic), 0));
+  }
+  return out;
+}
+
+/**
+ * 自动推荐：不指定答主时，挑最相关的席位。
+ *
+ * 三条规则，缺一不可：
+ *   1. **零信号答主一律不入选**（score 必须高于 BASE_SCORE）；
+ *   2. 对口答主不足 `count` 位时，用视角型分身补位，**绝不用无关答主凑数**；
+ *   3. 连视角型都没触发（问题太短或全是停用词）时，宁可少给，如实返回。
+ *
+ * 宁可只给 2 位对口的，也不给 3 位里 1 位是噪音的 —— 后者会直接
+ * 毁掉「同一个问题换不同答主」这个核心体验。
+ */
 export function recommendPersonas(title: string, count = MIN_SKILLS): Skill[] {
   const text = title.trim();
   const ranked = PERSONA_SKILLS.map((skill) => {
@@ -251,7 +332,13 @@ export function recommendPersonas(title: string, count = MIN_SKILLS): Skill[] {
     return { skill, score, reasons };
   }).sort((a, b) => b.score - a.score);
 
-  return ranked.slice(0, count).map((r) => r.skill);
+  const matched = ranked.filter((r) => r.score > BASE_SCORE);
+  const picked = matched.slice(0, count).map((r) => r.skill);
+
+  if (picked.length < count) {
+    picked.push(...pickSupplementarySkills(text, count - picked.length));
+  }
+  return picked;
 }
 
 /**
@@ -298,21 +385,33 @@ export function routeQuestion(title: string, handles: string[] = []): RoutingDec
 
   // 自动推荐路径
   const recommended = recommendPersonas(text, MIN_SKILLS);
+  const pickedNames = recommended.map((s) => s.name).join("、");
   return {
     mode: "auto",
     intent,
     picks: recommended.map((s) => {
-      const { score, reasons } = scorePersona(s.persona!, text);
+      // 视角型补位没有 Persona，不能走 scorePersona —— 过去这里直接
+      // `s.persona!` 会让补位分身一出现就抛错，所以补位逻辑一直是死的。
+      if (!s.persona) {
+        return {
+          skillId: s.id,
+          score: 0,
+          reason: `没有对口的答主，由「${s.name}」这一稳定视角补位：${s.lens}`,
+        };
+      }
+      const { score, reasons } = scorePersona(s.persona, text);
       return {
         skillId: s.id,
         score,
         reason: reasons.length > 0 ? reasons.join("；") : "按领域与风格搭配入选",
       };
     }),
-    summary: `识别为「${intent}」，从 ${PERSONA_SKILLS.length} 位答主里推荐了 ${recommended
-      .map((s) => s.name)
-      .join("、")}。你可以换人，也可以继续邀请。`,
-    queries: recommended.map((s) => buildPersonaQuery(s.persona!, text)),
+    summary:
+      `识别为「${intent}」，从 ${PERSONA_SKILLS.length} 位答主里推荐了 ${pickedNames}。` +
+      "你可以换人，也可以继续邀请。",
+    queries: recommended.map((s) =>
+      s.persona ? buildPersonaQuery(s.persona, text) : s.query || extractTopic(text),
+    ),
   };
 }
 
