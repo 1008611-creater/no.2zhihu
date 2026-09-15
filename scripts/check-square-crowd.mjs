@@ -26,7 +26,8 @@ const { crowdLayout } = await import("../lib/domain/crowd.ts");
 const { excerptOf, metaOf, sourceFromLibrary, toBroadcastItem } = await import(
   "../lib/domain/broadcast.ts"
 );
-const { statsOf } = await import("../lib/domain/library.ts");
+const { statsOf, hydrateLibraryEntry } = await import("../lib/domain/library.ts");
+const { splitSources } = await import("../lib/domain/evidence.ts");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, "..", "public", "square-library.json"), "utf8"));
@@ -221,6 +222,103 @@ if (!globalsCss.includes(".persona-grid > *:has(.persona-popover)")) {
   bad("PersonaDirectory 没有使用 persona-grid 类，上面的规则不会生效");
 } else {
   ok("名册浮层在网格项上提升层级（不再被后续卡片覆盖）");
+}
+
+console.log("\n" + "=".repeat(74));
+console.log("⑧ 来源必须带作者与链接（铁律 3），且展示口径只有一套");
+console.log("=".repeat(74));
+/**
+ * 这一节是 2026-09-15 那次修复的护栏。
+ *
+ * 当时 `slim()` 只留了来源**标题**，url / author 被裁掉，于是从广场载入的讨论，
+ * 其回答页呈现出「N 条真实知乎来源」+ 空链接 + 空署名胶囊 + 孤零零一个「…」。
+ * 守卫写在这里，是因为这类退化**不会报错、不会崩** —— 只会让页面看起来像坏了。
+ */
+const ZHIHU_HOST = /^https:\/\/(www|zhuanlan)\.zhihu\.com\//;
+let srcTotal = 0;
+let attributable = 0;
+let emptyAnswers = 0;
+for (const e of entries) {
+  for (const a of e.answers ?? []) {
+    // 要求**字段存在**：`sources` 被整个丢掉时（历史上就是这么退化的）这里会失败。
+    if (!Array.isArray(a.sources)) {
+      bad(e.title.slice(0, 18) + " / " + a.skillName + " 缺 sources 字段");
+      continue;
+    }
+    // 空数组是**合法**状态：确有回答是「一条证据都没取到」，此时回答页会走
+    // 「已标记为缺口」的提示 —— 那是设计内的降级，不是退化。如实计数即可。
+    if (a.sources.length === 0) {
+      emptyAnswers++;
+      continue;
+    }
+    for (const s of a.sources) {
+      srcTotal++;
+      if (!s.title?.trim()) bad("来源缺标题 @" + e.id.slice(0, 12));
+      if (!Number.isFinite(s.voteUp) || s.voteUp < 0) bad("赞同数不合法：" + s.voteUp);
+      // 只有「作者名与链接都在」才算可核对；缺一个就不该被当作来源展示。
+      if (!s.author?.trim() || !s.url?.trim()) continue;
+      attributable++;
+      if (!ZHIHU_HOST.test(s.url)) bad("来源链接不是知乎域名（疑似编造）：" + s.url.slice(0, 60));
+    }
+  }
+}
+// 归属率下限：一旦有人又为了省体积把 author/url 裁掉，这条会立刻失败。
+const rate = attributable / Math.max(srcTotal, 1);
+if (rate < 0.9) {
+  bad(
+    "可核对来源仅 " + (rate * 100).toFixed(1) + "%（低于 90%）" +
+      " —— slim() 是不是又把 author/url 裁掉了？",
+  );
+} else {
+  ok(attributable + "/" + srcTotal + " 条来源带作者与链接（" + (rate * 100).toFixed(1) + "%）");
+}
+if (emptyAnswers > 0) {
+  console.log("  · " + emptyAnswers + " 篇回答一条证据都没取到（走「已标记为缺口」提示，属合法降级）");
+}
+
+// 同一个数字只能有一个口径：右栏统计 == 回答页真正列得出的条数。
+let shownByStats = 0;
+let shownBySources = 0;
+for (const e of entries) {
+  shownByStats += statsOf(e).sourceCount;
+  for (const a of e.answers ?? []) shownBySources += splitSources(a.sources).displayable.length;
+}
+if (shownByStats !== shownBySources) {
+  bad("右栏统计 " + shownByStats + " 条 != 回答页可展示 " + shownBySources + " 条（口径漂移）");
+} else {
+  ok("右栏统计与回答页展示同为 " + shownByStats + " 条");
+}
+
+/**
+ * 生产端 → 消费端的闭环：把库条目真的还原一遍，看来源有没有**读得出来**。
+ *
+ * 为什么单独考这一条：字段改名（比如 `sources` → `evidenceSources`）时，
+ * 库文件照样合法、JSON 层面什么错都没有，但 `hydrateLibraryEntry` 会静默读到
+ * undefined —— 表现就是广场点进去来源区空白。这正是本文件开头警告的
+ * 「字段在库里、读不出来」的静默缺失，只有真跑一遍还原才拦得住。
+ */
+let hydratedMismatch = 0;
+let hydratedEvidence = 0;
+for (const e of entries) {
+  const q = hydrateLibraryEntry(e);
+  for (const a of q.answers) {
+    const fromJson = e.answers.find((x) => x.id === a.id)?.sources ?? [];
+    const wantN = splitSources(fromJson).displayable.length;
+    const gotN = splitSources(a.evidence).displayable.length;
+    hydratedEvidence += gotN;
+    if (wantN !== gotN) {
+      hydratedMismatch++;
+      bad("还原后来源数不一致 @" + e.id.slice(0, 12) + " / " + a.skillName + "：" + wantN + " → " + gotN);
+    }
+  }
+  // 分身侧的来源也要接到（镜像页的「证据时间轴」读的是 skill.sources）
+  const skillSources = q.skills.reduce((n, s) => n + s.sources.length, 0);
+  if (skillSources === 0 && e.answers.some((a) => (a.sources ?? []).length > 0)) {
+    bad("还原后 skill.sources 全空 @" + e.id.slice(0, 12) + " —— 镜像页证据时间轴会显示「没有可核对的来源」");
+  }
+}
+if (hydratedMismatch === 0) {
+  ok("库 → hydrate 往返一致，共还原出 " + hydratedEvidence + " 条可核对来源（含分身侧来源）");
 }
 
 console.log("\n" + "=".repeat(74));

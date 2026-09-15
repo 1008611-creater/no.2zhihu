@@ -2,6 +2,7 @@ import "server-only";
 
 import { checkClaims } from "@/lib/domain/claims";
 import { cutExcerpt, stripAssistantBoilerplate } from "@/lib/domain/answerIntegrity";
+import { cleanSourceUrl, confidenceOf, normalizeAuthorName } from "@/lib/domain/evidence";
 import { findGaps } from "@/lib/domain/gap";
 import { voiceFingerprintGaps } from "@/lib/domain/personas";
 import { filterEvidence } from "@/lib/domain/relevance";
@@ -36,7 +37,10 @@ import type { SearchItem } from "@/lib/zhihu/types";
  *   问题 → Human Router 定人（manual 优先）→ 每位答主跑真实知乎搜索取证据
  *        → 直答按该答主的人格生成正文 → 缺口识别（lib/domain/gap.ts）→ 匹配真人候选
  *
- * 额度纪律（直答 100/天、搜索 100/天）：
+ * 额度纪律（⚠️ 口径不一致，待确认：`AGENTS.md` §1.5 写「热榜 100/天、直答 100/天」，
+ * 而 2026-09-15 用 `/api/v1/quota` 实测该账号是 zhihu_search 5000/天、
+ * zhida_openai 5000/天、hot_list 100/天。两者差 50 倍，这里**不擅自改口径**，
+ * 预算一律按更小的那个（100/天）算 —— 宁可保守，不可超支）：
  *   - 整条流程的结果按「问题 + 指定答主 + 是否直答 + 证据条数」缓存 30 分钟。
  *   - 单次流程最多 MAX_SKILLS_PER_RUN 位答主。
  *   - 继续邀请（invite）只生成新的一位，不重跑已有分身。
@@ -434,9 +438,13 @@ export async function collectRelevantEvidence(
 function toSource(item: SearchItem): SkillSource {
   return {
     title: item.Title ?? "（无标题）",
-    author: item.AuthorName ?? "匿名用户",
-    url: item.Url ?? "",
-        // 截断必须落在句末 —— 这段摘要会被 evidenceBody() 原样贴进回答正文，
+    // ⚠️ 不要写 `item.AuthorName ?? "匿名用户"`：上游对**同一条内容**可能返回空串
+    //（实测同一 answer 两次请求分别得到 "Jackie Lee" 与 ""），而 `??` 只兜 null/undefined，
+    // 空串会穿过去渲染成空白胶囊；改成兜「匿名用户」更糟 —— 那位作者并非匿名（铁律 2）。
+    // 统一交给 normalizeAuthorName 如实保留，能否展示由 UI 用 isDisplayableSource 判定。
+    author: normalizeAuthorName(item.AuthorName),
+    url: cleanSourceUrl(item.Url ?? ""),
+    // 截断必须落在句末 —— 这段摘要会被 evidenceBody() 原样贴进回答正文，
     // 硬切会产生「……很多好方法好点子都是在实验的此外还有 2 条相关回答」这种断句。
     excerpt: cutExcerpt((item.ContentText ?? "").replace(/\s+/g, " "), 220),
     voteUp: item.VoteUpCount ?? 0,
@@ -447,11 +455,8 @@ function toSource(item: SearchItem): SkillSource {
   };
 }
 
-/** 可信度只由「拿到几条真实来源」决定，不引入任何模型自评分。 */
-function confidenceOf(sources: SkillSource[]): number {
-  if (sources.length === 0) return 0;
-  return Number(Math.min(0.35 + sources.length * 0.22, 0.95).toFixed(2));
-}
+/** 可信度公式已移到 `lib/domain/evidence.ts` —— 广场库还原来源时要用同一个数字，
+ *  而 domain 不能反向依赖 server。 */
 
 function normalizeEditTime(value: number | undefined): number {
   if (!value) return 0;

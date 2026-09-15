@@ -22,6 +22,7 @@
  * **真实派生**的四项，取不到就不出现 —— 宁可少一行，不写一个编出来的数。
  */
 
+import { splitSources } from "./evidence";
 import type { LibraryEntry } from "./library";
 import { statsOf } from "./library";
 import { statusLabelOf, type TopicCounts } from "./square-layout";
@@ -158,7 +159,9 @@ export function sourceFromMirror(q: MirrorQuestion): BroadcastSource {
   return {
     id: q.id,
     title: q.title,
-    sourceCount: q.answers.reduce((n, a) => n + (a.evidence?.length ?? 0), 0),
+    // 与 `statsOf` / 回答页同一口径：只数可核对的来源（作者名与链接齐全），
+    // 免得右栏的「N 条来源」比回答页列得出的多。
+    sourceCount: q.answers.reduce((n, a) => n + splitSources(a.evidence).displayable.length, 0),
     personaCount: handles.size,
     answerCount: q.answers.length,
     openGapCount: q.gaps.filter((g) => !g.filledBy).length,

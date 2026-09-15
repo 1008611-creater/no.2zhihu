@@ -48,5 +48,12 @@ tsconfig.tsbuildinfo
 # build-library.mjs 运行时自动生成的 loader hook（不入库）
 .library-resolver.mjs
 
+# 自检脚本的 TS 转译缓存（每次运行都会重建，绝不入库）
+# 这两个目录由 voice-selftest.mjs / mesh-selftest.mjs 写出，此前没有忽略规则，
+# 于是每跑一次 `npm run check:logic` 就会在工作区留下两个未跟踪目录 ——
+# 一次 `git add -A` 就会把它们提交进去。
+.voice-selftest/
+.mesh-selftest/
+
 # 拆层脚本的合成核对图（运行时产物，不入库）
 public/logo-layers/_preview.png

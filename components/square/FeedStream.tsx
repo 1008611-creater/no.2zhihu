@@ -8,6 +8,9 @@ import { useMirror } from "@/lib/store/mirror-store";
 import { PERSONA_BY_HANDLE } from "@/lib/domain/personas";
 import { skillFromPersona } from "@/lib/domain/skills";
 import { DISCUSSION_TOPICS } from "@/lib/domain/topics";
+// 来源与条目的类型只从 lib/domain/library.ts 取 —— 那里是在跑的还原实现，
+// 本文件这份 hydrate 是历史副本，类型共用可避免字段再次漂移。
+import type { LibrarySource } from "@/lib/domain/library";
 import type { HotItem } from "@/lib/zhihu/types";
 import type {
   Accent,
@@ -21,6 +24,13 @@ import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 虚拟广场信息流 —— 首页与 /square 共用同一条流。
+ *
+ * ⚠️ 2026-09-15：**本文件当前没有任何引用（死文件）**。
+ *   广场的实际数据流是 `lib/hooks/useSquareLibrary.ts` → `SquareField.tsx`
+ *   → `lib/domain/library.ts` 的 `hydrateLibraryEntry()`，右栏广播走
+ *   `lib/domain/broadcast.ts`。这里的 hydrate() 与那两处**逐字重复**，
+ *   保留仅为将来可能的「信息流」形态留底；**改动 `slim()` 时不要照它对齐**，
+ *   以 `lib/domain/library.ts` 为准（那里是唯一在跑的还原实现）。
  *
  * 广场的主角是「已经做完的镜像讨论组」：每个问题都已经跑完一轮
  * 分身作答 + 互相回应 + 缺口盘点，点开就能看这十几位答主怎么答的。
@@ -105,7 +115,7 @@ interface LibraryAnswer {
   round?: number;
   replyToName?: string;
   evidenceCount?: number;
-  evidenceTitles?: string[];
+  sources?: LibrarySource[];
 }
 
 interface LibraryGap {
@@ -167,17 +177,18 @@ function hydrate(entry: LibraryEntry): MirrorQuestion {
     accent: a.accent ?? ACCENTS[i % ACCENTS.length],
     handle: a.handle,
     body: a.body,
-    // 证据正文没有随 JSON 下发，只有标题可用。
-    // ⚠️ 只还原真正已知的字段：标题。author / url / voteUp / editTime 一律不知道，
-    // 就用空值 —— 绝不能拿 skillName 冒充来源作者（那是张冠李戴，违反保留来源的硬要求）。
-    // 当前 UI 不渲染 evidence，此处仅为类型完整性；将来若要渲染，必须先补齐字段。
-    evidence: (a.evidenceTitles ?? []).map((title) => ({
-      title,
-      author: "",
-      url: "",
+    // 来源按库里的真名与真链接还原；正文（excerpt）不进库，故为空串。
+    // ⚠️ 过去这里的注释写着「当前 UI 不渲染 evidence」—— 那是**错的**：
+    // 回答页（app/(flow)/answer/[id]/page.tsx）一直在渲染它，正因如此，
+    // 缺 author/url 时线上出现了空链接与空署名胶囊（违反铁律 3）。
+    // 现在消费端统一用 lib/domain/evidence.ts 的 splitSources() 决定展示与否。
+    evidence: (a.sources ?? []).map((s) => ({
+      title: s.title,
+      author: s.author,
+      url: s.url,
       excerpt: "",
-      voteUp: 0,
-      editTime: 0,
+      voteUp: s.voteUp ?? 0,
+      editTime: s.editTime ?? 0,
       confidence: 0,
     })),
     createdAt: a.createdAt ?? entry.createdAt,

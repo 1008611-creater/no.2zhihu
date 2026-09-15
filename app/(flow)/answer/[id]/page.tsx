@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { motion } from "motion/react";
+import { splitSources } from "@/lib/domain/evidence";
 import { useMirror } from "@/lib/store/mirror-store";
 import { matchRouteId } from "@/lib/domain/route-id";
 import { SHIFT } from "@/lib/motion/tokens";
@@ -44,6 +45,15 @@ export default function AnswerDetailPage() {
     () => (answer ? mirror?.skills.find((s) => s.id === answer.skillId) ?? null : null),
     [mirror, answer]
   );
+  /**
+   * 来源要分成「可核对」与「未归属」两组再渲染。
+   *
+   * 为什么：铁律 3 要求展示知乎内容必须带 AuthorName 与 Url。过去这里无条件渲染
+   * `<a href={e.url}>{e.author}</a>`，从广场载入的回答（库里曾只有标题）就会变成
+   * **空链接 + 空署名胶囊 + 孤零零一个「…」**，而标题却写着「N 条真实知乎来源」。
+   * 现在只把字段齐全的渲染成卡片，其余如实报数，不伪装成来源。
+   */
+  const evidenceView = useMemo(() => splitSources(answer?.evidence), [answer]);
 
   if (!ready) return <div className="skeleton" style={{ height: 340, marginTop: 44 }} />;
 
@@ -157,9 +167,13 @@ export default function AnswerDetailPage() {
 
             <div className="card">
               <p className="eyebrow">来源与证据</p>
-              <h3 style={{ marginBottom: 12 }}>{answer.evidence.length} 条真实知乎来源</h3>
+              <h3 style={{ marginBottom: 12 }}>
+                {evidenceView.displayable.length > 0
+                  ? `${evidenceView.displayable.length} 条真实知乎来源`
+                  : "没有可核对的来源"}
+              </h3>
               <div style={{ display: "grid", gap: 10 }}>
-                {answer.evidence.map((e, i) => (
+                {evidenceView.displayable.map((e, i) => (
                   <a
                     key={e.url + i}
                     href={e.url}
@@ -176,9 +190,19 @@ export default function AnswerDetailPage() {
                       {e.voteUp > 0 && <span className="chip mono">赞同 {e.voteUp}</span>}
                     </div>
                     <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 5 }}>{e.title}</div>
-                    <div className="dimmer" style={{ fontSize: 12.5 }}>{e.excerpt.slice(0, 140)}…</div>
+                    {/* 摘要只有实时检索回来的回答才有；广场库不带正文（体积），
+                        此时不渲染这一行 —— 否则页面上会剩一个孤零零的「…」。 */}
+                    {e.excerpt.trim() ? (
+                      <div className="dimmer" style={{ fontSize: 12.5 }}>{e.excerpt.slice(0, 140)}…</div>
+                    ) : null}
                   </a>
                 ))}
+                {evidenceView.unattributed > 0 && (
+                  <div className="dimmer" style={{ fontSize: 12.5 }}>
+                    另有 {evidenceView.unattributed} 条来源未取回作者名或链接，按「不展示无出处的知乎内容」
+                    的规矩不在此列出。
+                  </div>
+                )}
                 {answer.evidence.length === 0 && (
                   <div className="notice notice-warn">
                     这篇回答没有任何真实来源 —— 看山已把它标记为缺口，等待真人补上。
