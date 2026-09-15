@@ -344,6 +344,26 @@ h1 em {
   color: var(--text-700);
 }
 
+/* 首屏角色位的「让位」状态。
+   run 阶段看山在下方舞台主持，首屏这里只留一个装饰环占位 ——
+   同一视口里不能同时出现两个形象（2026-09-15 重影问题）。
+   方框尺寸与 .kanshan 的 208px 对齐，进出流程时首屏标题不会跳动。 */
+.hero-char-vacant {
+  position: relative;
+  width: 208px;
+  height: 208px;
+  display: grid;
+  place-items: center;
+}
+.hero-char-vacant-ring {
+  width: 62%;
+  height: 62%;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--blue) 36%, transparent);
+  opacity: 0.42;
+  animation: ks-spin 44s linear infinite;
+}
+
 .composer { margin-top: 34px; }
 
 /* 输入框与主按钮的关系：按钮挂在输入框右下角，视觉上像「发送键」而不是
@@ -839,5 +859,7 @@ button.chip[data-on="true"] {
     transform: none !important;
   }
   .kanshan-img, .kanshan-ring { animation: none !important; }
+  /* 首屏让位占位环与看山装饰环同源，降级要一致，否则 reduced-motion 下仍在转。 */
+  .hero-char-vacant-ring { animation: none !important; }
   .skeleton { animation: none !important; }
 }
