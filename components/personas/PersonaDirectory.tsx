@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { motion } from "motion/react";
 import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
 import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
@@ -15,8 +14,10 @@ import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
  * 「看答案」，只在生成之后存在。两者放在一起时，新用户只看到一句提示、
  * 老用户要先划过一整页名册，两边都不好用。现在这里只讲人，一个 tab 一个职责。
  *
- * 卡片上两个动作各自独立（看档案 / 带他去提问），因此外层是 div 不是 Link ——
- * 整块可点会让「查看详情」永远被跳转吃掉。
+ * 整张卡片是一个动作：「看这个人是谁」→ 打开详情浮层，不跳页。
+ * 浏览名册最怕点一个人就被跳走，回来还得重新滚动定位；浮层让人能在名册
+ * 上下文里把 16 位挨个扫一遍。需要完整档案时，浮层里给了
+ * 「完整人格档案 →」与「知乎主页 ↗」两个出口。
  */
 export default function PersonaDirectory() {
   const realCorpus = PERSONAS.filter((p) => p.corpus?.real).length;
@@ -52,47 +53,44 @@ export default function PersonaDirectory() {
             transition={{ duration: DUR.slow, ease: EASE.out, delay: Math.min(i * 0.04, 0.4) }}
             style={{ display: "flex" }}
           >
+            {/* 整张卡片即触发区：点哪儿都开浮层（cover 模式），详情不再跳页。 */}
             <div
               className="card persona-tile"
-              style={{ display: "flex", flexDirection: "column", width: "100%" }}
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                width: "100%",
+                position: "relative",
+              }}
             >
               <div className={"accent-bar a-" + p.accent} />
               <div className="row-between" style={{ alignItems: "baseline", gap: 10 }}>
                 <h3 style={{ margin: 0, fontSize: 16 }}>{p.displayName}</h3>
                 <span style={{ display: "inline-flex", alignItems: "center", gap: 8 }}>
                   <span className="persona-mono">@{p.handle}</span>
-                  <PersonaPopover persona={p} />
+                  {/* 纯视觉提示：真正的触发区是铺满整卡的那个按钮，这个「i」不参与交互。 */}
+                  <span className="persona-info-btn" aria-hidden="true">
+                    i
+                  </span>
                 </span>
               </div>
-              <Link
-                href={"/personas/" + p.handle}
-                className="persona-tile-main"
-                style={{ display: "block" }}
-              >
-                <p className="dim" style={{ fontSize: 13, margin: "8px 0 10px" }}>
-                  {p.headline}
-                </p>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
-                  {p.voice.tone.slice(0, 3).map((t) => (
-                    <span key={t} className="chip">
-                      {t}
-                    </span>
-                  ))}
-                </div>
-              </Link>
-              <div className="row-between" style={{ marginTop: "auto" }}>
-                {/* corpusLabel 在未抓取语料时返回空串 —— 此时整块不渲染，不留一段空白。 */}
-                {corpusLabel(p) ? (
-                  <span className="mono dimmer" style={{ fontSize: 11.5 }}>
-                    {corpusLabel(p)}
+              <p className="dim" style={{ fontSize: 13, margin: "8px 0 10px" }}>
+                {p.headline}
+              </p>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+                {p.voice.tone.slice(0, 3).map((t) => (
+                  <span key={t} className="chip">
+                    {t}
                   </span>
-                ) : (
-                  <span />
-                )}
-                <Link href={"/?persona=" + p.handle} className="link mono" style={{ fontSize: 11.5 }}>
-                  带他去提问 →
-                </Link>
+                ))}
               </div>
+              {/* corpusLabel 在未抓取语料时返回空串 —— 此时整块不渲染，不留一段空白。 */}
+              {corpusLabel(p) && (
+                <div className="mono dimmer" style={{ fontSize: 11.5, marginTop: "auto" }}>
+                  {corpusLabel(p)}
+                </div>
+              )}
+              <PersonaPopover persona={p} cover />
             </div>
           </motion.div>
         ))}
