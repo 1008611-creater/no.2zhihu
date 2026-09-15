@@ -6,7 +6,7 @@ import { findGaps } from "@/lib/domain/gap";
 import { voiceFingerprintGaps } from "@/lib/domain/personas";
 import { filterEvidence } from "@/lib/domain/relevance";
 import { routeQuestion } from "@/lib/domain/router";
-import { PERSONA_SKILLS } from "@/lib/domain/skills";
+import { PERSONA_SKILLS, SKILL_BY_ID, skillFromSeed } from "@/lib/domain/skills";
 import type { AnswerDraft, MirrorQuestion, Persona, Skill, SkillSource } from "@/lib/domain/types";
 import {
   checkVoice,
@@ -152,8 +152,15 @@ async function buildMirror(
   const skills = (
     await Promise.all(
       picks.map(async (pick, index) => {
-        const base = PERSONA_SKILLS.find((s) => s.id === pick.skillId);
-        if (!base) return null;
+        // 席位分两类：答主型在 PERSONA_SKILLS，视角型（拆解者 / 反驳者等）在 SKILL_SEEDS。
+        //
+        // ⚠️ 只查 PERSONA_SKILLS 会**静默丢掉全部补位视角** —— 表现为
+        // 「路由显示选了 3 位、页面只出 1 篇回答」，而日志里没有任何报错。
+        // 这是 Human Router 修好之后才暴露出来的接线断裂：路由开始返回视角型，
+        // 而这一层仍然只认答主型。
+        const personaSkill = PERSONA_SKILLS.find((s) => s.id === pick.skillId);
+        const seed = SKILL_BY_ID.get(pick.skillId);
+        if (!personaSkill && !seed) return null;
         const query = routing.queries[index] ?? "";
         // 相关性硬过滤：跑题证据挡在生成之前，并带上丢弃条数供 UI 如实展示。
         const { sources, dropped, scanned } = await collectRelevantEvidence(
@@ -162,13 +169,17 @@ async function buildMirror(
           opts.evidencePerSkill,
         );
         // confidence 表示「这一次检索到多少可核对的证据」，与人格蒸馏条数分开。
-        return {
-          ...base,
-          query,
-          sources,
-          confidence: confidenceOf(sources),
-          evidenceStats: { dropped, scanned },
-        } as Skill;
+        const confidence = confidenceOf(sources);
+        // seed! 由上面那道守卫保证非空；视角型用 skillFromSeed 还原成 Skill，
+        // 它没有 persona，生成链路会走「视角型」分支（见 systemPromptFor / finalizeAnswer）。
+        const resolved: Skill = personaSkill
+          ? { ...personaSkill, query, sources, confidence }
+          : skillFromSeed(seed!, sources, query, confidence);
+        // 显式标注：否则 `{ ...resolved, evidenceStats }` 会被推断成
+        // evidenceStats **必填**的结构类型，与 Skill 的可选字段不兼容，
+        // 下游 `.filter((s): s is Skill => ...)` 的类型谓词会直接报 TS2677。
+        const withStats: Skill = { ...resolved, evidenceStats: { dropped, scanned } };
+        return withStats;
       }),
     )
   ).filter((s): s is Skill => s !== null);
