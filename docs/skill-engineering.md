@@ -52,6 +52,8 @@
 
 2026-09-15 增补：第 8 个 owner 为 [nuwa-skill](https://github.com/alchaincyf/nuwa-skill)，项目入口 [女娲适配](skills/nuwa/SKILL.md)，规范 [公共人物模块](public-figure-skills.md)。本机已有全局安装；恢复脚本已登记。上游许可与固定版本尚待核验，禁止把当前全局包当作可公开再分发资产。以下原 7 项的统计保留为历史快照。
 
+2026-09-15 二次增补：第 9 个 owner 为 [humanizer](https://github.com/blader/humanizer)，负责**答主文风真实度**（去 AI 味 / 消除「GPT 直答感」）。此前 8 个 owner 无一覆盖文风，属 §3 路由表的真实缺口（门槛 ① 满足；与现有 8 个不重叠）。入口 `.skills/humanizer-main/SKILL.md`，读法与边界见 §4.8。
+
 7 个 skill，全部于 **2026-09-14** 从各仓库 `main` 分支拉取快照，落地在 `.skills/`。
 
 | # | 环节 | Skill | 上游仓库 | ★ | 许可 | commit | 体积 | 入口文件 |
@@ -63,12 +65,14 @@
 | 5 | 演示视频 | video-talkcraft | [Vincentwei1021/video-talkcraft](https://github.com/Vincentwei1021/video-talkcraft) | 1.0k | PolyForm Noncommercial | `8829ca31fb` | 34.3 MB | `.skills/video-talkcraft-main/SKILL.md` |
 | 6 | 图像资产 | banana-claude | [AgriciDaniel/banana-claude](https://github.com/AgriciDaniel/banana-claude) | 1.0k | MIT | `6a2b1b51fd` | 7.5 MB | `.skills/banana-claude-main/skills/banana/SKILL.md` |
 | 7 | 多模态生成 | Generative-Media-Skills | [SamurAIGPT/Generative-Media-Skills](https://github.com/SamurAIGPT/Generative-Media-Skills) | 4.3k | MIT | `5519622e88` | 2.6 MB | `.skills/Generative-Media-Skills-main/core/media/SKILL.md` |
+| 9 | 答主文风真实度 | humanizer | [blader/humanizer](https://github.com/blader/humanizer) | 48.2k | MIT | `9862685f57` | 0.1 MB | `.skills/humanizer-main/SKILL.md` |
 
 **许可提醒（重要）：**
 
 - **video-talkcraft 是 PolyForm Noncommercial**，非商业使用免费，商业用途需作者事先授权。本作品为比赛参赛作品（非商业），符合许可范围；**若日后商业化，必须重新评估或替换**。
 - genjutsu 主体 MIT，但其内部 `skills/_jutsu/ui-ux-pro-max/` 内嵌了 ui-ux-pro-max 的 MIT 数据集，声明已在其 `LICENSE` 尾部注明。
 - 其余 5 个均为标准 MIT。
+- **humanizer 本体 MIT，但判据来源是 Wikipedia 的 [Signs of AI writing](https://en.wikipedia.org/wiki/Signs_of_AI_writing)（CC BY-SA）**。本项目只使用其**条目编号与判据描述**，不复制维基正文；`.skills/` 不入 git，故不构成再分发。
 
 ---
 
@@ -88,11 +92,12 @@
 | 8 | 知乎接口 / 数据流 / 缓存 / 额度改造 | **不要用** | 项目文档 | [zhihu-api/INDEX.md](zhihu-api/INDEX.md) + [architecture.md](architecture.md) | 先查索引，只读命中的一份 |
 | 9 | 看山造型与几何设计 | **不要用** | 项目文档 | [character-engine.md](character-engine.md) + `components/kanshan/states.ts` | — |
 | 10 | 部署 Vercel / 推送 GitHub | **不要用** | 普通能力 + **外部写授权** | [runbook.md](runbook.md) | — |
-| 11 | 产品说明 / 计划书 / 提交材料 | **不要用这 7 个** | 项目文档 | [submission.md](submission.md) | 已是事实来源骨架，直接改，不要重写 |
-| 12 | 浏览器真机验收（核心闭环） | **不要用这 7 个** | Browser 工具 | — | HTTP 200 不是验收，必须看到闭环跑通 |
-| 13 | 跨线程项目状态 / 交接 | **不要用这 7 个** | `AGENTS.md` + [INDEX.md](INDEX.md) + 本文件 | — | 见 §7 |
+| 11 | 产品说明 / 计划书 / 提交材料 | **不要用这些 skill** | 项目文档 | [submission.md](submission.md) | 已是事实来源骨架，直接改，不要重写 |
+| 12 | 浏览器真机验收（核心闭环） | **不要用这些 skill** | Browser 工具 | — | HTTP 200 不是验收，必须看到闭环跑通 |
+| 13 | 跨线程项目状态 / 交接 | **不要用这些 skill** | `AGENTS.md` + [INDEX.md](INDEX.md) + 本文件 | — | 见 §7 |
 | 14 | 新增 / 更新公共人物思维能力、来源审核、人格辨识度验证 | **必须** | nuwa-skill | [项目适配入口](skills/nuwa/SKILL.md) | 上游入口 → 当前人物；提炼读 extraction-framework，构建读 skill-template |
 | 15 | 线上邀请公共人物 / 实现人物能力检索 | **不要启动蒸馏** | 项目规范 | [公共人物模块](public-figure-skills.md) | 只加载已审核的能力数据；实现阶段按原 UI/代码审查路由切换 owner |
+| 16 | 提升答主文风真实度 / 去 AI 味 / 消除「GPT 直答感」 | **必须** | humanizer | `.skills/humanizer-main/SKILL.md` | 入口 → §1–§5（最强痕迹，一次命中即可改）；词表查 §12 与 §13；`Voice` 一节决定如何用语料样本校准 |
 
 **判定的含义：**
 
@@ -154,6 +159,15 @@
 - **不要读**：`.opencode/skills/` 下的 13 个平台化子技能（`muapi-instagram-post`、`muapi-youtube-shorts`、`muapi-ad-creative` 等）——它们是社媒/广告投放场景，**与本项目无关**。
 - **边界**：与 banana-claude 功能**高度重叠**。二者**不得同时用于同一任务**（违反 §5 组合纪律）。分工是：**单张创意资产 → banana-claude（质量与审校更强）；批量/多类型媒体管线 → Generative-Media-Skills**。同样需要 `MUAPI_KEY` 与当轮授权。
 - **产出**：媒体文件或编辑后的变体，逐件验收。
+
+---
+
+### 4.8 humanizer（答主文风真实度）
+
+- **读法**：读入口 `SKILL.md`。**§1–§5 是「一次命中即可改」的最强痕迹**（not-X-but-Y 对照、单句收尾、格言化、铺垫式开场、与不存在的对手辩论），先读这五节；词表只有两处 —— §12（AI 高频词）与 §13（夸大表述），按需查；**`Voice` 一节是接入关键**：有语料样本时以样本为准，样本覆盖全部规则。
+- **不要读**：`.claude-plugin/`、`.github/`、`agents/`、`scripts/`（包校验脚本）、`README.md` 的安装与版本历史（其 25 条速查表可当索引）。
+- **边界（关键）**：它是**改写器**，不是生成器，也不做事实核查。本项目**不得把它当作「直接改写线上回答」的工具** —— 那会同时踩铁律 2（不编造）与铁律 3（保留来源）。正确用法是**把它的判据编译成生成侧约束与生成后校验**：① 词表 → `lib/server/mirror.ts` 的负向提示词；② 结构性痕迹 → `lib/domain/voice.ts` 的 `checkVoice()` 检测项；③ `Voice` 样本机制 → 项目已有的 `PersonaVoice.exemplars`。
+- **产出**：可枚举、可检测的中文痕迹清单 + 落到 `voice.ts` 的校验项，不是「把这段文字改一改」。
 
 ---
 
@@ -221,6 +235,7 @@
 | video-talkcraft | 1.0k★、**中文口播视频全流程**，含 108 张动效配方卡与七层镜头模型。演示视频是选交加分项里最值钱的一项 |
 | banana-claude | 1.0k★、**有完整审批与逐像素验收纪律**的图像生成流程，与本项目「外部生成需授权」的铁律天然一致 |
 | Generative-Media-Skills | 4.3k★、schema 驱动的多模型媒体生成，作为**批量/多类型**通道补齐 banana-claude 的单张定位 |
+| humanizer | **48.2k★（本清单最高）**，判据来自 Wikipedia *Signs of AI writing*（WikiProject AI Cleanup 维护）；25 条痕迹**按强度编号**且**每条带 Watch for 词表与改前改后对照**，可直接编译成代码里的检测项；其 `Voice` 样本校准机制与项目既有的 `PersonaVoice.exemplars` 天然对齐。文风是评委点名的失分项（「仍像 GPT 直答」），此前无 owner |
 
 ### 8.2 排除的候选与理由
 
@@ -235,6 +250,7 @@
 | 其他 UI 风格库（`frontend-design`、`hallmark`、`impeccable` 等） | 与 ui-ux-pro-max **能力重叠**；重叠即排除，避免路由歧义（§5） |
 | `ikun-image2` | 已淘汰的不可用路由，不得静默替换 |
 | 浏览器验收类 skill | GitHub 上同类 star 普遍偏低，且**当前 Browser 工具已覆盖**，无需引入 |
+| 中文去 AI 味同类（`MrGeDiao/shuorenhua` 1.7k★、`orange2ai/renwei-writing` 1.1k★、`larashero3-dotcom/lieflat-less-ai-tone` 0.7k★ 等） | 与 humanizer **能力重叠**（§5 禁止重叠叠加）。且其定位是**保守编辑**（保留句段结构、最小改动），与「打散三段式、重建节奏」的目标部分冲突；它们的长处（中文保真边界：保事实、保情态强度、保责任归属）已由 humanizer 工作流第 3 步的 draft check 覆盖 |
 
 ### 8.3 已排除的替代方案（同环节二选一）
 
@@ -274,7 +290,7 @@
 
 ## 10. 维护方式
 
-- **恢复/重建**：`.skills/` 体积约 68MB 且属第三方作品，**不纳入 git**（见 `.gitignore`）。新克隆的仓库运行 `node scripts/fetch-skills.mjs` 恢复全部 7 个快照，保证任何线程拿到同一组 skill。
+- **恢复/重建**：`.skills/` 体积约 68MB 且属第三方作品，**不纳入 git**（见 `.gitignore`）。新克隆的仓库运行 `node scripts/fetch-skills.mjs` 恢复全部快照（当前 9 个），保证任何线程拿到同一组 skill。
 - **脚本与本文件同步**：`scripts/fetch-skills.mjs` 里的仓库列表必须与 §2 索引表一致。**改一处必须改另一处。**
 - **更新流程**：重拉对应仓库快照 → 替换目录 → 更新 §2 的 ★ / commit / 体积 → 若入口路径变了，同步改 §3 与 §4 → 在 §8 记录变更理由。
 - **新增 skill 的门槛**：必须同时满足 ① 有 §3 路由表里**没有 owner** 的工作块 ② 不与现有 7 个重叠 ③ 许可允许本次使用。**不满足就不加**——加一个重叠 skill 会让路由歧义，比没有更糟。
@@ -285,4 +301,4 @@
 
 ## 附：一句话总结
 
-**8 个 owner，按任务命中才读。女娲负责离线生产，产品运行时只读相关能力；铁律优先，自检不能省。**
+**9 个 owner，按任务命中才读。女娲负责离线生产，产品运行时只读相关能力；humanizer 管文风，铁律优先，自检不能省。**
