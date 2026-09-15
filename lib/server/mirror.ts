@@ -1,7 +1,7 @@
 import "server-only";
 
 import { checkClaims } from "@/lib/domain/claims";
-import { stripAssistantBoilerplate } from "@/lib/domain/answerIntegrity";
+import { cutExcerpt, stripAssistantBoilerplate } from "@/lib/domain/answerIntegrity";
 import { findGaps } from "@/lib/domain/gap";
 import { voiceFingerprintGaps } from "@/lib/domain/personas";
 import { filterEvidence } from "@/lib/domain/relevance";
@@ -400,7 +400,9 @@ function toSource(item: SearchItem): SkillSource {
     title: item.Title ?? "（无标题）",
     author: item.AuthorName ?? "匿名用户",
     url: item.Url ?? "",
-    excerpt: (item.ContentText ?? "").replace(/\s+/g, " ").slice(0, 220),
+        // 截断必须落在句末 —— 这段摘要会被 evidenceBody() 原样贴进回答正文，
+    // 硬切会产生「……很多好方法好点子都是在实验的此外还有 2 条相关回答」这种断句。
+    excerpt: cutExcerpt((item.ContentText ?? "").replace(/\s+/g, " "), 220),
     voteUp: item.VoteUpCount ?? 0,
     // 上游返回秒级时间戳；小于 1e12 视为秒，统一转成毫秒。
     editTime: normalizeEditTime(item.EditTime),

@@ -13,6 +13,7 @@
 import {
   stripAssistantBoilerplate,
   hasAssistantBoilerplate,
+  cutExcerpt,
 } from "../lib/domain/answerIntegrity.ts";
 
 /** 负例：必须原样保留（一个字都不能动）。 */
@@ -95,6 +96,25 @@ console.log("\n=== 正例：AI 助手腔必须被拦住 ===");
 {
   const r = stripAssistantBoilerplate(SHORT_OK);
   check(r.removed.length === 0 && r.text === SHORT_OK, "正常短答 → 原样保留");
+}
+
+console.log("\n=== 证据摘要截断：必须落在句末，不能留半句 ===");
+{
+  // 线上实测的那一段：220 字硬切会把「…都是在实验的」切断，
+  // 后面还紧跟着 evidenceBody 拼的「此外还有 2 条相关回答」。
+  const long = "不要太焦虑，东亚人天生抗压王者来的。你可能是平时有些焦急情绪传导给家人了。跟他们说博士读 6 年也挺常见的，读一半退学的也很多，你能坚持就已经很不错了，只要学校不清退总有毕业的那天。不知道你们是什么方向的呀，导师有给你说过什么毕业计划吗，还是全都交给你们自己摸索，开题了吗，中期了吗，实验做了多少，很多好方法好点子都是在实验的过程中摸索出来的。";
+  const cut = cutExcerpt(long, 220);
+  check(
+    cut.length <= 220 && /[。！？…”）]$/.test(cut) && !cut.endsWith("实验的"),
+    `长摘要 → 句末收尾（${cut.length} 字，结尾「${cut.slice(-12)}」）`,
+  );
+  check(cutExcerpt("短句。", 220) === "短句。", "短于上限 → 原样返回");
+  const noStop = "一二三四五六七八九十".repeat(30); // 300 字、无任何标点
+  const hard = cutExcerpt(noStop, 220);
+  check(hard.length === 221 && hard.endsWith("…"), "通篇无标点 → 硬切并补省略号");
+  const softOnly = "甲，乙，丙，丁，".repeat(30); // 有逗号无句号
+  const soft = cutExcerpt(softOnly, 220);
+  check(soft.length <= 221 && soft.endsWith("…") && !soft.endsWith("，…"), "只有逗号 → 退到逗号处收尾");
 }
 
 console.log(`\n结果：${fail === 0 ? "全部通过" : fail + " 项失败"}`);
