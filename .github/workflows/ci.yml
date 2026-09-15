@@ -40,9 +40,18 @@ jobs:
       cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
+      # Node 22：与生产（22.23.2）对齐 —— 这样「CI 绿 ⇒ 生产绿」才真正成立。
+      #
+      # 原先写死 '20'，三个后果：
+      #   · GitHub 已于 2025-09-19 弃用 Node 20（build 日志里有 deprecation warning），
+      #     到期后 CI 会挂；而 deploy 是 needs: build —— **CI 挂就等于自动部署静默冻结**，
+      #     表现为「PR 合了、线上没变」，这是最难察觉的一类故障。
+      #   · CI 跑 20 而生产跑 22，等于用一套运行时验证、用另一套运行 —— 验证的意义打折。
+      #   · 自检脚本已不依赖 Node 版本（_ts-hook.mjs 用仓库自带 typescript 自己转译 TS），
+      #     所以升版本没有兼容性风险。
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
       # 仓库暂无 package-lock.json，所以用 install 而不是 ci
       # 先跑零依赖的编码检查：.ps1 必须是 UTF-8 with BOM，
       # 否则在 Windows PowerShell 5.1 下会因按 GBK 解码而报假语法错误。
