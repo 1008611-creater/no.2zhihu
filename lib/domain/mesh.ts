@@ -45,7 +45,7 @@ export function buildMesh(mirror: MirrorQuestion): MeshGraph {
       edges.push({
         source: `s:${skill.id}`,
         target: pid,
-        label: skill.persona.corpus.real ? `蒸馏 ${skill.persona.corpus.sampleSize} 条` : "预置人格",
+        label: skill.persona.corpus.real ? `蒸馏 ${skill.persona.corpus.sampleSize} 条` : "",
         weight: 0.8
       });
     }

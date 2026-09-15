@@ -137,9 +137,12 @@ export function PersonaPopover({ persona }: { persona: Persona }) {
               </>
             )}
 
-            <div className="mono dimmer" style={{ fontSize: 11, marginBottom: 12 }}>
-              蒸馏依据：{corpusLabel(persona)}
-            </div>
+            {/* 只有真实抓取到语料时才给依据；预置人格不展示任何来源标签（2026-09-15 删）。 */}
+            {corpusLabel(persona) && (
+              <div className="mono dimmer" style={{ fontSize: 11, marginBottom: 12 }}>
+                蒸馏依据：{corpusLabel(persona)}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <a

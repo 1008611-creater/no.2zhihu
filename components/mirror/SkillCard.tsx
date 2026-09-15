@@ -26,9 +26,9 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
       <div className={"accent-bar a-" + skill.accent} />
       <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 9 }}>
         <h3 style={{ marginRight: "auto" }}>{skill.name}</h3>
-        <span className={"chip chip-" + skill.accent}>
-          {p ? (p.corpus.real ? "基于公开片段提取" : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "语料待补充" : "依据公开资料撰写") : Math.round(skill.confidence * 100) + "% 证据覆盖"}
-        </span>
+        {/* 只有真实抓取到语料时才标依据；预置人格不再打任何标签（2026-09-15 删）。 */}
+        {p?.corpus.real && <span className={"chip chip-" + skill.accent}>基于公开片段提取</span>}
+        {!p && <span className={"chip chip-" + skill.accent}>{Math.round(skill.confidence * 100)}% 证据覆盖</span>}
       </div>
       <p className="dim" style={{ fontSize: 13.5, marginBottom: 12 }}>{skill.lens}</p>
 
@@ -59,10 +59,10 @@ export function SkillCard({ skill, index = 0 }: { skill: Skill; index?: number }
           )}
 
           <div className="mono dimmer" style={{ marginBottom: 8 }}>
-            {p.corpus.real
-              ? "实际使用 " + p.corpus.sampleSize + " 条公开片段；样本覆盖不代表人格准确率"
-              : p.corpus.status === "unavailable" || p.corpus.capturedAt ? "语料待补充；以下回答采用通用表达" : "依据其公开表达资料撰写"}
-            {" · "}
+            {/* 只有真实抓取时才谈样本；预置人格不再自述来源（2026-09-15 删）。 */}
+            {p.corpus.real && (
+              <>{`实际使用 ${p.corpus.sampleSize} 条公开片段；样本覆盖不代表人格准确率 · `}</>
+            )}
             {p.voice.wordRange[0]}–{p.voice.wordRange[1]} 字
           </div>
 
