@@ -1,6 +1,12 @@
 import { NextResponse } from "next/server";
 
-import { exchangeCode, fetchUser, hasOAuth, OAUTH_UNCONFIGURED_MESSAGE } from "@/lib/zhihu/oauth";
+import {
+  exchangeCode,
+  fetchUser,
+  hasOAuth,
+  OAUTH_UNCONFIGURED_MESSAGE,
+  publicOrigin,
+} from "@/lib/zhihu/oauth";
 import { consumeState, setSession, storeToken } from "@/lib/zhihu/session";
 import { ZhihuApiError } from "@/lib/zhihu/errors";
 
@@ -19,6 +25,9 @@ export const dynamic = "force-dynamic";
  *
  * 无论成功失败都重定向回 /mesh 并带上结果，不让用户卡在纯文本错误页上。
  * 全程在服务端完成 —— app_key 和 access_token 一次都不会出现在 URL 或前端。
+ *
+ * ⚠️ 回跳地址的 origin 用 `publicOrigin()` 推导，**不能用 `url.origin`**：
+ * 反代后面 `req.url` 的 host 是 `localhost:3000`，会把用户跳到不存在的地址。
  */
 export async function GET(req: Request) {
   const url = new URL(req.url);
@@ -27,7 +36,7 @@ export async function GET(req: Request) {
   const errorParam = url.searchParams.get("error");
 
   const back = (params: Record<string, string>) => {
-    const to = new URL("/mesh", url.origin);
+    const to = new URL("/mesh", publicOrigin(req.url));
     Object.entries(params).forEach(([k, v]) => to.searchParams.set(k, v));
     return NextResponse.redirect(to);
   };

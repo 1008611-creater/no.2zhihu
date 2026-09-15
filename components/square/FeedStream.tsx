@@ -173,10 +173,13 @@ function hydrate(entry: LibraryEntry): MirrorQuestion {
     accent: a.accent ?? ACCENTS[i % ACCENTS.length],
     handle: a.handle,
     body: a.body,
-    // 证据正文没有随 JSON 下发，这里把条数与标题还原成占位来源，避免 UI 显示成零证据。
+    // 证据正文没有随 JSON 下发，只有标题可用。
+    // ⚠️ 只还原真正已知的字段：标题。author / url / voteUp / editTime 一律不知道，
+    // 就用空值 —— 绝不能拿 skillName 冒充来源作者（那是张冠李戴，违反保留来源的硬要求）。
+    // 当前 UI 不渲染 evidence，此处仅为类型完整性；将来若要渲染，必须先补齐字段。
     evidence: (a.evidenceTitles ?? []).map((title) => ({
       title,
-      author: a.skillName,
+      author: "",
       url: "",
       excerpt: "",
       voteUp: 0,

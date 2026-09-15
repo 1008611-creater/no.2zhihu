@@ -60,6 +60,41 @@ export function resolveRedirectUri(reqUrl: string): string {
   return cfg.allowedRedirects.includes(candidate) ? candidate : cfg.redirectUri;
 }
 
+/**
+ * 本站对外的公开 origin（用于登录后跳回 /mesh 这类绝对地址）。
+ *
+ * ⚠️ 为什么不能直接用 `new URL(req.url).origin`：
+ * Next.js 14 的 Route Handler 在反代后面（`next start` 监听 127.0.0.1:3000、
+ * nginx 转发）拿到的 `req.url` 里 host 仍是 **本机监听地址**，
+ * 于是 origin 恒为 `http://localhost:3000` —— 用户登录完会被跳到
+ * `https://localhost:3000/mesh`，一个根本不存在的地址（2026-09-15 线上实测）。
+ *
+ * 这里改成从**已登记的合法回调地址**反推 origin（那是配置里唯一的可信来源），
+ * 并且用白名单校验请求带来的 origin，防止 Host 头被伪造导致开放重定向。
+ */
+export function publicOrigin(reqUrl: string): string {
+  const cfg = oauthConfig();
+  // 未配置 OAuth 时没有可信来源，退化为请求 origin（此时也不会有登录流程）。
+  if (!cfg) {
+    try {
+      return new URL(reqUrl).origin;
+    } catch {
+      return "";
+    }
+  }
+  // 请求 origin 若在白名单里（本地调试命中 ALT），优先用它，保证本地跳转也正确。
+  try {
+    const reqOrigin = new URL(reqUrl).origin;
+    for (const allowed of cfg.allowedRedirects) {
+      if (allowed.startsWith(reqOrigin + "/")) return reqOrigin;
+    }
+  } catch {
+    /* ignore */
+  }
+  // 否则一律用登记的主回调地址反推 —— 这是唯一不会被请求方篡改的来源。
+  return new URL(cfg.redirectUri).origin;
+}
+
 /** 面向用户的未配置说明。前端直接展示，不编造「登录成功」。 */
 export const OAUTH_UNCONFIGURED_MESSAGE =
   "知乎 OAuth 登录尚未开通：服务端缺少 ZHIHU_APP_ID / ZHIHU_OAUTH_APP_KEY。" +
