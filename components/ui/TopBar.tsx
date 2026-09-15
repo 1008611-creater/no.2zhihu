@@ -66,12 +66,9 @@ export function TopBar() {
       <div className="topbar-inner">
         <Link href="/" className="brand" aria-label="二号知乎 · 回到首页">
           <span className="brand-mark" aria-hidden>
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-              {/* 左环＝真人，右环＝分身，交汇点＝两者重合处生成的回答 */}
-              <circle cx="9.3" cy="12" r="6.1" stroke="#0b0d17" strokeWidth="1.9" />
-              <circle cx="14.7" cy="12" r="6.1" stroke="#0b0d17" strokeWidth="1.9" />
-              <circle cx="12" cy="12" r="2.2" fill="#3568db" />
-            </svg>
+            {/* 主 logo 与 favicon / apple-icon 用同一形象资源（public/logo.png），
+                保证「标签页图标 = 顶栏品牌」视觉一致。 */}
+            <img src="/logo.png" alt="" width={32} height={32} decoding="async" />
           </span>
           <span>
             <span className="brand-name">二号知乎</span>

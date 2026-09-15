@@ -75,7 +75,9 @@ h1 em { color: var(--foreground); background: none; -webkit-text-fill-color: cur
 .btn, button.chip, .nav a { min-height: 44px; }
 .btn-primary { background: var(--action); box-shadow: none; }
 .btn-primary:hover:not(:disabled) { background: #2a58c0; box-shadow: none; }
-.brand-mark { background: var(--foreground); box-shadow: none; }
+/* .brand-mark 的底色由 logo 图自身提供（暖白底砖），此处不再覆盖背景，
+   否则会把 logo 盖成一块实心色。 */
+.brand-mark { box-shadow: none; }
 .topbar { background: #0a0a0bef; }
 .nav a { position: relative; }
 .nav-active-marker { position: absolute; bottom: 0; left: 10px; right: 10px; height: 2px; background: var(--blue-soft); }
