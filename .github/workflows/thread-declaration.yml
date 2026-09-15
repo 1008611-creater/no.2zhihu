@@ -1,0 +1,122 @@
+name: 线程声明提醒
+
+# 为什么需要它
+#   docs/threads/ 是为了解决多线程并行的两个「不报错」的事故：
+#   重复劳动、基于过期信息做决定（见 docs/threads/README.md）。
+#   但这个机制有个死法：**没人填**。
+#
+#   前车之鉴就在同一天：docs/collaboration.md 写着「WIP ≤ 2」，而队列到过 7 个。
+#   **被无视的规则比没有规则更糟** —— 它会让人以为有保护。
+#   所以给它一个反馈回路：改了业务文件却没声明 → 在 PR 上留一条提醒。
+#
+# 为什么用 comment 而不是 check 失败
+#   它是**协作提醒**，不是**质量门禁**。用 failure 表达提醒是语义错位：
+#   红叉会让人以为 PR 坏了（pr-flow-check.yml 踩过同一个坑，已从 failure 改成 comment）。
+#   而且声明缺失不影响任何运行时行为，拿它挡合并是过度约束。
+#
+# 触发范围
+#   只在改了业务文件（app/ components/ lib/ public/）时才检查；
+#   只动 docs/ scripts/ .github/ 根配置的 PR 不要求声明。
+#   判定逻辑在 scripts/check-thread-declaration.mjs（可本地跑自查）。
+#
+# 幂等
+#   固定 marker，同一 PR 上只有一条；补上声明后（推送新 commit 触发 synchronize）
+#   会自动删除该 comment。
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write   # 需要写权限：在 PR 上留 / 更新 / 删除提醒 comment
+
+jobs:
+  thread-declaration:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 判断是否改了业务文件且缺声明
+        id: check
+        run: |
+          set -uo pipefail
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+          # 脚本默认恒 exit 0（软检查）；这里显式取输出，不因退出码中断
+          out=$(node scripts/check-thread-declaration.mjs --base "$base" --head "$head" 2>&1 || true)
+          printf '%s\n' "$out"
+          if printf '%s\n' "$out" | grep -qx 'THREAD_DECLARATION=need'; then
+            echo "need=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "need=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 缺声明时在 PR 上留提醒
+        if: steps.check.outputs.need == 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = "<!-- thread-declaration-reminder -->";
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { owner, repo, issue_number }
+            );
+            const mine = comments.find((c) => (c.body || "").includes(MARKER));
+
+            const text = [
+              MARKER,
+              "## ⚠️ 这个 PR 改了业务文件，但 `docs/threads/` 里没有你的线程声明",
+              "",
+              "**这不是错误，是提醒。** 多线程并行时，冲突的高发区是",
+              "「**正在做但还没提 PR**」的工作 —— 而 `preflight.mjs` 只看**已提的 PR**。",
+              "声明能让别人在动手前就看到你在改什么。",
+              "",
+              "实测（2026-09-15）：`E:\\codex\\_dev` 落后 main 6 个提交，",
+              "改的 3 个文件里有 2 个刚被 #52 改过 —— 这类事只有靠声明才能提前发现。",
+              "",
+              "补上（2 分钟）：",
+              "",
+              "```bash",
+              "cp docs/threads/_template.md docs/threads/<你的线程名>.md",
+              "# 填：工作区 / 分支 / 正在改哪些文件 / 基线 sha / 状态 / 最后更新",
+              "# 和本 PR 一起提交",
+              "```",
+              "",
+              "规范见 [`docs/threads/README.md`](../blob/main/docs/threads/README.md)。",
+              "",
+              "> 本条由 `thread-declaration.yml` 自动维护；推送补上声明的提交后会自行删除。",
+              "",
+              "**为什么可以不理会**：它是软提醒，不影响合并（分支保护只要求 `build`）。",
+              "但如果你改了业务文件且工作会持续一段时间，声明是给别人的路标。",
+            ].join("\n");
+
+            if (mine) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: mine.id, body: text });
+              core.info("已更新提醒 comment。");
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body: text });
+              core.info("已创建提醒 comment。");
+            }
+
+      - name: 已声明或不需要声明 → 清理旧提醒
+        if: steps.check.outputs.need != 'true'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MARKER = "<!-- thread-declaration-reminder -->";
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { owner, repo, issue_number }
+            );
+            const mine = comments.find((c) => (c.body || "").includes(MARKER));
+            if (mine) {
+              await github.rest.issues.deleteComment({ owner, repo, comment_id: mine.id });
+              core.info("已补上声明 / 无需声明，删除此前的提醒。");
+            } else {
+              core.info("无需声明，且没有历史提醒。");
+            }
