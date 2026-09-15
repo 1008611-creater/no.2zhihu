@@ -50,13 +50,38 @@
 
 ## 2. 合并顺序与冲突处理（**先看这节**）
 
-仓库里有其它在途 PR，按这个顺序合最省事：
+### 2.0 ⚠️ 先做一次取舍：本 PR 与 #9 目标重叠，**只能合一个**
+
+仓库里还有 **#9 `feat-ia-flow-split`**（另一条线），做的是**同一件事**：拆分「分身发现」、
+把「真人补充」降为子页面、修 `/personas` 与 `/feed` 两个 404。两个 PR 改同一批文件
+（`mirror/page.tsx`、`fill/page.tsx`、`page.tsx`、`FeedStream.tsx`、`JourneyNav.tsx`、
+`TopBar.tsx`、`build-library.mjs`），**不能都合**。
+
+| | 本 PR（#12） | PR #9 |
+|---|---|---|
+| 规模 | 14 文件 +618/−208 | 18 文件 +1226/−749 |
+| 状态 | **CLEAN**，CI `build` 已通过 | **CONFLICTING**，需先解冲突 |
+| 范围 | 只做被要求的那件事 | 额外加 `/me` tab、广场筛选、语料 Mesh、FeedStream 单入口 |
+| 分身发现路由 | `/discover` | `/personas` |
+| 我的 Mesh | 保留 `/mesh` 原样 | `/mesh` → 重定向到 `/me?tab=mesh` |
+
+**上线线程请先确认采用哪一个再动手**：
+
+- 采用 **#9** → 关闭本 PR，按 #9 自己的说明上线（需先 rebase 解决冲突）。
+- 采用 **本 PR** → 按下面 2.1 / 2.2 走；#9 的额外能力建议作为后续独立 PR 重做。
+- 若最终决定用 `/personas` 这个路由名而不是 `/discover`，本 PR 只需改 1 个目录名
+  + 3 处链接 + TopBar/面包屑各 1 处，改动量极小。
+
+### 2.1 合并顺序（采用本 PR 时）
 
 1. **先合 PR #7**（`feat/remove-persona-disclaimers`，「人格卡片移除自我否定标签」）。
    它 base 落后于当前 main，需要先 `git rebase origin/main` 再合。
 2. **再合本 PR**（`feat/discover-split-two-tracks`）。
 
-### 若 PR #7 先合，本 PR 只需处理 1 个冲突
+> 本 PR 的分支已与 main 同步（branch protection 的 `strict: true` 要求），
+> CI `build` 已通过，PR 页面显示 **CLEAN**。
+
+### 2.2 若 PR #7 先合，本 PR 只需处理 1 个冲突
 
 - **`app/(flow)/mirror/page.tsx`** —— PR #7 改的那 11 行在 `DiscoverSection` 内部，
   而本 PR 把整个 `DiscoverSection` 迁到了 `components/discover/PersonaRoster.tsx`。
@@ -179,3 +204,12 @@ ls /opt/no2zhihu-next-prev /root/no2zhihu-rollback-commit.txt
 - 部署完**不要清理服务器工作区**：那里可能有别的会话正在写的未提交改动。
 - 本 PR 的 `docs/` 目录在本机工作区显示为「已删除」——那是**另一条线在途的删除操作**，
   与本 PR 无关；本 PR 只新增 `docs/deploy-prompt-flow-split.md`，不还原、不动其它 docs 文件。
+- **`node scripts/verify-merge.mjs` 会报 2 处禁用词命中**（`依据公开资料撰写`、`语料待补充`
+  出现在 `.next/server/chunks/651.js` 与 `.next/static/chunks/502-*.js`）。这是**合并前就存在**的：
+  字符串来自 `lib/domain/personas/index.ts` 的 `corpusLabel()`，以及
+  `app/(explore)/personas/[handle]/page.tsx` 直接渲染它。**本 PR 没有新增任何渲染路径** ——
+  新迁出的名册用 `{p.corpus.real && ...}` 守卫，未抓取语料时整块不渲染。
+  这 2 处由 **PR #7** 修掉（`corpusLabel()` 改为未抓取时返回空串），与本 PR 不冲突。
+- 本 PR 的分支与 main 同步、CI 绿。若合并前 main 又有新提交，用 PR 页面的
+  **「Update branch」** 即可（本机沙箱写不了 git refs，本地 rebase 不可靠，见
+  `docs/collaboration.md` §八）。
