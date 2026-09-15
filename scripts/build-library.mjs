@@ -2,9 +2,11 @@
 /**
  * 广场镜像问题库 —— 把「已完成的镜像讨论组」预生成成一份静态 JSON。
  *
- * 消费端：components/square/FeedStream.tsx（首页与 /square 共用）。
- *   它 fetch `/square-library.json`，把条目还原成可载入工作台的镜像问题。
- *   改本文件的 slim() 必须同步改那边的 hydrate()，否则广场会出现空条目。
+ * 消费端：`components/square/SquareField.tsx` → `lib/domain/library.ts` 的
+ *   `hydrateLibraryEntry()`；数据由 `lib/hooks/useSquareLibrary.ts` fetch。
+ *   改本文件的 slim() 必须同步改那边的 hydrate()，否则会出现「字段在库里、读不出来」。
+ *   ⚠️ `components/square/FeedStream.tsx` 里还有一份**逐字重复**的 hydrate()，
+ *   但该文件已无任何引用（死文件），**不要**照它对齐 —— 以 `lib/domain/library.ts` 为准。
  *
  * 何时该用：演示现场如果想把广场做成「一大批已经做完的讨论组」而不是
  *   「一堆等着你去做的问题」——预生成后广场可秒开、无限翻页、不再耗额度。
@@ -35,6 +37,16 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+
+/**
+ * 链接清洗来自 `lib/domain/evidence.ts` —— 与运行时（`mirror.ts` 的检索）
+ * 共用同一份实现，避免「库里是干净链接、现跑的是带 utm 的」这种漂移。
+ *
+ * ⚠️ 必须是**动态 import**，不能写成顶层静态 import：ESM 的链接阶段
+ * 发生在模块体执行之前，那时解析钩子还没注册（见 `scripts/_ts-hook.mjs` 的说明）。
+ * 因此这里先占位，由 `main()` 在注册钩子后覆盖它。
+ */
+let cleanSourceUrl = (url) => url;
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, "..");
@@ -104,7 +116,8 @@ const TOPICS = [
  *     写错字段名不会报错，只会静默产出只剩 id 的空缺口（2026-09-15 踩过）。
  *   - AnswerDraft 必填 `accent` / `evidence` / `createdAt` / `status`，
  *     这些在还原时要么补回、要么由 hydrate() 补默认值。
- * 消费端在 components/square/FeedStream.tsx 的 hydrate()，改这里必须同步改那边。
+ * 消费端在 `lib/domain/library.ts` 的 `hydrateLibraryEntry()`，改这里必须同步改那边。
+ *（`components/square/FeedStream.tsx` 里那份重复实现是死代码，别照它改。）
  */
 function slim(mirror) {
   return {
@@ -132,9 +145,26 @@ function slim(mirror) {
       createdAt: a.createdAt,
       round: a.round,
       replyToName: a.replyToName,
-      /** 证据只留条数与来源标题，正文留在仓外 —— 它是最大的一块体积。 */
+      /**
+       * 证据：保留 `{title, author, url, voteUp, editTime}`，**正文（excerpt）不进库**
+       * —— 那是最大的一块体积，而 AGENTS.md §1 铁律 3 要的是「来源与作者」，不是全文。
+       *
+       * ⚠️ 不要为了省体积再把它裁成「只有标题」（2026-09-15 之前就是这样）：
+       * 回答页会照常渲染「N 条真实知乎来源」并给每条套 `<a href={e.url}>`，
+       * 裁掉 url/author 的结果是**空链接 + 空署名胶囊 + 孤零零一个「…」**，
+       * 既违反铁律 3，也让「来源」这一块整体失去意义。
+       * 实测代价：195 条来源约 +27KB（142.9KB → 170.4KB，压缩后更小），一次加载、可接受。
+       */
       evidenceCount: Array.isArray(a.evidence) ? a.evidence.length : 0,
-      evidenceTitles: (a.evidence ?? []).slice(0, 3).map((e) => e.title),
+      sources: (a.evidence ?? []).map((e) => ({
+        title: e.title,
+        // 上游可能返回空署名（同一条内容两次请求结果不同），如实保留空串，
+        // 由消费端的 isDisplayableSource() 决定不展示 —— 不猜、不填「匿名用户」。
+        author: e.author ?? "",
+        url: cleanSourceUrl(e.url ?? ""),
+        voteUp: e.voteUp ?? 0,
+        editTime: e.editTime ?? 0,
+      })),
     })),
     gaps: mirror.gaps.map((g) => ({
       id: g.id,
@@ -213,7 +243,13 @@ async function main() {
   writeFileSync(hookPath, RESOLVER, "utf8");
 
   const { register } = await import("node:module");
+  // 先挂通用 TS 钩子（补扩展名 + 转译，Node 20/22 走同一条路径），
+  // 再挂本脚本的解析钩子（`@/` 别名 + `server-only` 空模块）。
+  // 钩子按注册顺序反向生效，两者处理的说明符不重叠，谁先谁后都成立。
+  register(new URL("./_ts-hook.mjs", import.meta.url));
   register(pathToFileURL(hookPath), { parentURL: pathToFileURL(join(ROOT, "scripts", "x.mjs")).href });
+
+  ({ cleanSourceUrl } = await import("../lib/domain/evidence.ts"));
 
   const { runMirror } = await import("../lib/server/mirror.ts");
 

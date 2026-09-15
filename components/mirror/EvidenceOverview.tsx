@@ -3,6 +3,7 @@
 import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart, RadialBar, RadialBarChart, ResponsiveContainer, Tooltip } from 'recharts';
 import type { MirrorQuestion } from '@/lib/domain/types';
+import { splitSources } from '@/lib/domain/evidence';
 import CountUp from '@/components/ui/CountUp';
 import ScrollReveal from '@/components/ui/ScrollReveal';
 
@@ -10,7 +11,10 @@ export default function EvidenceOverview({ mirror }: { mirror: MirrorQuestion })
   const reduced = useReducedMotion();
   const gaps = mirror.gaps.filter(g => !g.filledBy);
   const severity = Math.round(Math.max(0, ...gaps.map(g => g.severity)) * 100);
-  const sources = Array.from(new Map(mirror.skills.flatMap(s => s.sources).map(s => [s.url, s])).values())
+  // 先筛掉缺署名或链接的条目再按 url 去重：否则它们的空 url 会互相覆盖，
+  // 只留下一条，既少算了条数、又渲染出一个点不动的空链接（违反铁律 3）。
+  const { displayable, unattributed } = splitSources(mirror.skills.flatMap(s => s.sources));
+  const sources = Array.from(new Map(displayable.map(s => [s.url, s])).values())
     .sort((a, b) => a.editTime - b.editTime);
   const radar = mirror.skills.map(s => ({ name: s.name, coverage: Math.round(s.confidence * 100) }));
   return <ScrollReveal className="section">
@@ -28,6 +32,7 @@ export default function EvidenceOverview({ mirror }: { mirror: MirrorQuestion })
     <details className="card evidence-details"><summary>查看证据时间轴 · {sources.length} 条来源</summary>
       <p className="dim">按来源最近编辑时间排序；接口未提供发布时间，不能把编辑时间视为发布时间。</p>
       {sources.length ? <ol className="evidence-timeline">{sources.map((source, i) => <li key={source.url}><span className="mono dimmer">#{String(i + 1).padStart(2, '0')}</span><time>{source.editTime > 0 ? new Date(source.editTime < 1e12 ? source.editTime * 1000 : source.editTime).toLocaleDateString('zh-CN') : '时间未提供'}</time><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a><span>{source.author}</span></li>)}</ol> : <p>当前没有可核对的来源。</p>}
+      {unattributed > 0 && <p className="dim">另有 {unattributed} 条来源未取回作者名或链接，按「不展示无出处的知乎内容」的规矩不在此列出。</p>}
     </details>
   </ScrollReveal>;
 }
