@@ -2,79 +2,74 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import type {
-  SquareLayout,
-  SquareScope,
-  TopicNode,
-  Viewport,
-} from "@/lib/domain/square-layout";
-import {
-  SCOPE_LABELS,
-  clampScale,
-  fitViewport,
-  focusViewport,
-  homeViewport,
-  myLocationNode,
-  toWorld,
-  zoomAt,
-} from "@/lib/domain/square-layout";
+import CrowdCluster from "@/components/square/CrowdCluster";
+import { crowdSummary, type CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
+import type { SquareLayout, SquareScope, TopicNode, Viewport } from "@/lib/domain/square-layout";
+import { SCOPE_LABELS, clampViewport, focusViewport, homeViewport, zoomAt } from "@/lib/domain/square-layout";
 
 /**
- * 虚拟广场 · 无限画布。
+ * 虚拟广场 · 可游逛的二维平面。
  *
- * 规格（老大给的，2026-09-15）：
- *   · 按住空白处拖动 → 平移；滚轮 → 缩放；**禁止页面上下滚动**
- *   · 中央是当前最活跃的话题，卡片最大，周围显示三个答主头像
- *   · 其他话题按主题松散聚集，大小随热度，差异克制
- *   · 悬停：卡片轻微升起、头像依次浮现、显示一句回答预览
- *   · 点击：镜头平滑聚焦并放大，原地展开讨论详情；关闭后缩回
- *   · 新话题从边缘缓慢进入；正在回答的话题带很轻的呼吸光点
- *   · 左下角缩略地图；右下角「回到我的位置」+「发现一场讨论」
- *   · 顶部一句「此刻，广场上有 N 场讨论正在发生」+ 筛选项
+ * ## 这一版改了什么（2026-09-15 第二轮）
  *
- * 实现优先级（老大明确）：
- *   ① 拖拽 ② 缩放 ③ 节点聚焦 ④ 头像展开 —— 这四个先做扎实。
- *   ⑤ 缩略地图、⑥ 复杂关系聚类放后续（这里给的是克制版，够用不外溢）。
+ * 上一版把每场讨论画成一张**话题卡**（矩形、标题 + 头像 + 预览），本质还是
+ * 「一屏卡片换个摆法」。这一版改成**人群**：每场讨论是一簇站在广场上的人，
+ * 问题标题浮在人群上方。改动的依据是老大给的概念图与产品说明。
  *
- * 技术要点：
- *   · 用一个 `transform: translate(x,y) scale(s)` 的容器承载所有卡片，
- *     而不是给每个节点单独算屏幕坐标 —— 后者在缩放时会有累积误差。
- *   · 拖动用 Pointer Events（不是 mouse/touch 各写一套），并 setPointerCapture，
- *     这样手指滑出元素也不会丢事件。
- *   · 滚轮必须 `passive: false` 才能 preventDefault，否则页面还是会滚 ——
- *     而「禁止页面上下滚动」是规格里的硬要求。
- *   · 缩放锚定鼠标位置（zoomAt），否则体感「不跟手」。
+ * 同时做减法（说明原文：页面只保留顶部导航、左侧广场和右侧现场广播）：
+ *   · 去掉左下角缩略地图 —— 它是「地图」隐喻，而这一版要的是「站在广场里」
+ *   · 去掉右下角「我的位置 / 发现一场讨论 / 全景」三个按钮 —— 它们把广场
+ *     变回了工具栏。回到可读视野改由**双击空白处**承担（画布类产品的通用手势，
+ *     不占界面位置）
+ *   · 去掉常驻的四个筛选 chip（说明与概念图都没有；筛选只保留 URL 深链入口，
+ *     生效时才显示一枚可关闭的说明条，见下）
+ *
+ * ## 交互契约（产品说明逐条对应）
+ *
+ *   · 空白处按住拖动 → 只改视野；话题位置不变、人物不跟鼠标
+ *   · 平移范围受限 → `clampViewport`（推导见 square-layout.ts）
+ *   · 滚轮缩放、双击放大；**禁止页面上下滚动**
+ *   · 点人群 → 原地展开详情；「载入工作台」才离开本页
+ *   · 首次进入给一次「拖动探索广场」提示，之后不再出现
+ *
+ * ## 与右栏的关系：**刻意不联动**
+ *
+ * 说明写得很死：拖动广场时右栏不滚动、不重排、不自动高亮；滚动右栏时广场
+ * 不平移、不切换高亮；页面不提供两边浏览位置的自动同步。所以这个组件
+ * **不接收任何来自右栏的状态**，也不向外暴露悬停/滚动位置。
+ * 两边唯一的共同点是「点进去是同一场讨论」—— 那走的是同一个 id。
  */
 
 export interface SquareCanvasProps {
   layout: SquareLayout;
-  /** 当前聚焦的节点 id；null = 广场全景 */
+  /** 与 layout.nodes 一一对应的人群（由 SquareField 统一算，避免两处重复计算） */
+  clusters: CrowdClusterData[];
+  /** 当前聚焦的节点 id；null = 广场常态 */
   focusedId: string | null;
   onFocus: (node: TopicNode | null) => void;
-  /** 点击「载入工作台」 */
+  /** 进入某场讨论（跳工作台） */
   onOpen: (node: TopicNode) => void;
-  /** 发现一场讨论：随机挑一个节点聚焦 */
-  onRandom?: () => void;
-  /** 是否有话题正在生成（用于呼吸光点） */
-  pendingIds?: string[];
-  /** 渲染详情面板 */
+  /** 渲染详情面板内容 */
   renderDetail: (node: TopicNode) => React.ReactNode;
-  /** 当前筛选（规格：全部 / 正在发生 / 等真人回答 / 我的讨论） */
+  /** 当前筛选（只由 URL 深链设置，界面上没有常驻入口） */
   scope: SquareScope;
   onScope: (s: SquareScope) => void;
-  /** 筛选前的总数，用于「筛掉了几场」的如实提示 */
+  /** 筛选前的总数，用于如实说明「筛掉了几场」 */
   totalCount: number;
 }
 
-const DRAG_THRESHOLD = 4; // 像素：小于这个距离算「点击」，防止拖完误触聚焦
+/** 像素：小于这个距离算「点击」，防止拖完误触聚焦。 */
+const DRAG_THRESHOLD = 4;
+
+/** 拖动提示只出现一次；换版本号可以让老用户再看一次。 */
+const HINT_KEY = "sq-drag-hint-v1";
 
 export default function SquareCanvas({
   layout,
+  clusters,
   focusedId,
   onFocus,
   onOpen,
-  onRandom,
-  pendingIds = [],
   renderDetail,
   scope,
   onScope,
@@ -85,16 +80,7 @@ export default function SquareCanvas({
   const [size, setSize] = useState({ w: 1200, h: 760 });
   const [hovered, setHovered] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
-  /**
-   * 用户是否主动切到了「全景」。
-   *
-   * 为什么需要这个状态：关闭详情时（focusedId → null）默认要「缩回广场」，
-   * 但「广场」有两个合理含义 —— 家视角（站在最热那场附近）和全景（看全部街区）。
-   * 用户点过「全景」后，他心里的「缩回」就是全景；没点过就是家视角。
-   * 不记这个状态的话，点完全景、随便点开一张卡再关掉，视角会莫名跳回家，
-   * 用户会觉得「我明明刚拉到全景，怎么又跑回来了」。
-   */
-  const [panorama, setPanorama] = useState(false);
+  const [hint, setHint] = useState(false);
 
   const drag = useRef({
     active: false,
@@ -108,8 +94,23 @@ export default function SquareCanvas({
 
   const reduced = useReducedMotion();
 
-  /* ------------------------------ 视口尺寸 ------------------------------ */
+  /**
+   * 平移约束用的包围盒。
+   *
+   * 为什么单独 memo 成四个数字：`layout.bounds` 每次布局重算都是新对象，
+   * 直接进依赖数组会让滚轮监听每帧重新挂载 —— 拖动时会明显掉帧。
+   */
+  const bounds = useMemo(
+    () => ({
+      minX: layout.bounds.minX,
+      minY: layout.bounds.minY,
+      maxX: layout.bounds.maxX,
+      maxY: layout.bounds.maxY,
+    }),
+    [layout.bounds.minX, layout.bounds.minY, layout.bounds.maxX, layout.bounds.maxY],
+  );
 
+  /** 视口尺寸 —— 拖拽、缩放、取景都要用它换算，所以集中一处监听。 */
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
@@ -123,51 +124,77 @@ export default function SquareCanvas({
     return () => ro.disconnect();
   }, []);
 
-  /* ------------------------------ 初始取景 ------------------------------ */
+  /* ------------------------------ 首次取景 ------------------------------ */
 
   /**
-   * 首次挂载 / 布局变化时落到「家视角」。
+   * 落到「家视角」：对准最热的那一场 + 一个读得清标题的缩放。
    *
-   * 为什么不是 fitViewport：22 场讨论铺开后包围盒约 2000px，1440 视口下
-   * fit 只能到 40%，标题糊成 8px 读不了 —— 那不是广场，是看不懂的地图。
-   * 家视角 = 对准最热那场 + 0.88 的可读缩放，一眼能读中央话题、
-   * 余光看到周围街区。想看全貌用「全景」按钮。
+   * 为什么不是把所有内容装进视口：22 场讨论铺开后包围盒约 2300px 宽，
+   * 广场只占屏幕 75%（1440 下约 1050px）时 fit 只能到 45% —— 人形缩成几个点、
+   * 标题糊成灰线，那不是广场，是一张看不懂的地图。
    *
-   * 为什么放在 size 就绪之后而不是 mount 时：mount 那一刻容器尺寸还是 0，
-   * 按 0 宽高算出来的取景会把内容全推到屏幕外，看起来像「一片空白」。
+   * 为什么放在 size 就绪之后：mount 那一刻容器尺寸还是 0，按 0 算出来的
+   * 取景会把内容全推出屏幕，看起来像一片空白。
    */
   useEffect(() => {
     if (ready) return;
     if (size.w <= 320 || size.h <= 320) return;
     if (layout.nodes.length === 0) return;
-    setViewport(homeViewport(layout, size.w, size.h));
+    setViewport(clampViewport(homeViewport(layout, size.w, size.h), bounds, size.w, size.h));
     setReady(true);
-  }, [ready, size, layout]);
+  }, [ready, size, layout, bounds]);
 
   /* ------------------------------ 聚焦 ------------------------------ */
 
   useEffect(() => {
     if (!ready) return;
     if (!focusedId) {
-      // 缩回广场。有「全景」意图就回全景，否则回家视角 ——
-      // 见 panorama 状态的注释。
-      setViewport(
-        panorama
-          ? fitViewport(layout.bounds, size.w, size.h)
-          : homeViewport(layout, size.w, size.h),
-      );
+      setViewport(clampViewport(homeViewport(layout, size.w, size.h), bounds, size.w, size.h));
       return;
     }
     const node = layout.nodes.find((n) => n.id === focusedId);
     if (!node) return;
-    setViewport(focusViewport(node, size.w, size.h));
-  }, [focusedId, ready, size, layout, panorama]);
+    setViewport(clampViewport(focusViewport(node, size.w, size.h), bounds, size.w, size.h));
+  }, [focusedId, ready, size, layout, bounds]);
 
-  /* ------------------------------ 拖拽 ------------------------------ */
+  /* ------------------------------ 拖动提示 ------------------------------ */
+
+  useEffect(() => {
+    let seen = false;
+    try {
+      seen = window.localStorage.getItem(HINT_KEY) === "1";
+    } catch {
+      // 隐私模式 / 存储被禁 —— 那就每次都提示，总好过静默不给任何引导。
+      seen = false;
+    }
+    if (!seen) setHint(true);
+  }, []);
+
+  /** 提示消失时记下「看过了」。开始拖动也算看过。 */
+  const dismissHint = useCallback(() => {
+    setHint((h) => {
+      if (!h) return false;
+      try {
+        window.localStorage.setItem(HINT_KEY, "1");
+      } catch {
+        /* 存不下就算了，不因为存储失败打断交互 */
+      }
+      return false;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!hint) return;
+    // 4.6s 足够读完一行字，又不至于让人等它消失才能看清广场。
+    const t = window.setTimeout(dismissHint, 4600);
+    return () => window.clearTimeout(t);
+  }, [hint, dismissHint]);
+
+  /* ------------------------------ 拖拽平移 ------------------------------ */
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      // 只有空白处能开始拖动画布；卡片上的交互不触发。
+      // 只有空白处能开始拖动画布；人群的命中区上不触发（否则点人变成拖布）。
       const target = e.target as HTMLElement;
       if (target.closest("[data-topic-card]") || target.closest("[data-no-pan]")) return;
       drag.current = {
@@ -179,20 +206,41 @@ export default function SquareCanvas({
         originY: viewport.y,
         pointerId: e.pointerId,
       };
-      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      // setPointerCapture：手指/鼠标滑出元素也不会丢事件。
+      // 包 try/catch 是因为它对**已经失效的 pointerId 会抛 NotFoundError**
+      // （指针被系统回收、合成事件、某些浏览器在 pointerdown 之后立刻 cancel）。
+      // 不包的话，一次异常就让这一次拖拽彻底失灵，而用户只看到「拖不动」。
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {
+        /* 拿不到捕获也能拖 —— 只是手指滑出画布时会丢事件 */
+      }
     },
     [viewport.x, viewport.y],
   );
 
-  const onPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
-    const d = drag.current;
-    if (!d.active) return;
-    const dx = e.clientX - d.startX;
-    const dy = e.clientY - d.startY;
-    if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
-    d.moved = true;
-    setViewport((v) => ({ ...v, x: d.originX + dx, y: d.originY + dy }));
-  }, []);
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>) => {
+      const d = drag.current;
+      if (!d.active) return;
+      const dx = e.clientX - d.startX;
+      const dy = e.clientY - d.startY;
+      if (!d.moved && Math.abs(dx) + Math.abs(dy) < DRAG_THRESHOLD) return;
+      if (!d.moved) {
+        d.moved = true;
+        dismissHint();
+      }
+      setViewport(
+        clampViewport(
+          { scale: viewport.scale, x: d.originX + dx, y: d.originY + dy },
+          bounds,
+          size.w,
+          size.h,
+        ),
+      );
+    },
+    [viewport.scale, bounds, size.w, size.h, dismissHint],
+  );
 
   const endDrag = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
@@ -206,31 +254,45 @@ export default function SquareCanvas({
       }
       // 拖完（有明显位移）就当作平移手势，不触发「点空白处关闭详情」。
       if (d.moved) return;
-      // 点击空白：关闭详情，缩回广场。
       if (focusedId) onFocus(null);
     },
     [focusedId, onFocus],
   );
 
-  /* ------------------------------ 滚轮缩放 ------------------------------ */
+  /* ------------------------------ 滚轮 ------------------------------ */
 
+  /**
+   * 滚轮：缩放广场。
+   *
+   * ⚠️ 两处必须保持现状，改之前先读这段：
+   *   ① 监听挂在 `.sq-canvas` 上（不是 window/document），所以**右栏现场广播的
+   *      滚动完全不受影响** —— 它是兄弟节点，wheel 事件不会冒泡到这里。
+   *      如果哪天把监听挪到 window，右栏立刻会被缩放吃掉。
+   *   ② 必须 `passive: false` 才能 preventDefault，否则页面还是会滚，
+   *      而「禁止页面上下滚动」是规格里的硬要求。
+   *
+   * 触控板双指横滑（deltaX 大、deltaY 小）当平移，鼠标滚轮当缩放 ——
+   * 混在一起会让 Mac 用户「想滑一下结果缩得飞起」。
+   */
   useEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
 
     const onWheel = (e: WheelEvent) => {
-      // 规格硬要求：滚轮用于缩放，页面不滚。必须 preventDefault，
-      // 而浏览器默认把 wheel 监听当 passive → 不生效，所以显式 passive:false。
       e.preventDefault();
 
-      // 触控板双指滚动（deltaX/deltaY 都很小且连续）与鼠标滚轮（deltaY 大）
-      // 要分别处理：前者更适合当成平移，后者才是缩放。混在一起会让
-      // Mac 用户「想滚一下结果缩得飞起」。
       const isTrackpadPan =
         Math.abs(e.deltaX) > Math.abs(e.deltaY) * 0.8 && Math.abs(e.deltaY) < 12;
 
       if (isTrackpadPan && !e.ctrlKey) {
-        setViewport((v) => ({ ...v, x: v.x - e.deltaX, y: v.y - e.deltaY }));
+        setViewport((v) =>
+          clampViewport(
+            { scale: v.scale, x: v.x - e.deltaX, y: v.y - e.deltaY },
+            bounds,
+            size.w,
+            size.h,
+          ),
+        );
         return;
       }
 
@@ -239,15 +301,22 @@ export default function SquareCanvas({
       const py = e.clientY - rect.top;
       // 指数缩放：不同设备 deltaY 量级差别很大，线性缩放会「一下缩到底」。
       const factor = Math.exp(-e.deltaY * 0.0016);
-      setViewport((v) => zoomAt(v, px, py, factor));
+      setViewport((v) => clampViewport(zoomAt(v, px, py, factor), bounds, size.w, size.h));
     };
 
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [bounds, size.w, size.h]);
 
-  /* ------------------------------ 双击放大 ------------------------------ */
+  /* ------------------------------ 双击 ------------------------------ */
 
+  /**
+   * 双击空白：把光标处放大到 1.6 倍并保持该点不动。
+   *
+   * 为什么用双击而不是保留「全景」按钮：说明要求页面只保留三块，而
+   * 「凑近看某个角落」是高频动作，不能没有。双击是画布类产品的通用手势，
+   * 不占任何界面位置，也不会让人以为这里是个工具栏。
+   */
   const onDoubleClick = useCallback(
     (e: React.MouseEvent<HTMLDivElement>) => {
       const target = e.target as HTMLElement;
@@ -256,46 +325,29 @@ export default function SquareCanvas({
       if (!rect) return;
       const px = e.clientX - rect.left;
       const py = e.clientY - rect.top;
-      setViewport((v) => zoomAt(v, px, py, 1.6));
+      setViewport((v) => clampViewport(zoomAt(v, px, py, 1.6), bounds, size.w, size.h));
     },
-    [],
+    [bounds, size.w, size.h],
   );
 
-  /* ------------------------------ 回到我的位置 / 全景 ------------------------------ */
+  /* ------------------------------ 选中 ------------------------------ */
 
-  const goMine = useCallback(() => {
-    const node = myLocationNode(layout);
-    if (!node) return;
-    setPanorama(false);
-    onFocus(node);
-  }, [layout, onFocus]);
-
-  /** 看全景：显式拉远看所有街区，并记住这个意图（见 panorama 状态）。 */
-  const goPanorama = useCallback(() => {
-    setPanorama(true);
-    setViewport(fitViewport(layout.bounds, size.w, size.h));
-    onFocus(null);
-  }, [layout.bounds, size.w, size.h, onFocus]);
-
-  /** 点卡片：退出全景意图，正常聚焦。 */
-  const selectNode = useCallback(
-    (node: TopicNode) => {
-      setPanorama(false);
-      onFocus(node);
-    },
-    [onFocus],
-  );
-
-  const scalePct = Math.round(viewport.scale * 100);
+  const selectNode = useCallback((node: TopicNode) => onFocus(node), [onFocus]);
 
   const focused = useMemo(
     () => (focusedId ? layout.nodes.find((n) => n.id === focusedId) ?? null : null),
     [focusedId, layout.nodes],
   );
 
+  const focusedCluster = useMemo(
+    () => (focused ? clusters.find((c) => c.id === focused.id) ?? null : null),
+    [focused, clusters],
+  );
+
+  const scopeLabel = SCOPE_LABELS.find((s) => s.key === scope)?.label ?? "";
+
   return (
     <div className="sq-root">
-      {/* ---------------- 画布 ---------------- */}
       <div
         ref={wrapRef}
         className="sq-canvas"
@@ -305,128 +357,118 @@ export default function SquareCanvas({
         onPointerCancel={endDrag}
         onDoubleClick={onDoubleClick}
         style={{
-          cursor: drag.current.active ? "grabbing" : focusedId ? "default" : "grab",
+          cursor: drag.current.active ? "grabbing" : "grab",
           touchAction: "none", // 移动端：禁止浏览器接管手势，交给我们的 pan/zoom
         }}
       >
+        {/* 人形轮廓定义一次，全广场的 <use> 都引用它。
+            放在 defs 里而不是每个簇各画一遍：22 簇 × 约 5 人 = 110 份重复路径，
+            既撑大 DOM，也让「改一次人形」变成改 110 处。
+
+            ⚠️ viewBox 的宽高比（12/20）必须与 CrowdCluster.tsx 的 GLYPH_ASPECT 一致，
+            否则人形会被拉伸成胖子或竹竿。改这里必须同时改那里。
+
+            第一版是 10×24（细高个），实测截图里人形读起来像一根竖条加个点，
+            不像人。加宽到 12×20、并把头和肩接上之后才有「人」的轮廓。 */}
+        <svg className="sq-defs" aria-hidden="true" focusable="false">
+          <defs>
+            {/* 实心：在场分身。圆头 + 肩弧 + 直身 —— 形状全部来自设计系统允许的圆/线/弧。 */}
+            <symbol id="sq-figure" viewBox="0 0 12 20">
+              <circle cx="6" cy="3.6" r="3.2" />
+              <path d="M1.4 20 L1.4 12 A4.6 4.6 0 0 1 10.6 12 L10.6 20 Z" />
+            </symbol>
+            {/* 空心：未补的缺口 —— 「还缺的那个真人」。
+                只描边不填色，一眼就能和在场的人区分开。 */}
+            <symbol id="sq-figure-gap" viewBox="0 0 12 20">
+              <circle cx="6" cy="3.6" r="3.2" fill="none" strokeWidth="1.7" />
+              <path
+                d="M1.4 20 L1.4 12 A4.6 4.6 0 0 1 10.6 12 L10.6 20 Z"
+                fill="none"
+                strokeWidth="1.7"
+              />
+            </symbol>
+          </defs>
+        </svg>
+
         <div
           className="sq-world"
           style={{
             transform: `translate(${viewport.x}px, ${viewport.y}px) scale(${viewport.scale})`,
-            // 拖动/聚焦时不要 transition —— 那会让手指拖影；聚焦靠 motion 的
-            // 弹簧单独做（见下方 focus 分支），所以这里只在「非拖动」时给短过渡。
-            transition: drag.current.active
-              ? "none"
-              : reduced
+            // 拖动中不要 transition —— 那会让手指拖影。聚焦的动画由详情面板的
+            // 弹簧单独做，所以这里只在非拖动时给一个短过渡。
+            transition:
+              drag.current.active || reduced
                 ? "none"
-                : "transform 420ms cubic-bezier(0.22, 1, 0.36, 1)",
+                : "transform var(--dur-slow) var(--ease-out)",
           }}
         >
-          {/* 关系线：若隐若现，形成局部街区（不画成规整流程图） */}
-          <svg className="sq-links" aria-hidden>
-            {layout.links.map((l, i) => {
-              const a =
-                l.from.startsWith("@")
-                  ? layout.clusters.find((c) => "@" + c.theme.key === l.from)
-                  : layout.nodes.find((n) => n.id === l.from);
-              const b = layout.nodes.find((n) => n.id === l.to);
-              if (!a || !b) return null;
-              const ax = a.x;
-              const ay = a.y;
-              // 二次贝塞尔：控制点垂直偏移，让线是「弧」而不是直线 ——
-              // 直线会读成流程图，弧线才像街区之间的小路。
-              const mx = (ax + b.x) / 2;
-              const my = (ay + b.y) / 2;
-              const dx = b.x - ax;
-              const dy = b.y - ay;
-              const len = Math.hypot(dx, dy) || 1;
-              const bend = 34;
-              const cx = mx + (-dy / len) * bend;
-              const cy = my + (dx / len) * bend;
-              return (
-                <path
-                  key={l.from + "->" + l.to + i}
-                  d={`M ${ax} ${ay} Q ${cx} ${cy} ${b.x} ${b.y}`}
-                  className="sq-link"
-                  style={{ opacity: 0.055 + l.strength * 0.075 }}
-                />
-              );
-            })}
-          </svg>
-
-          {/* 主题分区标签：给「街区」一个可读的归属 */}
-          {layout.clusters.map((c) => (
-            <div
-              key={c.theme.key}
-              className="sq-cluster"
-              style={{
-                transform: `translate(${c.x}px, ${c.y}px) translate(-50%, -50%)`,
-              }}
-            >
-              <span className={"sq-cluster-dot a-" + c.theme.accent} />
-              <span className="sq-cluster-label">{c.theme.label}</span>
-              <span className="sq-cluster-count">{c.count}</span>
-            </div>
-          ))}
-
-          {/* 话题卡 */}
-          {layout.nodes.map((n) => (
-            <TopicCard
-              key={n.id}
-              node={n}
-              hovered={hovered === n.id}
-              focused={focusedId === n.id}
-              dimmed={!!focusedId && focusedId !== n.id}
-              pending={pendingIds.includes(n.id)}
-              reduced={!!reduced}
-              onHover={setHovered}
-              onSelect={() => selectNode(n)}
-            />
-          ))}
+          {layout.nodes.map((n, i) => {
+            const c = clusters[i];
+            if (!c) return null;
+            return (
+              <CrowdCluster
+                key={n.id}
+                node={n}
+                cluster={c}
+                focused={focusedId === n.id}
+                dimmed={!!focusedId && focusedId !== n.id}
+                hovered={hovered === n.id}
+                onHover={setHovered}
+                onSelect={() => selectNode(n)}
+              />
+            );
+          })}
         </div>
 
-        {/* 顶部一句话 + 筛选（规格：只保留这一句，不要巨大的静态标题） */}
-        <div className="sq-topbar" data-no-pan>
-          <span className="sq-count">
-            此刻，广场上有 <b>{layout.nodes.length}</b> 场讨论正在发生
-          </span>
-          <div className="sq-filters" role="tablist" aria-label="广场筛选">
-            {SCOPE_LABELS.map((s) => (
-              <button
-                key={s.key}
-                role="tab"
-                aria-selected={scope === s.key}
-                className={"sq-filter" + (scope === s.key ? " sq-filter-on" : "")}
-                onClick={() => onScope(s.key)}
-              >
-                {s.label}
-              </button>
-            ))}
-            {/* 筛掉了多少如实说 —— 否则用户会以为广场上就只剩这几场 */}
-            {scope !== "all" && totalCount > layout.nodes.length && (
-              <span className="sq-filter-note">
-                共 {totalCount} 场，其中 {layout.nodes.length} 场符合
-              </span>
-            )}
+        {/* 广场标题。概念图上是两行：大字「虚拟广场」+ 一句副题。
+            刻意不做成首屏 hero —— 广场本身才是主角，标题是立在广场边上的指示牌。 */}
+        <div className="sq-plaza-head" data-no-pan>
+          <h1 className="sq-plaza-title">虚拟广场</h1>
+          <p className="sq-plaza-sub">此刻，人们正在讨论</p>
+        </div>
+
+        {/* 筛选只在 URL 深链生效时出现。
+            为什么不给常驻 chip 行：说明与概念图都没有这一行，而它会让广场看起来
+            像后台的筛选列表。但深链一旦生效又必须**可见** —— 否则用户看到的是
+            全部讨论，界面却以为自己被筛过，那是骗人。 */}
+        {scope !== "all" && (
+          <div className="sq-scope-active" data-no-pan role="status">
+            <span className="dim">只显示</span>
+            <span className="chip chip-blue">{scopeLabel}</span>
+            <span className="dim">
+              共 {totalCount} 场，其中 {layout.nodes.length} 场符合
+            </span>
+            <button type="button" className="sq-scope-clear" onClick={() => onScope("all")}>
+              看全部
+            </button>
           </div>
-        </div>
+        )}
 
-        {/* 左下角缩略地图（克制版：位置图 + 当前视口框） */}
-        <MiniMap layout={layout} viewport={viewport} size={size} onJump={setViewport} />
-
-        {/* 右下角控制 */}
-        <div className="sq-controls" data-no-pan>
-          <button className="sq-btn" onClick={goMine} title="回到我的位置">
-            <span aria-hidden>◎</span> 我的位置
-          </button>
-          <button className="sq-btn" onClick={onRandom ?? goPanorama} title="随机逛一场">
-            <span aria-hidden>⌾</span> 发现一场讨论
-          </button>
-          <button className="sq-btn sq-btn-ghost" onClick={goPanorama} title="看全景">
-            全景
-          </button>
-          <span className="sq-zoom mono">{scalePct}%</span>
-        </div>
+        {/* 首次进入的一次性提示。不是常驻板块，也没有关闭按钮 ——
+            它自己会走（4.6s 或首次拖动），所以不需要用户做任何事。 */}
+        <AnimatePresence>
+          {hint && (
+            <motion.div
+              className="sq-hint"
+              data-no-pan
+              initial={reduced ? { opacity: 0 } : { opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path
+                  d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.4"
+                  strokeLinecap="round"
+                />
+              </svg>
+              按住空白处拖动，逛逛这座广场
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
       {/* ---------------- 原地展开的详情 ---------------- */}
@@ -460,25 +502,23 @@ export default function SquareCanvas({
               </button>
             </div>
 
-            {focused.avatarNames.length > 0 && (
-              <div className="sq-detail-avatars">
-                {focused.avatarNames.map((n, i) => (
-                  <motion.span
-                    key={n + i}
-                    className="sq-avatar sq-avatar-lg"
-                    initial={reduced ? {} : { opacity: 0, x: -8 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: 0.04 * i, duration: 0.24 }}
-                    title={n}
-                  >
-                    {n.slice(0, 1)}
-                  </motion.span>
-                ))}
-                <span className="dim" style={{ fontSize: 12.5, marginLeft: 8 }}>
-                  {focused.answerCount} 位分身参与
-                </span>
-              </div>
-            )}
+            {/* 人群规模如实说：数字直接来自 CrowdCluster，与画出来的人形**同源**。
+                分成两段（在场 / 缺口）而不是合成一句「5 人参与」——
+                因为「等真人」的那个人还没到场，混在一起说就是把未来当现在。 */}
+            <div className="sq-detail-crowd">
+              {focused.avatarNames.length > 0 && (
+                <div className="sq-detail-avatars">
+                  {focused.avatarNames.map((n, i) => (
+                    <span key={n + i} className="sq-avatar sq-avatar-lg" title={n}>
+                      {n.slice(0, 1)}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <span className="dim sq-detail-crowd-note">
+                {focusedCluster ? crowdSummary(focusedCluster) : ""}
+              </span>
+            </div>
 
             <div className="sq-detail-body">{renderDetail(focused)}</div>
 
@@ -496,240 +536,3 @@ export default function SquareCanvas({
     </div>
   );
 }
-
-/* ------------------------------ 话题卡 ------------------------------ */
-
-function TopicCard({
-  node,
-  hovered,
-  focused,
-  dimmed,
-  pending,
-  reduced,
-  onHover,
-  onSelect,
-}: {
-  node: TopicNode;
-  hovered: boolean;
-  focused: boolean;
-  dimmed: boolean;
-  pending: boolean;
-  reduced: boolean;
-  onHover: (id: string | null) => void;
-  onSelect: () => void;
-}) {
-  // 头像依次浮现：悬停后才展开，每个延迟 60ms，形成「陆续出现」的观感。
-  const showAvatars = hovered || focused;
-
-  return (
-    <div
-      data-topic-card
-      className={
-        "sq-card" +
-        (node.mine ? " sq-card-mine" : "") +
-        (focused ? " sq-card-focused" : "") +
-        (dimmed ? " sq-card-dimmed" : "")
-      }
-      style={{
-        width: node.size,
-        height: node.size,
-        transform: `translate(${node.x - node.size / 2}px, ${node.y - node.size / 2}px)`,
-      }}
-      onPointerEnter={() => onHover(node.id)}
-      onPointerLeave={() => onHover(null)}
-      onClick={(e) => {
-        e.stopPropagation();
-        onSelect();
-      }}
-      role="button"
-      tabIndex={0}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      aria-label={node.title + " · " + node.statusLabel}
-    >
-      <motion.div
-        className="sq-card-inner"
-        animate={
-          reduced
-            ? {}
-            : {
-                // 「轻微升起」：只抬 6px，不夸张 —— 规格要求动效自然缓慢。
-                y: hovered && !focused ? -6 : 0,
-                scale: hovered && !focused ? 1.025 : 1,
-              }
-        }
-        transition={{ type: "spring", stiffness: 300, damping: 28 }}
-      >
-        <span className={"sq-card-bar a-" + node.theme.accent} />
-
-        {/* 呼吸光点：正在回答的话题 */}
-        {pending && !reduced && (
-          <motion.span
-            className="sq-breathe"
-            animate={{ opacity: [0.25, 0.7, 0.25], scale: [1, 1.5, 1] }}
-            transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
-          />
-        )}
-        {pending && reduced && <span className="sq-breathe sq-breathe-static" />}
-
-        <div className="sq-card-body">
-          <div className="sq-card-meta">
-            {node.mine && <span className="sq-card-mine-tag">我的</span>}
-            <span className="sq-card-status">{node.statusLabel}</span>
-          </div>
-
-          <div className="sq-card-title" style={{ fontSize: cardTitleSize(node.size) }}>
-            {node.title}
-          </div>
-
-          {/* 回答预览：悬停/聚焦时出现 —— 但卡片小的时候放不下，靠 CSS 截断 */}
-          <AnimatePresence>
-            {showAvatars && node.preview && (
-              <motion.div
-                className="sq-card-preview"
-                initial={reduced ? { opacity: 0 } : { opacity: 0, y: 6 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.22 }}
-              >
-                {node.preview}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* 答主头像：依次浮现 */}
-          <div className="sq-card-avatars">
-            <AnimatePresence>
-              {showAvatars &&
-                node.avatarNames.map((n, i) => (
-                  <motion.span
-                    key={n + i}
-                    className="sq-avatar"
-                    initial={reduced ? { opacity: 0 } : { opacity: 0, x: -10, scale: 0.85 }}
-                    animate={{ opacity: 1, x: 0, scale: 1 }}
-                    exit={{ opacity: 0, scale: 0.85 }}
-                    transition={{ delay: reduced ? 0 : 0.06 * i, duration: 0.26 }}
-                    title={n}
-                  >
-                    {n.slice(0, 1)}
-                  </motion.span>
-                ))}
-            </AnimatePresence>
-            {showAvatars && node.answerCount > node.avatarNames.length && (
-              <motion.span
-                className="sq-avatar sq-avatar-more"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                transition={{ delay: reduced ? 0 : 0.06 * node.avatarNames.length }}
-              >
-                +{node.answerCount - node.avatarNames.length}
-              </motion.span>
-            )}
-          </div>
-        </div>
-      </motion.div>
-    </div>
-  );
-}
-
-/** 卡片越大字号越大；小卡片必须缩字，否则标题会溢出来。 */
-function cardTitleSize(size: number): number {
-  if (size >= 280) return 20;
-  if (size >= 220) return 17;
-  if (size >= 180) return 15;
-  return 13.5;
-}
-
-/* ------------------------------ 缩略地图 ------------------------------ */
-
-/**
- * 左下角的广场地图。
- *
- * 规格里说「可以放到后续」，但一个极简版（只有点位 + 当前视口框）
- * 成本很低，对「我在广场的哪里」这个空间感帮助很大，所以给一个克制版。
- * 不做交互式拖拽 —— 那会与主画布的拖拽手势冲突。
- */
-function MiniMap({
-  layout,
-  viewport,
-  size,
-  onJump,
-}: {
-  layout: SquareLayout;
-  viewport: Viewport;
-  size: { w: number; h: number };
-  onJump: (v: Viewport) => void;
-}) {
-  const W = 152;
-  const H = 100;
-  const b = layout.bounds;
-  const bw = Math.max(b.maxX - b.minX, 1);
-  const bh = Math.max(b.maxY - b.minY, 1);
-  const s = Math.min(W / bw, H / bh) * 0.9;
-
-  const toMini = (x: number, y: number) => ({
-    x: W / 2 + (x - (b.minX + b.maxX) / 2) * s,
-    y: H / 2 + (y - (b.minY + b.maxY) / 2) * s,
-  });
-
-  // 当前视口在画布坐标里覆盖的矩形。
-  const tl = toWorld(0, 0, viewport);
-  const br = toWorld(size.w, size.h, viewport);
-  const p1 = toMini(tl.x, tl.y);
-  const p2 = toMini(br.x, br.y);
-
-  const onClick = (e: React.MouseEvent<SVGSVGElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    const mx = ((e.clientX - r.left) / r.width) * W;
-    const my = ((e.clientY - r.top) / r.height) * H;
-    // 反算：点到的小地图坐标 → 画布坐标 → 居中到该点的视口。
-    const wx = (mx - W / 2) / s + (b.minX + b.maxX) / 2;
-    const wy = (my - H / 2) / s + (b.minY + b.maxY) / 2;
-    onJump({
-      scale: viewport.scale,
-      x: size.w / 2 - wx * viewport.scale,
-      y: size.h / 2 - wy * viewport.scale,
-    });
-  };
-
-  return (
-    <div className="sq-minimap" data-no-pan>
-      <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} onClick={onClick} role="img" aria-label="广场地图">
-        <rect x={0.5} y={0.5} width={W - 1} height={H - 1} rx={6} className="sq-minimap-bg" />
-        {layout.clusters.map((c) => {
-          const p = toMini(c.x, c.y);
-          return <circle key={c.theme.key} cx={p.x} cy={p.y} r={13} className="sq-minimap-cluster" />;
-        })}
-        {layout.nodes.map((n) => {
-          const p = toMini(n.x, n.y);
-          const r = 1.6 + (n.size / 320) * 2.4;
-          return (
-            <circle
-              key={n.id}
-              cx={p.x}
-              cy={p.y}
-              r={r}
-              className={"sq-minimap-dot" + (n.mine ? " mine" : "")}
-            />
-          );
-        })}
-        <rect
-          x={Math.min(p1.x, p2.x)}
-          y={Math.min(p1.y, p2.y)}
-          width={Math.max(Math.abs(p2.x - p1.x), 3)}
-          height={Math.max(Math.abs(p2.y - p1.y), 3)}
-          rx={2}
-          className="sq-minimap-view"
-        />
-      </svg>
-    </div>
-  );
-}
-
-/* ------------------------------ 供外部用的工具 ------------------------------ */
-
-export { clampScale };

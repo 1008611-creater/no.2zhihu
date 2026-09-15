@@ -81,7 +81,7 @@ export function stableHash(s: string): number {
 }
 
 /** 由哈希导出 [0,1) 的确定性伪随机数。 */
-function rand01(seed: number, salt: number): number {
+export function hashUnit(seed: number, salt: number): number {
   const x = Math.imul(seed ^ Math.imul(salt + 1, 0x9e3779b9), 0x85ebca6b) >>> 0;
   return ((x >>> 8) & 0xffffff) / 0x1000000;
 }
@@ -96,7 +96,16 @@ export interface TopicInput {
   /** 是否是我自己的讨论 */
   mine: boolean;
   /**
-   * 是否还有**没被真人补上**的缺口。
+   * 真正参与作答的**分身人数**（去重后的答主数）。
+   *
+   * 为什么不能拿 answerCount 顶替：多轮讨论里一位分身会答两次以上，
+   * answerCount 是**回答条数**，不是**在场人数**。广场上一个人形代表
+   * 一个真实分身，所以这里必须是去重计数 —— 否则画出来的人比实际多，
+   * 那就是在替产品吹规模。
+   */
+  personaCount: number;
+  /**
+   * 还**没被真人补上**的缺口数。
    *
    * 为什么这是「等真人回答」的判据，而不是「作答数 ≤ 1」：
    * 这个产品的核心论点是「分身先答一遍，缺口交给真人」。一场讨论答了
@@ -104,8 +113,12 @@ export interface TopicInput {
    * 「已经答完了」，与产品语义正好相反。
    * 实测：库里的 22 场全部有未补缺口（gap 无 filledBy），也就是说
    * 「等真人回答」在这个快照下等于全部 —— 那是**数据的真相**，不是 bug。
+   *
+   * 存**数量**而不是布尔：广场上每个未补缺口要画成一个空心人形
+   * （见 lib/domain/crowd.ts），只存布尔就得在渲染层重数一遍，
+   * 两处计数迟早会对不上，而对不上就是「写着 2 个缺口、画了 3 个」。
    */
-  hasOpenGaps: boolean;
+  openGapCount: number;
 }
 
 /**
@@ -135,7 +148,7 @@ export function matchesScope(t: TopicInput, scope: SquareScope): boolean {
       return t.hasReplies;
     case "waiting":
       // 「等真人回答」= 分身答完了，但缺口还没被真人补上。
-      return t.hasOpenGaps;
+      return t.openGapCount > 0;
     case "mine":
       return t.mine;
     default:
@@ -168,7 +181,12 @@ export interface TopicNode {
   /** 2–3 个答主头像的 handle，用于卡片上展开 */
   avatarHandles: string[];
   avatarNames: string[];
+  /** 回答条数 */
   answerCount: number;
+  /** 在场分身数（去重）—— 广场上实心人形的数量就是这个 */
+  personaCount: number;
+  /** 未被真人补上的缺口数 —— 广场上空心人形的数量就是这个 */
+  openGapCount: number;
   hasReplies: boolean;
   mine: boolean;
   /** 一句回答预览（由调用方填） */
@@ -277,6 +295,8 @@ export function layoutSquare(
       avatarHandles: handles,
       avatarNames: handles.map((h) => avatarLookup(h) ?? h),
       answerCount: centerTopic.answerCount,
+      personaCount: centerTopic.personaCount,
+      openGapCount: centerTopic.openGapCount,
       hasReplies: centerTopic.hasReplies,
       mine: centerTopic.mine,
       statusLabel: statusLabelOf(centerTopic),
@@ -332,12 +352,12 @@ export function layoutSquare(
       const step = inRing > 1 ? spread / (inRing - 1) : 0;
       const base = inRing > 1 ? theme.angle - spread / 2 + step * k : theme.angle;
       // 抖动幅度压到半个分位宽的 18%：再大就会把刚算好的「不重叠」破坏掉。
-      const jitter = step > 0 ? (rand01(seed, 1) - 0.5) * step * 0.36 : 0;
+      const jitter = step > 0 ? (hashUnit(seed, 1) - 0.5) * step * 0.36 : 0;
       const a = base + jitter;
 
       // 环半径：从分区基准半径起步，每多一环往外推一个 RING_GAP。
       // 再叠一点哈希抖动（±6%）让环看起来是自然聚落而不是同心圆。
-      const rJitter = (rand01(seed, 2) - 0.5) * RING_GAP * 0.12;
+      const rJitter = (hashUnit(seed, 2) - 0.5) * RING_GAP * 0.12;
       const r = theme.radius + ring * RING_GAP + rJitter;
 
       const heat = heatOf(t, maxAnswers);
@@ -356,6 +376,8 @@ export function layoutSquare(
         avatarHandles: handles,
         avatarNames: handles.map((h) => avatarLookup(h) ?? h),
         answerCount: t.answerCount,
+        personaCount: t.personaCount,
+        openGapCount: t.openGapCount,
         hasReplies: t.hasReplies,
         mine: t.mine,
         statusLabel: statusLabelOf(t),
@@ -514,10 +536,40 @@ function relaxOverlaps(nodes: TopicNode[], clusters: ThemeCluster[]): void {
   }
 }
 
-function statusLabelOf(t: TopicInput): string {
-  if (t.mine) return t.hasReplies ? "我的讨论 · 已互相回应" : "我的讨论";
-  if (t.hasReplies) return "讨论正热";
-  return t.answerCount > 1 ? t.answerCount + " 位答主已作答" : "等真人回答";
+/**
+ * 状态文案：有几项说几项。
+ *
+ * 2026-09-15 改。原先只有「等真人回答 / 讨论正热 / N 位答主已作答」三选一，
+ * 三个分支**都不提缺口** —— 而缺口是这个产品的核心论点。库里的 22 场
+ * 全是「3 位分身已作答 + 1–3 个缺口还空着」，旧文案只会显示「3 位答主已作答」，
+ * 把最关键的那半句藏了。现在如实拼接。
+ *
+ * 「分身数」用 personaCount、「回答条数」用 answerCount —— 两者在多轮讨论里
+ * 不相等，混用会让人以为广场上站着 5 个人（实际是 3 人答了 5 条）。
+ */
+export interface TopicCounts {
+  personaCount: number;
+  answerCount: number;
+  openGapCount: number;
+  hasReplies: boolean;
+  mine: boolean;
+}
+
+/**
+ * 状态文案（纯计数 → 文案）。
+ *
+ * 为什么签名收窄成 `TopicCounts` 而不是 `TopicInput`：广场的人群浮标与右栏
+ * 现场广播必须显示**同一句**状态。两处各写一套文案，迟早会一个说
+ * 「3 位分身已作答」另一个说「讨论正热」。收窄之后两处调的是同一个函数。
+ */
+export function statusLabelOf(t: TopicCounts): string {
+  const parts: string[] = [];
+  if (t.mine) parts.push("我的讨论");
+  if (t.hasReplies) parts.push("已互相回应");
+  parts.push(t.personaCount > 0 ? t.personaCount + " 位分身已作答" : "还没有分身作答");
+  if (t.answerCount > t.personaCount) parts.push("共 " + t.answerCount + " 条回答");
+  if (t.openGapCount > 0) parts.push(t.openGapCount + " 个缺口等真人");
+  return parts.join(" · ");
 }
 
 /* ------------------------------ 视图变换工具 ------------------------------ */
@@ -606,9 +658,11 @@ export function homeViewport(
 ): Viewport {
   const home = layout.nodes.find((n) => n.mine) ?? layout.nodes[0];
   if (!home) return fitViewport(layout.bounds, vw, vh);
-  // 0.88：中央卡在 900 高视口上约 280px，标题 20px×0.88 ≈ 17.6px 清晰可读，
-  // 同时四周还能露出 2–3 个邻居。
-  const scale = clampScale(0.88);
+  // 1.02：广场只占屏幕 75%（1440 下约 1080px），比改造前独占视口时窄了三成。
+  // 沿用旧的 0.88 会让整个人群偏小、标题偏糊 —— 实测截图里一簇人只有二十来像素，
+  // 看不出是人。抬到 1.02 之后一簇人约 40px、标题 13px 清晰可读，
+  // 四周仍能露出 2–3 个邻居。
+  const scale = clampScale(1.02);
   return {
     scale,
     x: vw / 2 - home.x * scale,
@@ -628,6 +682,55 @@ export function fitViewport(
   const cx = (bounds.minX + bounds.maxX) / 2;
   const cy = (bounds.minY + bounds.maxY) / 2;
   return { scale, x: vw / 2 - cx * scale, y: vh / 2 - cy * scale };
+}
+
+/**
+ * 把视口夹在内容范围内。
+ *
+ * 规格硬要求：「广场外缘允许继续探索，但需要限制平移范围，避免用户一直拖到
+ * 没有内容的空白处」。改造前**没有任何约束** —— `onPointerMove` 直接把位移写进
+ * viewport，用户拖三下就能把整个广场推出屏幕，看到一屏深色底纹。
+ * 那时画布上没有滚动条、没有坐标提示，用户唯一的结论是「页面坏了」。
+ *
+ * 两条规则：
+ *   · 内容比视口大 → 视野不能越过内容边界（拖到边就停）；
+ *   · 内容比视口小 → 居中锁死，否则内容会缩在角落、另一侧留一大片空。
+ *
+ * `bounds` 已经含了布局层预留的 pad，所以这里不再额外留白 ——
+ * 再留白会让「拖到边界」看起来没拖到底，用户会反复用力拖。
+ */
+export function clampViewport(
+  v: Viewport,
+  bounds: SquareLayout["bounds"],
+  vw: number,
+  vh: number,
+): Viewport {
+  return {
+    scale: v.scale,
+    x: clampAxis(v.x, vw, v.scale, bounds.minX, bounds.maxX),
+    y: clampAxis(v.y, vh, v.scale, bounds.minY, bounds.maxY),
+  };
+}
+
+function clampAxis(pos: number, view: number, scale: number, min: number, max: number): number {
+  const span = (max - min) * scale;
+  // 至少保留视口一半的可见内容 —— 这就是「不许拖到没有内容的空白」的量化定义。
+  //
+  // 为什么不写成「内容边界不能越过视口边界」（更直觉的写法）：
+  // 那样最外侧那一簇**永远无法居中**。实测 1440 宽、75% 广场（约 1050px）、
+  // scale 1.22 时，世界坐标最右的簇只能贴到屏幕右沿，一半身子在视口外 ——
+  // 用户点它，它会「跑到屏幕边上」，看着像 bug。
+  // 允许半个视口的余量之后，最外侧的簇刚好能居中（实测临界值吻合），
+  // 同时极端位置仍有一半屏幕是内容，不会出现「一整屏空白」。
+  const keep = view * 0.5;
+
+  // 内容比「必须保留的量」还小 —— 没有可平移的余地，居中锁死，
+  // 否则内容会缩在角落、另一侧留一大片空。
+  if (span <= keep) return (view - span) / 2 - min * scale;
+
+  const lo = keep - max * scale;
+  const hi = view - keep - min * scale;
+  return Math.min(Math.max(pos, lo), hi);
 }
 
 /** 把中心放到我自己的讨论上；没有自己的讨论时回落到全场最热的一场。 */
