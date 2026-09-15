@@ -238,7 +238,7 @@ export default function MirrorPage() {
               搬运入口统一收在「我的 Mesh」—— 搬运是收尾动作，不是作答流程的一步。
               这里只留一条去路，不再把整个搬运面板塞进作答流程下方。
             */}
-            <Link className="link mono" href="/mesh">去我的 Mesh 一键搬回知乎 →</Link>
+            <Link className="link mono" href="/mesh">去我的 Mesh 搬回知乎 →</Link>
           </div>
           <MeshGraph graph={mesh} height={380} />
         </section>

@@ -146,7 +146,7 @@ export default function MyMeshPanel({
             <strong style={{ fontSize: 14, marginRight: "auto" }}>
               {pendingHandoff} 篇分身回答还没搬回知乎
             </strong>
-            <span className="link mono" style={{ fontSize: 12 }}>去一键发布 →</span>
+            <span className="link mono" style={{ fontSize: 12 }}>去搬回知乎 →</span>
           </a>
         )}
 

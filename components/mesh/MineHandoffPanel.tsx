@@ -134,7 +134,7 @@ export default function MineHandoffPanel({
   }
 
   /**
-   * 一键发布：复制正文，并打开知乎。
+   * 「复制正文并打开知乎」：这就是「一键」的全部内容 —— 发布动作由人完成。
    *
    * 顺序必须是**先开窗口、再 await 复制**。
    * 原因：window.open 依赖浏览器的 transient user activation（约 5 秒），而 await 会
@@ -200,8 +200,8 @@ export default function MineHandoffPanel({
                     {isOpenCopied
                       ? "已复制，去粘贴"
                       : item.questionUrl
-                        ? "一键发布 · 复制并打开知乎问题页"
-                        : "一键发布 · 复制并打开知乎"}
+                        ? "复制正文并打开知乎问题页"
+                        : "复制正文并打开知乎"}
                   </button>
                   <button
                     className="btn btn-ghost btn-sm"
