@@ -5,6 +5,9 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # merge queue 会在临时合并分支上以 merge_group 事件触发 CI。
+  # 不加这一条，开启 merge queue 后排队中的 PR 会一直等不到检查结果。
+  merge_group:
   workflow_dispatch:
 
 jobs:
@@ -30,3 +33,33 @@ jobs:
         env:
           # 构建阶段不需要真实凭证；给空值让代码走降级路径，避免 CI 依赖密钥
           ZHIHU_ACCESS_SECRET: ""
+
+      # ────────────────────────────────────────────────────────────────
+      # 冒烟检查：把「编译通过但运行时挂掉」这一类回归挡在 main 之外。
+      #
+      # 为什么必须加：CI 之前只到 build 为止。而自动部署已经上线，
+      # 一次「能编译、页面 500」的合并会直接推到正在评审的评委眼前 ——
+      # 编译期检查对这类回归完全无感。成本约 15 秒，是当前性价比最高的一道闸门。
+      #
+      # 与部署后用的是同一份脚本（scripts/smoke.mjs），断言一致，
+      # 这样「CI 绿但线上红」就直接指向部署或环境问题，不用再猜。
+      # ────────────────────────────────────────────────────────────────
+      - name: 起服务并跑冒烟检查
+        env:
+          ZHIHU_ACCESS_SECRET: ""
+        run: |
+          set -uo pipefail
+          npx next start -p 3100 > /tmp/next-smoke.log 2>&1 &
+          # 等端口可用：最多 60 秒（首次启动要加载 .next，冷启动偏慢）
+          for i in $(seq 1 30); do
+            if curl -sf -o /dev/null --max-time 5 http://127.0.0.1:3100/api/health; then
+              echo "服务已就绪（第 ${i} 次探测）"
+              break
+            fi
+            sleep 2
+          done
+          if ! node scripts/smoke.mjs --base http://127.0.0.1:3100 --retries 2 --retry-wait 4000; then
+            echo "──── next start 日志尾部 ────"
+            tail -60 /tmp/next-smoke.log
+            exit 1
+          fi
