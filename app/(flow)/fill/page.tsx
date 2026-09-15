@@ -9,7 +9,7 @@ import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import { SHIFT } from "@/lib/motion/tokens";
 
 /**
- * 真人补充页。
+ * 真人补充页（子页面）。
  *
  * 两种模式对应两类真人：
  *   - 最小填空：只补一句最关键的事实（最新价格、上个月排期、只有内部人知道的坑），
@@ -17,6 +17,10 @@ import { SHIFT } from "@/lib/motion/tokens";
  *   - 完整编辑：直接在 AI 草稿上改写成自己的版本，适合愿意写长文的答主。
  *
  * 提交后立刻回写回答、缺口、Mesh 与贡献值，全部走同一份领域模型。
+ *
+ * 2026-09-15：从主流程的第 3 步降级为子页面。真人补充不是每个问题都会发生 ——
+ * 只有某一场的某个缺口需要真人时才进入这里。入口只有两个：工作台的缺口卡片，
+ * 以及单篇回答页的「我来接管」。因此不再出现在顶部流程条里。
  */
 
 const QUICK_TEMPLATES = [
@@ -98,8 +102,9 @@ function FillContent() {
         </p>
         <div className="grid grid-3" style={{ marginTop: 24 }}>
           <Link className="btn btn-primary" href="/mirror">回工作台看搬运</Link>
-          <Link className="btn" href="/mesh">查看 Mesh 变化</Link>
-          <Link className="btn btn-ghost" href="/feed">分身动态</Link>
+          <Link className="btn" href="/me?tab=mesh">查看 Mesh 变化</Link>
+          {/* 原先这里指向 /feed —— 该路由不存在，点了必然 404。改成真实存在的广场。 */}
+          <Link className="btn btn-ghost" href="/square">回广场看看</Link>
         </div>
         <div style={{ marginTop: 26, maxWidth: 420 }}>
           <KanshanStage step={8} running={false} size={170} />
@@ -197,7 +202,7 @@ function FillContent() {
 
           <AnimatePresence mode="wait">
             {mode === "quick" ? (
-              <motion.div key="quick" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+              <motion.div key="quick" initial={{ opacity: 0, y: SHIFT.sm }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -SHIFT.sm }}>
                 <label className="lbl" htmlFor="quick">只补最关键的一句或几句</label>
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 9 }}>
                   {QUICK_TEMPLATES.map((t) => (
@@ -219,7 +224,7 @@ function FillContent() {
                 </p>
               </motion.div>
             ) : (
-              <motion.div key="full" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}>
+              <motion.div key="full" initial={{ opacity: 0, y: SHIFT.sm }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -SHIFT.sm }}>
                 <label className="lbl" htmlFor="full">在草稿上直接改写</label>
                 <textarea
                   id="full"

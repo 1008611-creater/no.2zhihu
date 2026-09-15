@@ -52,6 +52,16 @@ CI 与部署是**一条流水线**（`build` → `deploy`），不再是两个�
 + `/api/auth/session` 必须含 `tokenValid` + `/api/auth/user-data` 必须 401）。
 它与部署后用的是**同一份脚本** —— 所以「CI 绿而线上红」能直接指向部署/环境问题，不用猜。
 
+### 合并队列怎么处理
+
+`node scripts/audit-merge.mjs --apply` 一次处理整条队列（查冲突 → 同步 base → 等 CI → 合并），
+**冲突的自动跳过**（默认 dry-run，需显式 `--apply`）。
+
+> 🚨 **`DIRTY` 在 GitHub 语义里就是「合并有冲突」**，必须与 `CONFLICTING` 一并判 ——
+> 踩过：#11/#35 显示 `DIRTY`，却因为 merge-tree 取不到对象被误判成「未判定」而放行。
+>
+> **它不做自动解冲突**：冲突需要人判断「取哪一侧」，这是审计不可让渡的部分。
+
 ---
 
 ## 三、开发线程流程

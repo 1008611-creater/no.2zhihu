@@ -80,7 +80,10 @@ export const SKILL_SEEDS: SkillSeed[] = [
     name: "拆解者",
     kind: "analysis",
     lens: "把问题拆成结构、变量和因果链，先讲框架再讲结论。",
-    queryTemplate: "{topic} 岗位 真相 分析",
+    // 原模板是 "{topic} 岗位 真相 分析"，"岗位" 与「拆解」毫无关系
+    // （应是早期从招聘类问题复制留下的），会让半导体、心理这类问题
+    // 检索出无关的招聘内容。改为与 lens 一致的机制向检索词。
+    queryTemplate: "{topic} 机制 原理 分析",
     keywords: ["机制", "框架", "因果", "变量"],
     tone: ["结构化", "抽象", "定义先行"],
     accent: "violet",

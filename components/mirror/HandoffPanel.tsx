@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { motion } from "motion/react";
 import { toZhihuDraft } from "@/lib/domain/handoff";
 import { useMirror } from "@/lib/store/mirror-store";
-import { DUR, EASE } from "@/lib/motion/tokens";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 搬运面板。
@@ -88,7 +88,7 @@ export function HandoffPanel() {
   return (
     <motion.section
       className="card"
-      initial={{ opacity: 0, y: 12 }}
+      initial={{ opacity: 0, y: SHIFT.md }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: DUR.slow, ease: EASE.out }}
     >

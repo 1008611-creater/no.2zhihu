@@ -70,6 +70,9 @@ export interface PersonaVoice {
    * 这是「遮住名字能不能认出人」最有效的一组特征：破折号、括号吐槽、
    * 省略号、问号密度、段落长度，比「语气温和」这类词有信息量得多 ——
    * 因为它是**可数**的。模型无法把「温和」落地，但可以执行「每段 2–4 句」。
+   *
+   * 本项目进一步把它**解析成数字**（见 lib/domain/voice.ts），
+   * 用于生成后的确定性校验，而不只是当提示词文字。
    */
   punctuation?: string;
   /**
@@ -130,6 +133,14 @@ export interface Skill {
   persona?: Persona;
   /** true = 降级的补充视角，不占主叙事 */
   supplementary?: boolean;
+  /**
+   * 本轮检索的质量统计。
+   *
+   * 为什么要暴露到 UI：实测检索经常返回与问题无关的内容（力学答主回答
+   * 「大厂转行」时拿回 7 条力学劝退帖）。把「原始 N 条 / 跑题丢弃 M 条」
+   * 如实显示出来，比假装检索成功更可信 —— 也让评委看到这层过滤真的在跑。
+   */
+  evidenceStats?: { dropped: number; scanned: number };
 }
 
 export interface SkillSource {
@@ -148,6 +159,14 @@ export interface SkillSource {
 export interface AnswerDraft {
   publicFigure?: import("./publicFigures").PublicAttribution;
   generationIntegrity?: "complete" | "possibly_truncated" | "unknown";
+  /**
+   * 生成后的「无据断言」核对结果（见 lib/domain/claims.ts）。
+   *
+   * 为什么放在回答上、而不是写进日志：提示词里写了「不允许引入证据之外的数字、
+   * 机构名」，但那只是请求；实测仍有回答编出协会调研与百分比。把结果**如实标在卡片上**
+   * 比悄悄删掉更有价值 —— 它恰好是本产品「AI 答得快但不可信」叙事的直接证据。
+   */
+  claimCheck?: import("./claims").ClaimCheck;
   id: string;
   skillId: string;
   skillName: string;
@@ -263,6 +282,14 @@ export interface ContributionEvent {
 export interface MeshNode {
   id: string;
   label: string;
+  /**
+   * 未截断的原始文本，供悬停提示与详情面板使用。
+   *
+   * 为什么需要它：主题层的节点是答主的领域词，原文形如「互联网商业模式与资本运作」，
+   * 直接画在节点上会糊成一片；`label` 因此只放首短语（显示名），
+   * 完整原文放这里，信息不丢 —— 鼠标一悬停就能看到原话。
+   */
+  full?: string;
   type: "human" | "skill" | "keyword" | "question" | "answer" | "persona";
   weight: number;
   accent: Accent;

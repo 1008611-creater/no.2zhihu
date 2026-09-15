@@ -24,7 +24,10 @@ export const dynamic = "force-dynamic";
  *      未完成 CSRF 校验；只有「收到了但对不上」才拒绝（那才是真异常）。
  *   3. redirect_uri 必须与发起授权时完全一致，从 cookie 取回，不重新推导。
  *
- * 无论成功失败都重定向回 /mesh 并带上结果，不让用户卡在纯文本错误页上。
+ * 无论成功失败都重定向回 /me?tab=mesh 并带上结果，不让用户卡在纯文本错误页上。
+ * ⚠️ 落地页必须是 /me?tab=mesh，不能是 /mesh —— PR #9 之后 /mesh 变成了
+ *    redirect("/me?tab=mesh")，重定向会丢掉 auth / authError 参数，
+ *    于是「登录成功没有确认、登录失败没有原因」。
  * 全程在服务端完成 —— app_key 和 access_token 一次都不会出现在 URL 或前端。
  *
  * ⚠️ 回跳地址的 origin 用 `publicOrigin()` 推导，**不能用 `url.origin`**：
@@ -37,7 +40,7 @@ export async function GET(req: Request) {
   const errorParam = url.searchParams.get("error");
 
   const back = (params: Record<string, string>) => {
-    const to = new URL("/mesh", publicOrigin(req.url));
+    const to = new URL("/me?tab=mesh", publicOrigin(req.url));
     Object.entries(params).forEach(([k, v]) => to.searchParams.set(k, v));
     return NextResponse.redirect(to);
   };

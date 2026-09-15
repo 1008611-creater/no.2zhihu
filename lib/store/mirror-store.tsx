@@ -125,7 +125,11 @@ export function MirrorProvider({ children }: { children: React.ReactNode }) {
         confirmedAt: Date.now(),
         note: "你已在知乎确认搬运。开放平台没有写入接口，发布动作由你本人完成。",
       },
-      answers: m.answers.map((a) => (a.status === "human" ? { ...a, status: "handed-off" as const } : a)),
+      // 标记「分身自己写的那几篇」为已搬运。
+      // 这里必须是 ai 而不是 human：human 是真人补充段，本来就不在搬运清单里
+      // （见 MineHandoffPanel.toItem 的过滤条件），标它属于张冠李戴 ——
+      // 而清单里陈列的正是 ai 那几篇，只有标了它们，卡片才会真正从待搬运列表消失。
+      answers: m.answers.map((a) => (a.status === "ai" ? { ...a, status: "handed-off" as const } : a)),
       contributions: [
         ...m.contributions,
         { at: Date.now(), who: "你", delta: 12, reason: "把自己的分身回答搬运回真实知乎" },

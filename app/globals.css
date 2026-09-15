@@ -58,10 +58,15 @@
   --ease-emphasis: cubic-bezier(0.34, 1.4, 0.64, 1);
 
   /* 动效：间距与位移 ────────────────────────────────────────────
-     位移量比时长更容易被做过头。小元素小位移，大元素大位移。 */
-  --shift-sm: 6px;   /* 文字、图标级微动 */
-  --shift-md: 14px;  /* 卡片级入场 */
-  --shift-lg: 28px;  /* 区块级入场 */
+     位移量比时长更容易被做过头。小元素小位移，大元素大位移。
+     4 档而非 3 档：收敛前全站实际用到 7 种位移（6/8/10/12/14/18/22px），
+     3 档覆盖不了，落在档位之间的值就会继续以硬编码形式存活，
+     等于「只收敛了一半」。这 4 档按 ~1.5 倍递进，能吃掉实测分布。
+     改这里必须同步改 lib/motion/tokens.ts 的 SHIFT。 */
+  --shift-sm: 6px;   /* 文字、图标级微动（吃掉 6、8） */
+  --shift-md: 12px;  /* 卡片级入场主力（吃掉 10、12、14） */
+  --shift-lg: 18px;  /* 区块级入场、面板展开（吃掉 18、22） */
+  --shift-xl: 28px;  /* 首屏级别的整块位移 */
 }
 
 * { box-sizing: border-box; }
@@ -337,6 +342,26 @@ h1 em {
   font-size: 10.5px;
   letter-spacing: 0.26em;
   color: var(--text-700);
+}
+
+/* 首屏角色位的「让位」状态。
+   run 阶段看山在下方舞台主持，首屏这里只留一个装饰环占位 ——
+   同一视口里不能同时出现两个形象（2026-09-15 重影问题）。
+   方框尺寸与 .kanshan 的 208px 对齐，进出流程时首屏标题不会跳动。 */
+.hero-char-vacant {
+  position: relative;
+  width: 208px;
+  height: 208px;
+  display: grid;
+  place-items: center;
+}
+.hero-char-vacant-ring {
+  width: 62%;
+  height: 62%;
+  border-radius: 50%;
+  border: 1px dashed color-mix(in srgb, var(--blue) 36%, transparent);
+  opacity: 0.42;
+  animation: ks-spin 44s linear infinite;
 }
 
 .composer { margin-top: 34px; }
@@ -730,6 +755,29 @@ button.chip[data-on="true"] {
   background: var(--ink-700);
 }
 
+/* 名册卡片：整卡即触发区（PersonaPopover 的 cover 模式）。
+   按钮透明铺满卡片，视觉上的「i」由调用方渲染成静态提示、不参与交互。 */
+.persona-popover-anchor.is-cover {
+  position: absolute;
+  inset: 0;
+}
+.persona-info-cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.persona-info-cover:focus-visible {
+  outline: 2px solid var(--blue);
+  outline-offset: 2px;
+}
+
 /* ============================================================
    答主详情浮层
    ============================================================ */
@@ -811,5 +859,7 @@ button.chip[data-on="true"] {
     transform: none !important;
   }
   .kanshan-img, .kanshan-ring { animation: none !important; }
+  /* 首屏让位占位环与看山装饰环同源，降级要一致，否则 reduced-motion 下仍在转。 */
+  .hero-char-vacant-ring { animation: none !important; }
   .skeleton { animation: none !important; }
 }

@@ -14,8 +14,9 @@ import { SHIFT } from "@/lib/motion/tokens";
  * 四要素在这里展开成完整内容，并附上蒸馏依据 —— 让「像这个人」
  * 这个评价标准可以被评审逐条核对，而不是只能靠感觉。
  *
- * 入口：档案页的 CTA 会把 handle 带回首页（/?persona=xxx），
- * 用户不用在首页重新找一遍这个人。
+ * 档案页只负责「这个人的完整说明」，不承担导流：要提问回首页，要看别人回
+ * 「分身发现」。入口挂在名册浮层的「完整人格档案 →」上 —— 名册负责浏览，
+ * 档案负责细读，各管一件事。
  */
 
 const SENTENCE_LABEL: Record<string, string> = {
@@ -38,7 +39,7 @@ export default function PersonaDetailPage() {
           这个 handle 不在当前答主名册里。可能是链接写错了，或者名册已经更新。
         </p>
         <Link className="btn btn-primary" href="/personas" style={{ marginTop: 20 }}>
-          回答主名册
+          返回分身发现
         </Link>
       </section>
     );
@@ -70,11 +71,8 @@ export default function PersonaDetailPage() {
             </div>
 
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
-              <Link className="btn btn-primary" href={"/?persona=" + p.handle}>
-                让他来答一个问题
-              </Link>
               <Link className="btn btn-ghost" href="/personas">
-                回答主名册
+                返回分身发现
               </Link>
             </div>
           </div>
@@ -299,10 +297,10 @@ export default function PersonaDetailPage() {
         </div>
         <div className="card">
           <div className="row-between" style={{ alignItems: "baseline" }}>
-            <span style={{ fontWeight: 700 }}>{corpusLabel(p)}</span>
-            <span className={"chip " + (p.corpus.real ? "chip-green" : "chip-orange")}>
-              {p.corpus.real ? "真实抓取" : "预置人格"}
+            <span style={{ fontWeight: 700 }}>
+              {corpusLabel(p) ? corpusLabel(p) : "公开印象档案"}
             </span>
+            {p.corpus.real && <span className="chip chip-green">真实抓取</span>}
           </div>
 
           {p.corpus.real ? (
@@ -343,23 +341,6 @@ export default function PersonaDetailPage() {
         </div>
       </section>
 
-      <section className="section">
-        <div className="card" style={{ borderColor: "rgba(77,124,255,0.35)" }}>
-          <p className="eyebrow">下一步</p>
-          <h3 style={{ marginBottom: 10 }}>让 {p.displayName} 回答一个真实问题</h3>
-          <p className="dim" style={{ fontSize: 13.5 }}>
-            回到首页后，这位答主会被预选。你可以只让他一个人答，也可以再拉上别人对同一件事发表看法。
-          </p>
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 16 }}>
-            <Link className="btn btn-primary" href={"/?persona=" + p.handle}>
-              带他去提问
-            </Link>
-            <Link className="btn btn-ghost" href="/personas">
-              看看别人
-            </Link>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }

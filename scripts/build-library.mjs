@@ -22,7 +22,11 @@
  *   node scripts/build-library.mjs                 # 生成缺失的条目
  *   node scripts/build-library.mjs --force         # 全部重跑
  *   node scripts/build-library.mjs --only 3        # 只跑前 3 个（试跑）
+ *   node scripts/build-library.mjs --topic 读博    # 只重跑题目含「读博」的那一条（省额度、避开限流）
  *   node scripts/build-library.mjs --no-zhida      # 只取证据，不调直答
+ *
+ * ⚠️ 全量重跑会连打 60+ 次直答，可能触发上游限流；一旦某条出现「直答暂时不可用」
+ * 这种瞬时降级，用 `--topic <子串>` 只补那一条，不要把降级文案留在库里。
  *
  * 额度提醒：每个问题消耗 N 次搜索 + N 次直答（N = 该问题命中的答主数，≤4）。
  * 直答额度 100/天，所以一次完整生成请控制在 15 个问题以内。
@@ -63,7 +67,7 @@ loadEnv();
 /* ------------------------------ 话题清单 ------------------------------ */
 
 /**
- * 与 components/square/FeedStream.tsx 的 DISCUSSION_TOPICS 保持一致 ——
+ * 与 lib/domain/topics.ts 的 DISCUSSION_TOPICS 保持一致 ——
  * 广场上的讨论组就是这些话题，这里把它们做成「已经答完」的样子。
  * 改这里时同步改那边，否则广场会出现点进去空白的条目。
  */
@@ -146,10 +150,22 @@ function slim(mirror) {
 /* ------------------------------ 主流程 ------------------------------ */
 
 const args = process.argv.slice(2);
-const FORCE = args.includes("--force");
+let FORCE = args.includes("--force");
 const NO_ZHIDA = args.includes("--no-zhida");
 const onlyArg = args.indexOf("--only");
 const ONLY = onlyArg >= 0 ? Number(args[onlyArg + 1]) : 0;
+/**
+ * `--topic <子串>`：只刷新题目里含这个子串的那一条。
+ *
+ * 为什么需要它：全量重跑 22 条会连打 60+ 次直答，容易触发上游限流，
+ * 而限流会让 `draftAnswer` 返回「直答暂时不可用」这种**瞬时**降级文案 ——
+ * 它绝不该被烤进这份长期躺在仓库里、直接给评委看的静态数据。
+ * 有了单条刷新，发现某一条降级就能只补那一条（也顺带省额度）。
+ * 指定 `--topic` 时默认重跑，否则会被「已存在就跳过」拦掉。
+ */
+const topicArg = args.indexOf("--topic");
+const TOPIC = topicArg >= 0 ? args[topicArg + 1] : null;
+if (TOPIC) FORCE = true;
 
 /**
  * 让 Node 认识 Next 的 `@/` 路径别名，并把 `server-only` 变成空模块。
@@ -159,7 +175,7 @@ const ONLY = onlyArg >= 0 ? Number(args[onlyArg + 1]) : 0;
  * 用一个 loader 在解析阶段改掉，就不必为了跑脚本去改业务代码。
  */
 const RESOLVER = `
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { existsSync, statSync } from "node:fs";
 const ROOT = ${JSON.stringify(ROOT.replace(/\\/g, "/"))};
 const tryExt = (base) => {
@@ -179,8 +195,11 @@ export function resolve(specifier, context, next) {
   }
   // TS 源码里相对 import 不带扩展名，Node 的 ESM 解析器不认，这里补上。
   if ((specifier.startsWith("./") || specifier.startsWith("../")) && context.parentURL) {
-    const base = new URL(specifier, context.parentURL);
-    const hit = tryExt(decodeURIComponent(base.pathname));
+    // ⚠️ 必须用 fileURLToPath，不能用 decodeURIComponent(base.pathname)：
+    // Windows 上 pathname 会得到 "/E:/codex/..."（前导斜杠）→ existsSync 一律失败 →
+    // 报 ERR_MODULE_NOT_FOUND: Cannot find module '.../personas/ban-fo-xian-ren'。
+    // fileURLToPath 会正确还原成 "E:\\codex\\..."，两个平台都对。
+    const hit = tryExt(fileURLToPath(new URL(specifier, context.parentURL)));
     if (hit) return { url: pathToFileURL(hit).href, shortCircuit: true };
   }
   return next(specifier, context);
@@ -201,7 +220,14 @@ async function main() {
   const existing = existsSync(OUT) ? JSON.parse(readFileSync(OUT, "utf8")) : { entries: [] };
   const byTitle = new Map(existing.entries.map((e) => [e.title, e]));
 
-  const topics = ONLY > 0 ? TOPICS.slice(0, ONLY) : TOPICS;
+  let topics = ONLY > 0 ? TOPICS.slice(0, ONLY) : TOPICS;
+  if (TOPIC) {
+    topics = topics.filter((t) => t.includes(TOPIC));
+    if (topics.length === 0) {
+      process.stderr.write(`--topic ${TOPIC} 没有匹配到任何题目\n`);
+      process.exit(1);
+    }
+  }
   let fresh = 0;
   let skipped = 0;
 

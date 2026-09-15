@@ -38,6 +38,30 @@ v1 主线是「**具体知乎答主的分身**」。分身分两类，评价标�
 | **答主型** | `persona` | `Persona` 四要素 | 「像这个人」>「答案完美」 | 主体，首页主叙事 |
 | **视角型** | `experience` / `analysis` / `counter` / `method` / `story` / `risk` | `SkillSeed` | 视角是否稳定、可解释 | 补充层（`supplementary: true`） |
 
+### 视角型什么时候真的出场（2026-09-15 修正）
+
+在此之前，「补充层」只是一句**设计意图**：`recommendPersonas` 只遍历 `PERSONA_SKILLS`，
+`skillFromSeed` **全项目从未被调用过**。后果是 —— `scorePersona` 的底分是 `0.25`，
+答主只要没有任何领域 / 立场命中，得分就**恰好等于底分**；16 位答主在零信号时全部同分，
+稳定排序让它恒取「名册前两位」。于是半佛仙人成了**无处不在的填充物**：问半导体也推他，
+问失眠也推他。产品承诺「多视角作答、标出共同缺口」，而视角本身是凑数的。
+
+现行规则（`lib/domain/router.ts`）：
+
+1. **零信号答主不入选** —— `score` 必须**严格高于** `BASE_SCORE`（0.25）。该常量因此必须具名。
+2. **席位不足时用视角型补位**，按 `SkillSeed.triggers` 命中数排序 ——
+   问「为什么」时「拆解者」必然对口，问「推荐」时「实操派」必然对口；
+   它们**永远与问题相关**，且带 `supplementary: true`，**不伪装成真人答主**。
+3. **通用兜底只留两个**（拆解者 → 反驳者），用于问法不在任何 `triggers` 里的情况
+   （例如「半导体国产替代走到哪一步了」既无「为什么」也无「怎么做」）。
+4. **宁可少给，绝不退回凑数。** 兜底后仍不足就如实少给 ——
+   少一位视角，好过三位里两位在自说自话。
+5. 视角型**没有相关性得分**，前端 chip 不渲染分数，改显示「补位」。
+
+> 由此产生一条约束：`routeQuestion` 的自动路径**不能**对视角型调用
+> `scorePersona(s.persona!, …)` —— 视角型没有 `persona`。
+> 这正是这条路此前「即使调了也会崩」的原因。
+
 ### 答主人格四要素
 
 每位答主由 `lib/domain/personas/<handle>.ts` 里的一份 `Persona` 定义，字段固定四组：
@@ -98,16 +122,37 @@ scripts/distill-personas.mjs    把原始回答喂给直答，抽四要素 → l
 
 > 合规边界：官方制作指南禁止批量爬取。抓取脚本与原始语料仅本地一次性使用、不入公开仓库；见 [acceptance.md](acceptance.md) §六 风险表。
 
-## 二、目录结构（目标态）
+## 二、目录结构
+
+> 下面这份是**现状**（2026-09-15 逐文件核对过），不是「目标态」。
+> 早先这里写的是设计当初的规划，代码长过去之后没人回头看，
+> 结果文档比代码旧了两轮 —— 而本文开头写着「代码与本文冲突时以本文为准」，
+> 一个过期的唯一事实源会把后来的人带偏。改动代码若动了目录，请顺手改这里。
 
 ```
 app/
   layout.tsx                    根布局 + 元信息
   globals.css                   设计 token + 基础样式（唯一全局样式文件）
-  page.tsx                      首页：提问入口 + 看山 + 流程
-  mesh/page.tsx                 Human Mesh 视图
+  template.tsx                  路由切换的进场包裹（动效）
+  (flow)/                       提问主线
+    layout.tsx
+    page.tsx                    首页：提问入口 + 看山 + 流程
+    mirror/page.tsx             镜像工作台：读答案（/mirror 只服务这一个意图）
+    fill/page.tsx               真人补充
+    answer/[id]/page.tsx        单条回答详情
+  (explore)/                    发现主线（layout 里含面包屑 JourneyNav）
+    personas/page.tsx           答主名册
+    personas/[handle]/page.tsx  单个答主档案（语言指纹 / 语感范例 / 他不会写的句子）
+    square/page.tsx             虚拟广场（无限画布）
+    me/page.tsx                 我的（含 Mesh 标签页）
+    mesh/page.tsx               旧入口，meta-refresh 重定向到 /me?tab=mesh
   api/
     health/route.ts             健康检查（部署探针）
+    auth/
+      login/route.ts            发起知乎授权（307 → openapi.zhihu.com/authorize）
+      callback/route.ts         回调换 token、写会话；落地必须写 /me?tab=mesh
+      session/route.ts          当前登录态（含 tokenValid：cookie 未过期 ≠ 还能取数）
+      user-data/route.ts        代理取用户数据；未登录 401
     zhihu/
       hot/route.ts              热榜（缓存 10 分钟）
       search/route.ts           知乎搜索 / 全网搜索
@@ -120,32 +165,50 @@ app/
       route.ts                  ★ 核心：问题 → 路由 → 证据 → 回答 → 缺口
       invite/route.ts           继续邀请一位答主（只生成这一位，不重跑旧的）
       debate/route.ts           一轮互相回应（识别冲突 → 双方各回一段，上限 2 次直答）
+    handoff/route.ts            搬运到 Mesh
 components/
   kanshan/                      看山角色引擎（见 character-engine.md）
     Kanshan.tsx                 对外组件（SVG + Motion 弹簧）
     KanshanStage.tsx            按流程阶段驱动看山 + 旁白
     states.ts                   状态表 / 眼神表 / 停留区间 / 姿态表
-  mirror/                       镜像工作台组件（Skill / Answer / Gap / Handoff）
-  mesh/                         Human Mesh 关系图
-  ui/                           通用组件（TopBar / QuotaBadge）
+  mirror/                       镜像工作台组件（Skill / Answer / Gap / Handoff / 人格选择器）
+  mesh/                         Human Mesh 关系图 + 搬运面板 + 知乎数据面板
+  me/                           「我的」页（IdentityCard / MyMeshPanel / MyPersonasPanel）
+  personas/                     PersonaDirectory：答主名册
+  square/                       SquareField（数据接入）→ SquareCanvas（桌面）/ SquareStrip（≤640px）
+  providers/                    MotionProvider
+  ui/                           通用组件（TopBar / JourneyNav / LogoMark / RouteTransition /
+                                CountUp / ScrollProgress / ScrollReveal / HeroTitle / QuotaBadge）
 lib/
   zhihu/                        服务端知乎客户端（server-only）
     client.ts                   fetch + 鉴权 + 超时 + 错误归一
     cache.ts                    进程内 TTL + 请求去重
+    oauth.ts                    授权 URL / 换 token / publicOrigin()（反代下勿用 req.url）
+    session.ts                  签名 cookie 会话 + 进程内 token 暂存
+    user-api.ts                 用户数据 API（双 header）
     types.ts                    上游响应类型
     errors.ts                   错误分类与用户文案
   server/                       编排层（唯一同时接触知乎 IO 与领域规则）
     mirror.ts                   ★ 核心：问题 → 路由 → 证据 → 回答 → 缺口 + 邀请 + 互相回应
     persona.ts                  在线蒸馏：临时指定一位没预置的答主，如实返回命中条数
-  domain/                       纯业务逻辑（无 IO）
-    types.ts                    领域模型（含 Persona 四要素）
-    personas/                   答主人格名册（6 位真实答主，一人一文件 + index.ts）
+    publicFigures.ts            公共人物研究
+  domain/                       纯业务逻辑（无 IO、无 process.env）
+    types.ts                    领域模型（含 Persona 四要素与 PersonaVoice）
+    personas/                   答主人格名册（16 位答主，一人一文件 + index.ts）
     skills.ts                   答主型主体（由 personas 派生）+ 视角型补充层
     router.ts                   Human Router：手动指定优先，自动推荐补位
     gap.ts                      ★ 缺口识别
     handoff.ts                  搬运文案与深链规则
     mesh.ts                     Human Mesh 关系推导
-  motion/                       动效工具（clamp 等）
+    topics.ts                   话题归类
+    publicFigures.ts            公共人物数据
+    square-layout.ts            虚拟广场的确定性布局（FNV-1a，零随机可复现）
+    voice.ts                    语言指纹 → 可数指标（段数 / 每段句数 / 篇幅 / 招牌标点）
+    relevance.ts                证据相关性硬过滤
+  store/                        mirror-store（跨页状态）
+  hooks/                        useSession 等
+  motion/                       动效 token 与弹簧（tokens.ts / spring.ts / useInviteUrl.ts）
+  brand/                        logo 矢量路径
 docs/                           规格文档
 ```
 

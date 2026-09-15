@@ -9,11 +9,24 @@ import { LogoMark } from "./LogoMark";
 import { DUR, SPRING } from "@/lib/motion/tokens";
 import { useSession } from "@/lib/hooks/useSession";
 
+/**
+ * 四个 tab，一个 tab 只回答一个问题：
+ *   · 首页     —— 我要问一个问题（提问 + 选答主，不铺任何结果）
+ *   · 分身发现 —— 这座虚拟知乎里住着谁（答主名册 + 公共人物）
+ *   · 虚拟广场 —— 别人问过什么、我问过什么（含「我曾经提问过的」）
+ *   · 我的     —— 我的分身答过什么、我的 Mesh 长什么样
+ *
+ * 为什么把「分身发现」从 /mirror 拆出来：/mirror 原本同时干两件事 ——
+ * 既列全部答主（看人），又渲染本场结果（看答案）。两者生命周期完全不同：
+ * 名册永远在那儿，本场结果只在生成后存在。合在一个 tab 里，没生成过问题的
+ * 用户进来只看到一句提示，生成过的用户又要先划过一整页名册才看到自己的答案。
+ * 拆成独立 tab 之后，「看人」和「看回答」各归各位。
+ */
 const NAV = [
   { href: "/", label: "首页" },
+  { href: "/personas", label: "分身发现" },
   { href: "/square", label: "虚拟广场" },
-  { href: "/mirror", label: "分身发现" },
-  { href: "/mesh", label: "我的 Mesh" }
+  { href: "/me", label: "我的" }
 ];
 
 /**
@@ -23,14 +36,19 @@ const NAV = [
  * 多个导航项在 720px 以下会挤成两行并把品牌挤变形。现在窄屏收成抽屉，
  * 保证「品牌 + 入口 + 账号」在小屏上依然是一行干净的版式。
  *
- * 账号区三态（见 lib/hooks/useSession.ts）：
- *   已登录 → 头像 + @昵称 + 退出
+ * 账号区四态（见 lib/hooks/useSession.ts）：
+ *   已登录且可用 → 头像 + @昵称 + 退出
+ *   登录已过期 → 「登录已过期 · 重新登录」（cookie 还在但服务端 token 没了）
  *   已开通未登录 → 「知乎登录」
  *   未开通 → 什么都不显示，避免给一个必然报错的按钮
+ *
+ * 为什么要把「已过期」单列一态：cookie 有 7 天有效期，而 access_token 只活在
+ * 服务端进程内存里。服务一重启，user 还在（cookie 没过期）但 token 已经没了 ——
+ * 这时若照常显示「已登录」，用户点任何需要数据的入口都会收到 401，且看不出原因。
  */
 export function TopBar() {
   const path = usePathname();
-  const { user, available, loading: sessionLoading, login, logout } = useSession();
+  const { user, available, tokenValid, loading: sessionLoading, login, logout } = useSession();
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);
   const drawerRef = useRef<HTMLElement>(null);
@@ -94,7 +112,7 @@ export function TopBar() {
 
         {!sessionLoading && (
           <div className="account">
-            {user ? (
+            {user && tokenValid ? (
               <>
                 <span className="account-avatar" aria-hidden>
                   {user.avatarUrl ? (
@@ -108,6 +126,13 @@ export function TopBar() {
                 <span className="account-name">@{user.name}</span>
                 <button onClick={logout} aria-label="退出登录">退出</button>
               </>
+            ) : user ? (
+              /* cookie 没过期、但服务端 token 已不在（服务重启或满 1 小时）。
+                 如实说「过期」并给一个点一下就重新授权的入口，
+                 而不是照常显示已登录、让用户去撞 401。 */
+              <button onClick={login} title="登录已过期，请重新登录">
+                登录已过期 · 重新登录
+              </button>
             ) : available ? (
               <button onClick={login}>知乎登录</button>
             ) : null}

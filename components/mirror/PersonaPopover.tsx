@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 
 import type { Persona } from "@/lib/domain/types";
 import { corpusLabel } from "@/lib/domain/personas";
+import { SHIFT } from "@/lib/motion/tokens";
 
 /**
  * 答主框上的详情浮层。
@@ -21,7 +22,20 @@ import { corpusLabel } from "@/lib/domain/personas";
  * 内容只放「已经在 Persona 里的事实」：领域、立场、语癖、不装懂的边界、
  * 以及蒸馏依据。来源链接与知乎主页链接都如实给出，不新增编造字段。
  */
-export function PersonaPopover({ persona }: { persona: Persona }) {
+export function PersonaPopover({
+  persona,
+  cover = false,
+}: {
+  persona: Persona;
+  /**
+   * 铺满父卡片模式（分身发现名册专用）。
+   *
+   * 名册上「点一个人」本来就该等于「看这个人是谁」，所以触发区不该是一个
+   * 19px 的小图标 —— 鼠标要瞄准，手机上基本点不中。cover 让整张卡片都成为
+   * 触发区；视觉上那个「i」改由调用方作为静态提示单独渲染，不再是交互元素。
+   */
+  cover?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const wrap = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
@@ -78,22 +92,26 @@ export function PersonaPopover({ persona }: { persona: Persona }) {
   const profileUrl = `https://www.zhihu.com/people/${persona.handle}`;
 
   return (
-    <div ref={wrap} style={{ position: "relative", display: "inline-flex" }}>
+    <div
+      ref={wrap}
+      className={cover ? "persona-popover-anchor is-cover" : undefined}
+      style={cover ? undefined : { position: "relative", display: "inline-flex" }}
+    >
       <button
         ref={trigger}
         type="button"
-        className="persona-info-btn"
+        className={cover ? "persona-info-cover" : "persona-info-btn"}
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         aria-label={`查看 ${persona.displayName} 的分身档案`}
         onClick={(e) => {
-          // 卡片整体是个 <Link>，这里必须阻止冒泡，否则点「详情」会直接跳去提问页。
+          // 触发区可能铺满整张卡片，必须掐断冒泡：否则外层若挂了跳转会被一起触发。
           e.preventDefault();
           e.stopPropagation();
           setOpen((v) => !v);
         }}
       >
-        i
+        {cover ? null : "i"}
       </button>
 
       <AnimatePresence>
@@ -105,7 +123,7 @@ export function PersonaPopover({ persona }: { persona: Persona }) {
             aria-label={`${persona.displayName} 的分身档案`}
             tabIndex={-1}
             className="persona-popover"
-            initial={{ opacity: 0, y: 6, scale: 0.98 }}
+            initial={{ opacity: 0, y: SHIFT.sm, scale: 0.98 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 4, scale: 0.98 }}
             transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
@@ -137,9 +155,12 @@ export function PersonaPopover({ persona }: { persona: Persona }) {
               </>
             )}
 
-            <div className="mono dimmer" style={{ fontSize: 11, marginBottom: 12 }}>
-              蒸馏依据：{corpusLabel(persona)}
-            </div>
+            {/* 只有真实抓取到语料时才给依据；预置人格不展示任何来源标签（2026-09-15 删）。 */}
+            {corpusLabel(persona) && (
+              <div className="mono dimmer" style={{ fontSize: 11, marginBottom: 12 }}>
+                蒸馏依据：{corpusLabel(persona)}
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
               <a

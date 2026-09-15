@@ -11,7 +11,18 @@ import { DUR, EASE, STAGGER } from "@/lib/motion/tokens";
  * Human Mesh 可视化。
  *
  * 用确定性的同心布局（不是物理引擎），保证同一份数据每次渲染位置一致，
- * 评委截屏、录视频时结果可复现。真人在外环，Skill 在中环，问题在中心。
+ * 评委截屏、录视频时结果可复现。
+ *
+ * 同心圈的语义（2026-09-15 起）：问题在中心，**关键词在内环（主干）**，
+ * Skill / 回答在中环，答主人格与真人依次在外 —— 因为 `buildMesh` 已改成
+ * 「主题层为主干、答主为注脚」，环序必须跟着换，否则主干被压到最外圈、
+ * 又变回「读答主」而不是「读主题」。
+ *
+ * 2026-09-15：布局参数改为可覆盖（rings / showLabels / legendLabels）。
+ * 「我的 Mesh」要用同一套引擎画另一张网 —— 那张网的节点是
+ * 「我提过的问题 × 领域关键词」，同心圈的语义完全不同（没有真人在外环），
+ * 标签也该显示关键词而不是答主名。与其复制一份 SVG，不如把这三处差异
+ * 变成显式入参；默认值仍是原来那张「一场问答」的图，调用点行为不变。
  */
 
 const ACCENT: Record<string, string> = {
@@ -21,17 +32,77 @@ const ACCENT: Record<string, string> = {
   orange: "#ff8a4c"
 };
 
-const RING: Record<MeshNode["type"], number> = {
+/** 默认同心圈：一场问答内部的关系图。 */
+const DEFAULT_RING: Record<MeshNode["type"], number> = {
   question: 0,
-  skill: 0.42,
-  keyword: 0.62,
+  // 2026-09-15 结构重做后，图的**主干是关键词**（`buildMesh` 里主题层簇内两两相连），
+  // 所以关键词从原来的外环（0.62）收到内环，Skill 与答主退到外圈。
+  keyword: 0.42,
+  skill: 0.6,
   answer: 0.72,
   // 人格节点：AI 这一侧的完整人格，比真人靠内一环，仍由真人来兜底。
   persona: 0.86,
   human: 1
 };
 
-export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: number }) {
+/**
+ * 默认显示标签的节点类型 —— 全显示会糊成一片。
+ *
+ * 关键词必须在这里：主干要是没标签，读者只能看到一堆点，
+ * 「这个主题怎么连到那个主题」就完全读不出来了。
+ */
+const DEFAULT_LABEL_TYPES: MeshNode["type"][] = ["question", "keyword", "skill", "persona"];
+
+/** 默认图例：只列真正出现过的类型，没出现的类型不再占一行。 */
+const LEGEND_ORDER: Array<{ type: MeshNode["type"]; c: string; l: string }> = [
+  { type: "question", c: "#4d7cff", l: "问题" },
+  { type: "skill", c: "#8b5cf6", l: "Skill 分身" },
+  { type: "persona", c: "#a78bfa", l: "答主人格" },
+  { type: "human", c: "#2fbf8f", l: "真人" },
+  { type: "keyword", c: "#ff8a4c", l: "关键词" },
+  { type: "answer", c: "#ff8a4c", l: "回答" },
+];
+
+/** 环上标签按字数截断 —— 长标题横跨小半个圆，同环相邻两个必然叠在一起。 */
+function truncateLabel(label: string, max: number): string {
+  return label.length > max ? `${label.slice(0, max)}…` : label;
+}
+
+export function MeshGraph({
+  graph,
+  height = 460,
+  rings,
+  showLabels,
+  legendLabels,
+  labelMaxChars = 16,
+  layout = "organic",
+}: {
+  graph: Graph;
+  height?: number;
+  /** 覆盖同心圈半径（0 = 圆心）。未传的节点类型走默认。 */
+  rings?: Partial<Record<MeshNode["type"], number>>;
+  /** 覆盖显示文字的节点类型。 */
+  showLabels?: MeshNode["type"][];
+  /** 覆盖图例里的类型名（例如把 question 叫「我提过的问题」）。 */
+  legendLabels?: Partial<Record<MeshNode["type"], string>>;
+  /**
+   * 标签最长字数，超出截断补省略号。
+   *
+   * 同心圈上的标签是水平居中排的，一条 20 字的问题标题能横跨小半个圆 ——
+   * 同一环上相邻两个节点必然叠在一起。截断保证「一眼读得出是哪件事」，
+   * 完整原文仍在悬停提示与点击详情里，信息没有丢。
+   */
+  labelMaxChars?: number;
+  /**
+   * 布局模式：
+   *   organic —— 同心圆起手，再跑力导向微调（默认；节点少、想要一点自然感时用）。
+   *   radial  —— 严格落在同心圆上，不跑力导向（节点多、要读「结构」时更规整）。
+   *
+   * 力导向会把连边两端的节点互相拉近，节点一多，同心圆就会被拉成偏心椭圆 ——
+   * 「我的 Mesh」要读的恰恰是「哪一圈、多密」，所以那边显式选 radial。
+   */
+  layout?: "organic" | "radial";
+}) {
   const [hover, setHover] = useState<string | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [zoom, setZoom] = useState(1);
@@ -44,6 +115,15 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
   const H = 460;
   const cx = W / 2;
   const cy = H / 2;
+
+  const RING = useMemo<Record<MeshNode["type"], number>>(
+    () => ({ ...DEFAULT_RING, ...(rings ?? {}) }),
+    // rings 通常是模块级常量；用序列化结果做依赖，避免调用方内联对象导致每次重算。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [JSON.stringify(rings ?? null)],
+  );
+
+  const labelTypes = showLabels ?? DEFAULT_LABEL_TYPES;
 
   const pos = useMemo(() => {
     const byRing = new Map<number, MeshNode[]>();
@@ -65,6 +145,8 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
       });
     }
     type Point = SimulationNodeDatum & { id: string; type: MeshNode['type'] };
+    // radial：同心圆即最终位置，不再让力导向把环拉变形。
+    if (layout === "radial") return map;
     const nodes: Point[] = graph.nodes.map(n => ({ id: n.id, type: n.type, ...map.get(n.id) }));
     const links = graph.edges.map(e => ({ source: e.source, target: e.target }));
     const simulation = forceSimulation(nodes).stop()
@@ -76,11 +158,20 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
     simulation.stop();
     nodes.forEach(n => map.set(n.id, { x: n.x ?? cx, y: n.y ?? cy }));
     return map;
-  }, [graph.nodes, graph.edges, cx, cy]);
+  }, [graph.nodes, graph.edges, cx, cy, RING, layout]);
   const radius = scaleSqrt().domain([0, Math.max(1, ...graph.nodes.map(n => n.weight))]).range([6, 16]);
   const point = (id: string) => offsets[id] ?? pos.get(id);
   const activeId = hover ?? selected;
   const detail = graph.nodes.find(n => n.id === selected);
+
+  /** 只画真正用到的同心圈，不再固定画五条。 */
+  const usedRings = useMemo(
+    () => [...new Set(graph.nodes.map(n => RING[n.type] ?? 0.6))].filter(r => r > 0).sort((a, b) => a - b),
+    [graph.nodes, RING],
+  );
+
+  const presentTypes = useMemo(() => new Set(graph.nodes.map(n => n.type)), [graph.nodes]);
+  const legend = LEGEND_ORDER.filter(k => presentTypes.has(k.type));
 
   if (graph.nodes.length === 0) {
     return <div className="notice">还没有关系数据。</div>;
@@ -113,7 +204,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
         </defs>
 
         <circle cx={cx} cy={cy} r="200" fill="url(#mesh-core)" />
-        {[0.42, 0.62, 0.72, 0.86, 1].map((r) => (
+        {usedRings.map((r) => (
           <circle key={r} cx={cx} cy={cy} r={r * 196} fill="none" stroke="#1c2032" strokeDasharray="3 7" />
         ))}
 
@@ -153,9 +244,11 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
               onMouseLeave={() => setHover(null)}
               style={{ cursor: "pointer", originX: `${p.x}px`, originY: `${p.y}px` }}
             >
+              {/* 悬停显示完整标签 —— 截断只影响画面，原文随时可查。 */}
+              <title>{n.full ?? n.label}</title>
               <circle cx={p.x} cy={p.y} r={r + (active ? 5 : 0)} fill={ACCENT[n.accent] ?? "#4d7cff"} opacity={active ? 1 : 0.88} />
               <circle cx={p.x} cy={p.y} r={r + 6} fill="none" stroke={ACCENT[n.accent] ?? "#4d7cff"} strokeOpacity={active ? 0.6 : 0.22} />
-              {(n.type === "question" || n.type === "skill" || n.type === "persona" || active) && (
+              {(labelTypes.includes(n.type) || active) && (
                 <text
                   x={p.x} y={p.y - r - 8}
                   textAnchor="middle"
@@ -163,7 +256,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
                   fill={active ? "#f2f4fb" : "#8b93ad"}
                   fontWeight={n.type === "question" ? 700 : 600}
                 >
-                  {n.label}
+                  {truncateLabel(n.label, labelMaxChars)}
                 </text>
               )}
             </motion.g>
@@ -172,19 +265,13 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
         </g>
       </svg>
       </div>
-      {detail && <aside className="notice" aria-live="polite"><strong>{detail.label}</strong><p>类型：{detail.type} · 关联权重：{detail.weight.toFixed(2)} · {graph.edges.filter(e => e.source === detail.id || e.target === detail.id).length} 条关系</p><button className="btn" onClick={() => setSelected(null)}>关闭详情</button></aside>}
+      {detail && <aside className="notice" aria-live="polite"><strong>{detail.full ?? detail.label}</strong><p>类型：{legendLabels?.[detail.type] ?? detail.type} · 关联权重：{detail.weight.toFixed(2)} · {graph.edges.filter(e => e.source === detail.id || e.target === detail.id).length} 条关系</p><button className="btn" onClick={() => setSelected(null)}>关闭详情</button></aside>}
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", padding: "4px 10px 8px" }}>
-        {[
-          { c: "#4d7cff", l: "问题" },
-          { c: "#8b5cf6", l: "Skill 分身" },
-          { c: "#a78bfa", l: "答主人格" },
-          { c: "#2fbf8f", l: "真人" },
-          { c: "#ff8a4c", l: "关键词 / 回答" }
-        ].map((k) => (
-          <span key={k.l} className="mono dimmer" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+        {legend.map((k) => (
+          <span key={k.type} className="mono dimmer" style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
             <i style={{ width: 8, height: 8, borderRadius: 999, background: k.c, display: "inline-block" }} />
-            {k.l}
+            {legendLabels?.[k.type] ?? k.l}
           </span>
         ))}
         <span className="mono dimmer" style={{ marginLeft: "auto" }}>

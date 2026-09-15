@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import HeroTitle from '@/components/ui/HeroTitle';
 import { useInviteUrl } from '@/lib/motion/useInviteUrl';
@@ -11,13 +12,12 @@ import { KanshanStage } from "@/components/kanshan/KanshanStage";
 import { FLOW_STATES, flowStateAt } from "@/components/kanshan/states";
 import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDrawer";
 import PersonaPicker from "@/components/mirror/PersonaPicker";
-import FeedStream from "@/components/square/FeedStream";
 import { personaCandidates, type PersonaCandidate } from "@/lib/domain/router";
 import { useMirror } from "@/lib/store/mirror-store";
-import { DUR, EASE } from "@/lib/motion/tokens";
+import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
 /**
- * 首页 = 提问入口 + 广场信息流。
+ * 首页 = 提出问题。
  *
  * v1 主叙事（2026-09-14 重构）：不是「抽象视角」，而是「具体知乎答主的分身」。
  * 提问 → 选答主 → 每位答主按自己的领域/立场/说话方式作答。
@@ -25,15 +25,20 @@ import { DUR, EASE } from "@/lib/motion/tokens";
  * 2026-09-15 收敛（评委反馈）：
  *   · 首页不再铺开全部结果 —— 答主阵容、回答群组、缺口、Mesh 都与 /mirror 重复，
  *     现在统一由 /mirror（首页的子级页面）承载，生成完成后直接跳过去。
- *   · 空闲态不再是一块说明文字，而是**广场信息流**：主体是已经做完的
- *     镜像讨论组，后面跟知乎热榜，点任意一条就能变成新的镜像问题。
+ *
+ * 2026-09-15 二次收敛（信息架构）：
+ *   · 首页只负责「提出问题」这一件事。原先首页还铺了一整段广场信息流，
+ *     与 /square 是同一份内容 —— 同一件事有两个入口，用户反而不知道哪边是"正路"。
+ *     现在首页只留一个入口（一行卡片 + 一个链接），内容整体归 /square。
+ *   · 支持 `?auto=1&q=…&persona=…`：从「我的」页的一键自动回答进来时，
+ *     跳过手动点选，直接开跑。
  *
  * 文案约定（req 10）：大字后面不加解释性小字，大字末尾不加句号。
  *   HeroTitle 与各 section 标题统一走 `className="no-tail"`，
  *   配套的 `.no-tail + .lede / .no-tail + .dim { display: none }` 兜住残留小字。
  *
  * 三步状态机（phase）：
- *   ask   —— 输入问题（下方是广场信息流）
+ *   ask   —— 输入问题（下方只有一个广场入口，不铺内容）
  *   pick  —— 选答主（默认勾选推荐 3 位）
  *   run   —— 生成中，完成后跳转到 /mirror#answers
  */
@@ -45,10 +50,10 @@ type Phase = "ask" | "pick" | "run";
 
 export default function Home() {
   const router = useRouter();
-  const { mirror, setMirror, ready, appendInvite } = useMirror();
+  const { mirror, setMirror, appendInvite } = useMirror();
 
   const [question, setQuestion] = useState("");
-  // 从答主档案页「带他去提问」过来时带 ?persona=handle，用于预选这位答主。
+  // ?persona=handle：预选这位答主。现在只有「我的」页的一键自动回答会带它过来。
   const [preferred, setPreferred] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>("ask");
   const [selected, setSelected] = useState<string[]>([]);
@@ -57,6 +62,23 @@ export default function Home() {
   const [error, setError] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useInviteUrl();
   const [inviteNote, setInviteNote] = useState<string | null>(null);
+  /** 「我的」页一键自动回答带过来的答主 handle —— 输入框就绪后自动开跑。 */
+  const [pendingAuto, setPendingAuto] = useState<string | null>(null);
+  /**
+   * 首屏角色位是否让位给流程舞台。
+   *
+   * 为什么需要这个开关（2026-09-15 审计）：首页原来**同时**渲染两个看山 ——
+   * 第 240 行首屏一个、`KanshanStage` 内部再包一个（run 阶段挂载）。
+   * 同一视口里出现两个形象，视觉上就是重影。
+   * 现在约定「同一时刻一个视口只出现一个看山」，由这个状态互斥。
+   *
+   * 为什么不用 `phase === "run"` 直接判断：`KanshanStage` 所在的 section 走
+   * AnimatePresence，退出时还会在屏幕上停留一小段淡出动画。若按 phase 判断，
+   * phase 一回到 "pick" 首屏看山就立刻出现，退出动画期间两个形象会同时可见 ——
+   * 正是要避免的中间态。所以这里改成由 `onExitComplete` 在**退出动画结束后**
+   * 才把角色位还回来。
+   */
+  const [hostVacant, setHostVacant] = useState(false);
 
   const timers = useRef<Array<ReturnType<typeof setTimeout>>>([]);
 
@@ -65,14 +87,16 @@ export default function Home() {
     timers.current = [];
   }, []);
 
-  // 从虚拟广场点热榜条目过来时带 ?q=，直接填进输入框，省一步操作。
-  // 从答主档案页过来时带 ?persona=handle，记下这位答主，进选人步骤时优先选中。
+  // 从虚拟广场点条目过来时带 ?q=，直接填进输入框，省一步操作。
+  // ?persona=handle：记下这位答主，进选人步骤时优先选中。
+  // 从「我的」页一键自动回答过来时带 ?auto=1，记下后自动开跑。
   useEffect(() => {
     const sp = new URLSearchParams(window.location.search);
     const q = sp.get("q");
     if (q) setQuestion(q);
     const p = sp.get("persona");
     if (p) setPreferred(p);
+    if (sp.get("auto") === "1" && q && p) setPendingAuto(p);
   }, []);
 
   useEffect(() => clearTimers, [clearTimers]);
@@ -111,7 +135,7 @@ export default function Home() {
     setError(null);
     // 默认勾选推荐的前 3 位 —— 用户想直接开始就点确认，想换人就点卡片。
     const ranked = personaCandidates(q).map((c) => c.handle);
-    // 从档案页带过来的答主排在第一位，保证「带他去提问」真的带上他。
+    // 指定了答主就把他排在第一位，保证「一键自动回答」真的用上他。
     const withPreferred =
       preferred && ranked.includes(preferred)
         ? [preferred, ...ranked.filter((h) => h !== preferred)]
@@ -133,14 +157,16 @@ export default function Home() {
    * 首页继续堆一份一样的内容就是重复。生成完直接把人送过去。
    */
   const run = useCallback(
-    async (handles: string[]) => {
-      const q = question.trim();
+    async (handles: string[], qOverride?: string) => {
+      const q = (qOverride ?? question).trim();
       if (q.length < MIN_QUESTION) return;
 
       setError(null);
       setMirror(null);
       setInviteNote(null);
       setPhase("run");
+      // 角色位让给下方的流程舞台 —— 同一时刻只留一个看山（见 hostVacant 注释）。
+      setHostVacant(true);
       setRunning(true);
       setStep(-1);
 
@@ -179,6 +205,28 @@ export default function Home() {
     [clearTimers, playFlow, question, router, setMirror],
   );
 
+  /**
+   * 一键自动回答：把 `?auto=1` 接成「选人 → 生成 → 跳工作台」。
+   *
+   * 「我的」页在没有分身记录时会推荐「一个问题 + 一位答主」，点一下就带
+   * auto=1 回到这里。用户在那边已经表过态（就是这个问题、就是这个人），
+   * 再让他手动点两次选人/确认纯属多余。
+   *
+   * 消费掉之后立刻把 auto 从地址栏抹掉：否则生成失败退回 pick 步骤时，
+   * 用户刷新页面会被再自动跑一遍。
+   */
+  useEffect(() => {
+    if (!pendingAuto) return;
+    const q = question.trim();
+    if (q.length < MIN_QUESTION) return;
+    const handle = pendingAuto;
+    setPendingAuto(null);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("auto");
+    window.history.replaceState(null, "", url.pathname + (url.search || "") + url.hash);
+    void run([handle], q);
+  }, [pendingAuto, question, run]);
+
   /** 继续邀请的回调：把新答主与回答追加进当前镜像问题，不重跑旧的。 */
   const handleInvited = useCallback(
     (outcome: InviteOutcome) => {
@@ -206,7 +254,19 @@ export default function Home() {
             <HeroTitle />
           </div>
           <div className="hero-char">
-            <Kanshan state={flowStateAt(step)} size={208} followPointer />
+            {/*
+              首屏角色位：run 阶段让给下方的 KanshanStage。
+              空位里只放装饰环与标签 —— 它是**占位**，不是第二个看山形象：
+              同一个视口里任何时候只有一个 `.kanshan-img`（验收标准 6）。
+              保留 208px 的方框尺寸，避免进入/退出流程时首屏标题发生跳动。
+            */}
+            {hostVacant ? (
+              <div className="hero-char-vacant" aria-hidden>
+                <span className="hero-char-vacant-ring" />
+              </div>
+            ) : (
+              <Kanshan state={flowStateAt(step)} size={208} followPointer />
+            )}
             <div className="hero-char-label mono">KANSHAN · HOST</div>
           </div>
         </div>
@@ -252,7 +312,7 @@ export default function Home() {
         {phase === "pick" && (
           <motion.section
             className="section"
-            initial={{ opacity: 0, y: 18 }}
+            initial={{ opacity: 0, y: SHIFT.lg }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out }}
@@ -293,11 +353,16 @@ export default function Home() {
       </AnimatePresence>
 
       {/* ------------------------------ 主持舞台 ------------------------------ */}
-      <AnimatePresence>
+      {/*
+        onExitComplete：退出动画播完才把首屏角色位还回去。
+        这样「切换过程中两个看山同时可见」的中间态不存在 —— 舞台上那个
+        完全淡出之后，首屏的才出现（验收标准 5）。
+      */}
+      <AnimatePresence onExitComplete={() => setHostVacant(false)}>
         {phase === "run" && (
           <motion.section
             className="section"
-            initial={{ opacity: 0, y: 18 }}
+            initial={{ opacity: 0, y: SHIFT.lg }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0 }}
             transition={{ duration: DUR.slow, ease: EASE.out }}
@@ -323,17 +388,23 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      {/* ------------------------------ 广场信息流 ------------------------------ */}
+      {/* ------------------------------ 广场入口（只给门，不铺内容） ------------------------------ */}
       {phase === "ask" && (
         <section className="section">
-          <div className="section-head">
-            <div>
-              <p className="eyebrow">Virtual square · 虚拟广场</p>
-              <h2 className="no-tail">这座虚拟知乎里已经讨论过的事</h2>
+          <div
+            className="card-flat"
+            style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap" }}
+          >
+            <div style={{ marginRight: "auto" }}>
+              <div style={{ fontWeight: 700, fontSize: 13.5 }}>虚拟广场</div>
+              <div className="dim" style={{ fontSize: 12.5 }}>
+                别人正在讨论的事，以及你自己提问过的，都在广场里。
+              </div>
             </div>
+            <Link className="btn" href="/square">
+              进入广场 →
+            </Link>
           </div>
-          {ready && <FeedStream hotLimit={20} />}
-          {!ready && <div className="skeleton" style={{ height: 260 }} />}
         </section>
       )}
 
