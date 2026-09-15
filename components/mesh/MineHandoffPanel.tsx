@@ -29,8 +29,14 @@ interface Item {
 
 /** 把一场镜像问题整理成可搬运的一条。正文与预览共用同一字符串。 */
 function toItem(mirror: MirrorQuestion): Item | null {
-  // 只取分身自己写的：真人补充段（status === "human"）不属于「我的分身」。
-  const answers = mirror.answers.filter((a) => a.status !== "human");
+  // 只取分身自己写的、且还没搬走的：
+  //   · human —— 真人补充段，不属于「我的分身」；
+  //   · handed-off —— 已确认搬运过，不该再出现在待搬运清单里。
+  // 这两个条件必须与 /mesh 页头「N 篇还没搬回知乎」的统计**完全一致**，
+  // 否则会出现「统计说 0 篇待搬运、清单里却还立着一张卡片」的自相矛盾。
+  const answers = mirror.answers.filter(
+    (a) => a.status !== "human" && a.status !== "handed-off",
+  );
   if (answers.length === 0) return null;
 
   const body = answers.map((a) => `## ${a.skillName}\n\n${a.body.trim()}`).join("\n\n---\n\n");
@@ -128,15 +134,19 @@ export default function MineHandoffPanel({
   }
 
   /**
-   * 复制后打开知乎。
+   * 一键发布：复制正文，并打开知乎。
    *
-   * 顺序很重要：先 await 复制、再开新标签。若反过来，浏览器会把
-   * window.open 当成非用户手势弹出的窗口而拦截。
+   * 顺序必须是**先开窗口、再 await 复制**。
+   * 原因：window.open 依赖浏览器的 transient user activation（约 5 秒），而 await 会
+   * 让出这次手势。剪贴板写入本身是毫秒级，但一旦碰上首次授权弹窗、或用户在弹窗上
+   * 停留几秒，手势窗口就过期了 —— 此时 window.open 会被当作弹窗直接拦掉，
+   * 用户看到的现象是「点了按钮没反应」。先开窗口时手势一定还在；
+   * 写剪贴板不需要窗口焦点，放到后面做没有副作用。
    */
   async function copyAndOpen(item: Item) {
-    await copyText(item.composed, "open:" + item.mirror.id);
-    if (item.questionUrl) markHandoffOpenedFor(item.mirror.id, item.questionUrl);
     window.open(item.questionUrl ?? "https://www.zhihu.com/", "_blank", "noopener,noreferrer");
+    if (item.questionUrl) markHandoffOpenedFor(item.mirror.id, item.questionUrl);
+    await copyText(item.composed, "open:" + item.mirror.id);
   }
 
   return (
