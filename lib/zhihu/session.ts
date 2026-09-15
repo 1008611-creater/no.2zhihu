@@ -1,6 +1,8 @@
 import "server-only";
 
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createCipheriv, createDecipheriv, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { cookies } from "next/headers";
 import type { ZhihuUser } from "./oauth";
 
@@ -209,17 +211,21 @@ export async function getSession(): Promise<
 }
 
 /* ---------------------------------------------------------------------------
- * OAuth access token 的进程内暂存
+ * OAuth access token 的暂存（内存 + 加密落盘）
  *
  * 为什么不写进 cookie：cookie 会到浏览器。access_token 代表「这位用户的
  * 全部授权」，一旦下发到客户端就等于把钥匙给了前端 —— 铁律禁止。
  *
- * 为什么不写数据库：token 只有 1 小时有效期，且本项目其余数据全在浏览器
- * localStorage，为它引入持久层不划算。放进程内存，重启即失效，
- * 用户重新点一次登录即可 —— 这比「把钥匙存进硬盘」安全得多。
+ * 2026-09-15 修正：原先只放进程内存，当时的假设是「重启即失效，用户重新点
+ * 一次登录即可」。实测这个假设不成立 ——
+ *   · 本服务部署极频繁（journalctl：6 小时 23 次重启，全是主动 Stopping）；
+ *   · 每次重启清空内存 token，而 session cookie 有 7 天寿命；
+ *   · 两者寿命不一致 → 用户卡在「顶栏显示已登录、一用就 401」的半登录态。
+ * 现在额外加密落盘，让 token 跨重启存活（仍受它自身 1 小时有效期约束）。
  *
- * 代价：多实例部署时各实例互不可见。当前是单实例 systemd，不构成问题；
- * 若将来横向扩容，这里要换成共享存储（并重新评估加密方案）。
+ * 安全边界：文件用 AES-256-GCM 加密、权限 0600，密钥由 SESSION_SECRET 派生，
+ * 不额外引入配置项；磁盘不可写或密钥缺失时静默退回纯内存，不阻断登录。
+ * 仍然不做的事：token 绝不进 cookie、绝不回传前端。
  * ------------------------------------------------------------------------- */
 
 interface TokenEntry {
@@ -227,30 +233,108 @@ interface TokenEntry {
   expiresAt: number;
 }
 
+/** 落盘路径：默认 <cwd>/.data/，可用 ZHIHU_TOKEN_FILE 覆盖。 */
+const TOKEN_FILE =
+  process.env.ZHIHU_TOKEN_FILE?.trim() || join(process.cwd(), ".data", "zhihu-tokens.json");
+
+/** 内存缓存（快路径）；持久化文件是它的后备。 */
 const TOKENS = new Map<string, TokenEntry>();
 
-/** 登录成功后把 token 存进内存，返回会话 id（写进签名的 cookie）。 */
+let diskLoaded = false;
+
+/** 密钥由会话签名密钥派生 —— 同一个 secret 管两件事，少一个配置项。 */
+function tokenCipherKey(): Buffer | null {
+  const secret = sessionSecret();
+  if (!secret) return null;
+  return createHmac("sha256", secret).update("no2zhihu-token-store-v1").digest();
+}
+
+/** 首次读取时把磁盘上的条目解密回内存；单条解不开就跳过，不影响其余条目。 */
+function loadTokensFromDisk(): void {
+  if (diskLoaded) return;
+  diskLoaded = true;
+  const key = tokenCipherKey();
+  if (!key) return;
+  try {
+    if (!existsSync(TOKEN_FILE)) return;
+    const raw = JSON.parse(readFileSync(TOKEN_FILE, "utf8")) as Record<
+      string,
+      { iv: string; tag: string; data: string }
+    >;
+    const now = Date.now();
+    for (const [sid, box] of Object.entries(raw)) {
+      try {
+        const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(box.iv, "base64url"));
+        decipher.setAuthTag(Buffer.from(box.tag, "base64url"));
+        const plain = Buffer.concat([
+          decipher.update(Buffer.from(box.data, "base64url")),
+          decipher.final(),
+        ]).toString("utf8");
+        const entry = JSON.parse(plain) as TokenEntry;
+        if (entry.expiresAt > now) TOKENS.set(sid, entry);
+      } catch {
+        // 密钥轮换过或文件被改动 → 这条解不开，跳过即可。
+      }
+    }
+  } catch {
+    // 文件损坏 / 不可读 → 退回纯内存，不阻断登录。
+  }
+}
+
+/** 原子写回（先写临时文件再 rename），避免半写把好数据弄坏。 */
+function saveTokensToDisk(): void {
+  const key = tokenCipherKey();
+  if (!key) return;
+  try {
+    const out: Record<string, { iv: string; tag: string; data: string }> = {};
+    for (const [sid, entry] of TOKENS) {
+      const iv = randomBytes(12);
+      const cipher = createCipheriv("aes-256-gcm", key, iv);
+      const data = Buffer.concat([cipher.update(JSON.stringify(entry), "utf8"), cipher.final()]);
+      out[sid] = {
+        iv: iv.toString("base64url"),
+        tag: cipher.getAuthTag().toString("base64url"),
+        data: data.toString("base64url"),
+      };
+    }
+    mkdirSync(dirname(TOKEN_FILE), { recursive: true });
+    const tmp = `${TOKEN_FILE}.tmp`;
+    writeFileSync(tmp, JSON.stringify(out), { mode: 0o600 });
+    renameSync(tmp, TOKEN_FILE);
+  } catch {
+    // 磁盘不可写 → 降级为纯内存，不阻断登录。
+  }
+}
+
+/** 登录成功后存下 token，返回会话 id（写进签名的 cookie）。 */
 export function storeToken(accessToken: string, expiresAt: number): string {
+  loadTokensFromDisk();
   const sid = randomBytes(18).toString("base64url");
   TOKENS.set(sid, { accessToken, expiresAt });
   purgeExpiredTokens();
+  saveTokensToDisk();
   return sid;
 }
 
 /** 按会话 id 取 token；过期即视为不存在，并顺手清掉。 */
 export function readToken(sid: string | undefined): string | null {
   if (!sid) return null;
+  loadTokensFromDisk();
   const entry = TOKENS.get(sid);
   if (!entry) return null;
   if (entry.expiresAt <= Date.now()) {
     TOKENS.delete(sid);
+    saveTokensToDisk();
     return null;
   }
   return entry.accessToken;
 }
 
 export function dropToken(sid: string | undefined): void {
-  if (sid) TOKENS.delete(sid);
+  if (!sid) return;
+  loadTokensFromDisk();
+  TOKENS.delete(sid);
+  saveTokensToDisk();
 }
 
 /** 清掉已过期的条目，避免长时间运行后内存无限增长。 */

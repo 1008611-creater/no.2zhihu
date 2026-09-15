@@ -72,8 +72,9 @@ export default function MirrorPage() {
     return <div className="skeleton" style={{ height: 320, marginTop: 40 }} />;
   }
 
-  // 没有当前会话时，这一页的职责就是把人送回第 1 步 —— 不在这里铺名册
-  // （名册已归 /personas），也不假装有结果可看。
+  // 没有当前会话时，这一页的职责就是把人送回第 1 步 —— 不在这里铺名册，
+  // 也不放通往「分身发现」的链接（提问/回答流程中不该跳去浏览名册），
+  // 更不假装有结果可看。
   if (!mirror) {
     return (
       <div className="page-enter">
@@ -84,11 +85,9 @@ export default function MirrorPage() {
           </h1>
           <p className="lede" style={{ marginTop: 14 }}>
             先提出一个问题，选好答主，他们的分身答完就会出现在这里。
-            想看这座虚拟知乎里有哪些分身，去「分身发现」。
           </p>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 20 }}>
             <Link className="btn btn-primary" href="/">去提出一个问题 →</Link>
-            <Link className="btn btn-ghost" href="/personas">先看看有哪些分身</Link>
           </div>
         </section>
       </div>

@@ -38,6 +38,9 @@ tsconfig.tsbuildinfo
 .git-remote-token
 *.token
 
+# OAuth token 的加密落盘（跨重启保留登录态，绝不入库）
+.data/
+
 # 答主原始语料（本地一次性抓取，绝不入库）
 .personas-raw/
 .personas-work/
