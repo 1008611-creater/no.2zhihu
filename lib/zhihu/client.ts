@@ -25,6 +25,9 @@ import type {
  *
  * 参数大小写坑（2026-09-14 实测）：搜索类接口的条数参数是 `Count`，不是 `Limit`。
  * 传错名字上游不会报错，而是静默按默认值返回 10 条，容易在联调时误判为「正常」。
+ *
+ * system 角色坑（2026-09-15 实测）：`POST /v1/chat/completions` 会**丢弃 system 消息**，
+ * 只按 user 内容作答。所有写在 system 里的指令都等于没写 —— 详见 foldSystemIntoUser()。
  */
 
 const API_BASE = "https://developer.zhihu.com";
@@ -323,11 +326,45 @@ export function questionRecommendations(
 /* ------------------------------ 直答 ------------------------------- */
 
 /** 公共人物追加只允许一次生成尝试，失败由用户决定是否再次发起。 */
+/**
+ * 把 `system` 消息折叠进第一条 `user` 消息。
+ *
+ * 为什么需要（2026-09-15 线上实测，两组对照，`zhida-fast-1p5`）：
+ *   ① system 写「你的每一段都必须以「※」开头」→ 输出里一个「※」都没有；
+ *      同一句话改放 user → 每一段都以「※」开头。
+ *   ② system 写「只输出 {"ping":true}」→ 模型回答的是自我介绍
+ *      「我是知乎直答，由知乎与面壁智能联合打造…」，说明它根本没收到 system。
+ *
+ * 影响面：所有写在 system 里的约束（答主人格口吻、「只能使用知乎证据里的信息」、
+ * 「不要 Markdown / 不要分点」、防雷同参照、人格蒸馏与互相回应的 JSON 格式要求）
+ * 此前**全部等于没写**。这不是「模型读了没照做」，是指令压根没送到。
+ *
+ * 折叠顺序：system 内容放在 user 消息**最前面**，原始 user 内容跟在后面。
+ * 实测这个顺序（指令在前、材料在后）模型会稳定照做；反过来容易被材料带跑
+ * —— 例如只给材料时，直答会按本能输出「信源评估报告」而不是要求的 JSON。
+ *
+ * 调用方仍可照常写 `role: "system"`（读起来更符合原意），由这里统一补偿。
+ * 将来上游修好 system 角色后，删掉这一处即可，调用方无需改动。
+ */
+function foldSystemIntoUser(messages: ZhidaMessage[]): ZhidaMessage[] {
+  if (!messages.some((m) => m.role === "system")) return messages;
+
+  const head = messages
+    .filter((m) => m.role === "system")
+    .map((m) => m.content)
+    .join("\n\n");
+  const rest = messages.filter((m) => m.role !== "system");
+  const at = rest.findIndex((m) => m.role === "user");
+
+  if (at < 0) return [...rest, { role: "user", content: head }];
+  return rest.map((m, i) => (i === at ? { ...m, content: head + "\n\n" + m.content } : m));
+}
+
 export function publicFigureCompletion(messages: ZhidaMessage[]): Promise<ZhidaCompletion> {
   return request<ZhidaCompletion>(`${API_BASE}/v1/chat/completions`, {
     method: "POST",
     headers: authHeaders(),
-    body: JSON.stringify({ model: "zhida-fast-1p5", messages, stream: false }),
+    body: JSON.stringify({ model: "zhida-fast-1p5", messages: foldSystemIntoUser(messages), stream: false }),
   }, { envelope: false, serialize: false, retries: 0 });
 }
 
@@ -336,7 +373,9 @@ export function zhida(
   opts: { model?: string; temperature?: number } = {},
 ): Promise<ZhidaCompletion> {
   const { model = "zhida-fast-1p5", temperature } = opts;
-  const key = `zhida:${model}:${JSON.stringify(messages)}`;
+  // 先折叠再算缓存键：否则「同一段 user 内容 + 不同 system 指令」会命中同一份缓存。
+  const sent = foldSystemIntoUser(messages);
+  const key = `zhida:${model}:${JSON.stringify(sent)}`;
   return cached(
     key,
     () =>
@@ -345,7 +384,7 @@ export function zhida(
         {
           method: "POST",
           headers: authHeaders(),
-          body: JSON.stringify({ model, messages, stream: false, temperature }),
+          body: JSON.stringify({ model, messages: sent, stream: false, temperature }),
         },
         // 直答与内容检索的限流维度不同：实测可并发，故不排队。
         { envelope: false, serialize: false },
