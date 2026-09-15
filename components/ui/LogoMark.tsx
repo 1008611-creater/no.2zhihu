@@ -1,7 +1,8 @@
 "use client";
 
 import { useId } from "react";
-import { motion, useReducedMotion } from "motion/react";
+import { motion } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { SPRING } from "@/lib/motion/tokens";
 import {
   LOGO_HUMAN_PATH,

@@ -1,6 +1,7 @@
 "use client";
 
-import { motion, useReducedMotion, useScroll, useTransform } from 'motion/react';
+import { motion, useScroll, useTransform } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { useRef } from 'react';
 import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 

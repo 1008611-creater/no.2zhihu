@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { AnimatePresence, motion } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import ScrollProgress from "./ScrollProgress";
 import { LogoMark } from "./LogoMark";
 import { DUR, SPRING } from "@/lib/motion/tokens";

@@ -1,6 +1,6 @@
 "use client";
 
-import { useReducedMotion } from "motion/react";
+import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { KANSHAN_ASSET_BY_STATE, KANSHAN_ACCENT_BY_STATE, type KanshanState } from "./states";
 
 /**
