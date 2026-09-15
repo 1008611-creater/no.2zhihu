@@ -39,7 +39,6 @@ export function Kanshan({
   const reducedMotion = useReducedMotion();
   const asset = KANSHAN_ASSET_BY_STATE[state];
   const accent = KANSHAN_ACCENT_BY_STATE[state];
-  const src = reducedMotion ? asset.still : asset.anim;
 
   return (
     <div
@@ -50,15 +49,32 @@ export function Kanshan({
     >
       <span className="kanshan-glow" aria-hidden />
       <span className="kanshan-ring" aria-hidden />
-      <img
-        className="kanshan-img"
-        src={src}
-        width={size}
-        height={size}
-        alt={"看山主持人 · " + asset.label}
-        draggable={false}
-        decoding="async"
-      />
+      {reducedMotion ? (
+        // 减少动态效果时用静态首帧：GIF / WebP 动画都无法用 CSS 暂停，必须换图源。
+        <img
+          className="kanshan-img"
+          src={asset.still}
+          width={size}
+          height={size}
+          alt={"看山主持人 · " + asset.label}
+          draggable={false}
+          decoding="async"
+        />
+      ) : (
+        // 优先 WebP（约为官方 GIF 的 24%），GIF 保留为兜底源。
+        <picture>
+          <source srcSet={asset.animWebp} type="image/webp" />
+          <img
+            className="kanshan-img"
+            src={asset.anim}
+            width={size}
+            height={size}
+            alt={"看山主持人 · " + asset.label}
+            draggable={false}
+            decoding="async"
+          />
+        </picture>
+      )}
     </div>
   );
 }

@@ -27,7 +27,7 @@ export default function EvidenceOverview({ mirror }: { mirror: MirrorQuestion })
     </div>
     <details className="card evidence-details"><summary>查看证据时间轴 · {sources.length} 条来源</summary>
       <p className="dim">按来源最近编辑时间排序；接口未提供发布时间，不能把编辑时间视为发布时间。</p>
-      {sources.length ? <ol className="evidence-timeline">{sources.map(source => <li key={source.url}><time>{source.editTime > 0 ? new Date(source.editTime < 1e12 ? source.editTime * 1000 : source.editTime).toLocaleDateString('zh-CN') : '时间未提供'}</time><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a><span>{source.author}</span></li>)}</ol> : <p>当前没有可核对的来源。</p>}
+      {sources.length ? <ol className="evidence-timeline">{sources.map((source, i) => <li key={source.url}><span className="mono dimmer">#{String(i + 1).padStart(2, '0')}</span><time>{source.editTime > 0 ? new Date(source.editTime < 1e12 ? source.editTime * 1000 : source.editTime).toLocaleDateString('zh-CN') : '时间未提供'}</time><a href={source.url} target="_blank" rel="noreferrer">{source.title}</a><span>{source.author}</span></li>)}</ol> : <p>当前没有可核对的来源。</p>}
     </details>
   </ScrollReveal>;
 }

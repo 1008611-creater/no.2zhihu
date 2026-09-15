@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import ScrollProgress from "./ScrollProgress";
 
 const NAV = [
   { href: "/", label: "首页" },
@@ -141,6 +142,8 @@ export function TopBar() {
           </>
         )}
       </AnimatePresence>
+
+      <ScrollProgress />
     </header>
   );
 }

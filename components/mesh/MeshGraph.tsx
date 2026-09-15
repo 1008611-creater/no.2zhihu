@@ -88,6 +88,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
   return (
     <div className="card" style={{ padding: 12, overflow: "hidden" }}>
       <div className="feedback-actions"><button className="btn" onClick={() => setZoom(z => Math.min(3, z + .2))} aria-label="放大关系图">放大</button><button className="btn" onClick={() => setZoom(z => Math.max(.5, z - .2))} aria-label="缩小关系图">缩小</button><button className="btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }); setOffsets({}); }}>重置布局</button></div>
+      <div className="mesh-scroll">
       <svg ref={svgRef} className="mesh-interactive" viewBox={`0 0 ${W} ${H}`} width="100%" height={height} aria-label="Human Mesh 关系图，可拖动节点或背景"
         onPointerDown={e => { if (e.target === e.currentTarget) { drag.current = { id: null, x: e.clientX, y: e.clientY }; e.currentTarget.setPointerCapture(e.pointerId); } }}
         onPointerMove={e => {
@@ -169,6 +170,7 @@ export function MeshGraph({ graph, height = 460 }: { graph: Graph; height?: numb
         })}
         </g>
       </svg>
+      </div>
       {detail && <aside className="notice" aria-live="polite"><strong>{detail.label}</strong><p>类型：{detail.type} · 关联权重：{detail.weight.toFixed(2)} · {graph.edges.filter(e => e.source === detail.id || e.target === detail.id).length} 条关系</p><button className="btn" onClick={() => setSelected(null)}>关闭详情</button></aside>}
 
       <div style={{ display: "flex", gap: 14, flexWrap: "wrap", padding: "4px 10px 8px" }}>

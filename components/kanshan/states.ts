@@ -24,8 +24,17 @@ export type KanshanState =
   | "sleepy";
 
 export interface KanshanAsset {
-  /** 动态素材地址（透明底 GIF） */
+  /** 动态素材地址（透明底 GIF，官方原始文件，作为最终降级） */
   anim: string;
+  /**
+   * 动态素材的 WebP 版本（同帧率同尺寸，仅换容器）。
+   *
+   * 为什么两副并存：官方 GIF 单段接近 1 MB，6 段合计 5.56 MB，
+   * 首屏 preload 一段就等于让评委多等一次。WebP 体积约为原文件的 24%，
+   * 且 2026 年主流浏览器全部支持。但「不使用未授权素材」要求官方原始文件
+   * 不得删改，所以 GIF 保留为 <picture> 里的兜底源，而不是被替换掉。
+   */
+  animWebp: string;
   /** 静态首帧地址（PNG，reduced-motion 用） */
   still: string;
   /** 官方动作名，用于无障碍描述 */
@@ -43,16 +52,16 @@ export interface KanshanAsset {
  *   - 「运球」只在闭环完成时出现 —— 全站最稀缺的庆祝动作。
  */
 export const KANSHAN_ASSET_BY_STATE: Record<KanshanState, KanshanAsset> = {
-  idle:      { anim: "/kanshan/anim/idle.gif",     still: "/kanshan/still/idle.png",     label: "待机" },
-  greeting:  { anim: "/kanshan/anim/greet.gif",    still: "/kanshan/still/greet.png",    label: "打招呼" },
-  routing:   { anim: "/kanshan/anim/sway.gif",     still: "/kanshan/still/sway.png",     label: "晃悠" },
-  searching: { anim: "/kanshan/anim/computer.gif", still: "/kanshan/still/computer.png", label: "用电脑" },
-  thinking:  { anim: "/kanshan/anim/computer.gif", still: "/kanshan/still/computer.png", label: "用电脑" },
-  answering: { anim: "/kanshan/anim/computer.gif", still: "/kanshan/still/computer.png", label: "用电脑" },
-  gap:       { anim: "/kanshan/anim/sway.gif",     still: "/kanshan/still/sway.png",     label: "晃悠" },
-  inviting:  { anim: "/kanshan/anim/greet.gif",    still: "/kanshan/still/greet.png",    label: "打招呼" },
-  celebrate: { anim: "/kanshan/anim/ball.gif",     still: "/kanshan/still/ball.png",     label: "运球" },
-  sleepy:    { anim: "/kanshan/anim/sleepy.gif",   still: "/kanshan/still/sleepy.png",   label: "瞌睡" },
+  idle:      { anim: "/kanshan/anim/idle.gif",     animWebp: "/kanshan/webp/idle.webp",     still: "/kanshan/still/idle.png",     label: "待机" },
+  greeting:  { anim: "/kanshan/anim/greet.gif",    animWebp: "/kanshan/webp/greet.webp",    still: "/kanshan/still/greet.png",    label: "打招呼" },
+  routing:   { anim: "/kanshan/anim/sway.gif",     animWebp: "/kanshan/webp/sway.webp",     still: "/kanshan/still/sway.png",     label: "晃悠" },
+  searching: { anim: "/kanshan/anim/computer.gif", animWebp: "/kanshan/webp/computer.webp", still: "/kanshan/still/computer.png", label: "用电脑" },
+  thinking:  { anim: "/kanshan/anim/computer.gif", animWebp: "/kanshan/webp/computer.webp", still: "/kanshan/still/computer.png", label: "用电脑" },
+  answering: { anim: "/kanshan/anim/computer.gif", animWebp: "/kanshan/webp/computer.webp", still: "/kanshan/still/computer.png", label: "用电脑" },
+  gap:       { anim: "/kanshan/anim/sway.gif",     animWebp: "/kanshan/webp/sway.webp",     still: "/kanshan/still/sway.png",     label: "晃悠" },
+  inviting:  { anim: "/kanshan/anim/greet.gif",    animWebp: "/kanshan/webp/greet.webp",    still: "/kanshan/still/greet.png",    label: "打招呼" },
+  celebrate: { anim: "/kanshan/anim/ball.gif",     animWebp: "/kanshan/webp/ball.webp",     still: "/kanshan/still/ball.png",     label: "运球" },
+  sleepy:    { anim: "/kanshan/anim/sleepy.gif",   animWebp: "/kanshan/webp/sleepy.webp",   still: "/kanshan/still/sleepy.png",   label: "瞌睡" },
 };
 
 /** 状态 → 设计系统的状态色，用于舞台光晕与装饰环。 */
