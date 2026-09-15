@@ -23,6 +23,11 @@ export const dynamic = "force-dynamic";
  *
  * `stateVerified` 如实回报：知乎当前的回调不回传 state，所以这里通常是
  * false。前端据此在界面上标注「未完成 CSRF 校验」，不谎称生产级安全。
+ *
+ * `tokenValid` 回答的是另一个问题：**这个登录态现在还能用吗**。
+ * user 有值只说明 cookie 没过期（7 天）；access_token 只在服务端内存，
+ * 进程一重启就没了。两者不一致时（user 有值但 tokenValid 为 false），
+ * 前端必须显示「登录已过期，请重新登录」，而不是让用户点下去收 401。
  */
 export async function GET() {
   const session = await getSession();
@@ -48,6 +53,7 @@ export async function GET() {
     signedIn: Boolean(withToken),
     expired: false,
     stateVerified: session?.stateVerified ?? false,
+    tokenValid: session?.tokenValid ?? false,
   });
 }
 
