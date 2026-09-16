@@ -7,6 +7,8 @@ import CrowdCluster from "@/components/square/CrowdCluster";
 import { crowdSummary, type CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
 import { hottestId } from "@/lib/domain/light";
 import { Kanshan } from "@/components/kanshan/Kanshan";
+import SpeechLayer from "./SpeechLayer";
+import type { Speech } from "@/lib/domain/speech";
 import type { SquareLayout, SquareScope, TopicNode, Viewport } from "@/lib/domain/square-layout";
 import { SCOPE_LABELS, clampViewport, focusViewport, homeViewport, zoomAt } from "@/lib/domain/square-layout";
 
@@ -61,6 +63,8 @@ const KANSHAN_LIFT = 40;
 
 export interface SquareCanvasProps {
   layout: SquareLayout;
+  /** 每个话题的对话安排（从真实回答里摘出来的原话，见 speech.ts） */
+  speeches: Map<string, { lines: Speech[]; cycle: number; phase: number }>;
   /** 与 layout.nodes 一一对应的人群（由 SquareField 统一算，避免两处重复计算） */
   clusters: CrowdClusterData[];
   /** 当前聚焦的节点 id；null = 广场常态 */
@@ -85,6 +89,7 @@ const HINT_KEY = "sq-drag-hint-v1";
 
 export default function SquareCanvas({
   layout,
+  speeches,
   clusters,
   focusedId,
   onFocus,
@@ -608,6 +613,18 @@ export default function SquareCanvas({
           )}
         </AnimatePresence>
       </div>
+
+      {/* ---------------- 对话气泡 ----------------
+          在 world **之外**、独立成层（见 SpeechLayer 的文件头说明：
+          气泡必须固定在屏幕坐标里，否则一缩放就读不了）。
+
+          ⚠️ 气泡里的每个字都是答主原话的摘录，不是我们编的。 */}
+      <SpeechLayer
+        layout={layout}
+        speeches={speeches}
+        view={viewport}
+        focusedId={focusedId}
+      />
 
       {/* ---------------- 原地展开的详情 ---------------- */}
       <AnimatePresence>

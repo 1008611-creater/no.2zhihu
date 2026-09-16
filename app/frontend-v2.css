@@ -1911,3 +1911,83 @@ body.sq-locked {
   .sq-kanshan-host { transition: none; }
   .sq-kanshan-beacon { animation: none; }
 }
+
+/* ==================== 对话气泡 ==================== */
+
+/* 气泡层：覆盖整个广场，但**不吃事件**（下面的画布要能继续拖动/点击）。 */
+.sq-speech-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 在详情面板之下（详情是 aside，后挂的），但在画布之上 */
+  z-index: 3;
+  overflow: hidden;
+}
+
+/* 一条气泡。
+ *
+ * 宽度上限 20em ≈ 260px：中文约 17 字/行。再宽会横跨两个簇、
+ * 读起来不知道是谁在说；再窄则 30 字的句子要折三行，气泡变成一块砖。 */
+.sq-bubble {
+  position: absolute;
+  /* 以簇中心为轴向两边长 */
+  transform: translateX(-50%);
+  max-width: 20em;
+  width: max-content;
+  padding: 8px 12px 9px;
+  border-radius: 10px;
+  /* 不透明底色 —— 半透明会让人形透过来，字就糊了 */
+  background: #14182a;
+  border: 1px solid #2b3350;
+  text-align: left;
+  animation: sq-bubble-in 260ms var(--ease-out) both;
+}
+
+/* 入场：轻微上浮 + 淡入。幅度刻意小 —— 气泡是「有人开口了」，
+   不是「一个弹窗蹦出来了」。 */
+@keyframes sq-bubble-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(5px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 不做入场动画，但**气泡照常出现** —— 它是内容，不是装饰。
+     隐藏它就等于删掉「有人在讨论」这件事。 */
+  .sq-bubble { animation: none; }
+}
+
+.sq-bubble-text {
+  display: block;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #e8ecf8;
+  /* 中文标点的悬挂会让行尾更整齐（专业排版细节，代价一行） */
+  hanging-punctuation: allow-end;
+}
+
+/* 署名：比正文小一档、暗两档。
+   为什么放**下面**而不是上面：气泡读起来的顺序是「先看话、再确认谁说的」,
+   署名在上会先占掉注意力。 */
+.sq-bubble-who {
+  display: block;
+  margin-top: 5px;
+  font-size: 11.5px;
+  line-height: 1.3;
+  color: #8fa7d8;
+  letter-spacing: 0.01em;
+}
+
+/* 小尾巴：指向下方的人群。
+   用旋转 45° 的方块做出一个三角，比 border 技巧更好控制颜色一致性。 */
+.sq-bubble-tail {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  background: #14182a;
+  border-right: 1px solid #2b3350;
+  border-bottom: 1px solid #2b3350;
+  transform: rotate(45deg);
+}
