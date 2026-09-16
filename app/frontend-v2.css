@@ -1080,8 +1080,8 @@ body.sq-locked {
      收紧之后「站立面」还在，但不会再糊成一团白。 */
   background: radial-gradient(
     ellipse at 50% 58%,
-    rgba(200, 218, 255, 0.10) 0%,
-    rgba(172, 192, 238, 0.055) 50%,
+    rgba(200, 218, 255, 0.06) 0%,
+    rgba(172, 192, 238, 0.033) 50%,
     rgba(0, 0, 0, 0) 78%
   );
 }
@@ -1186,15 +1186,19 @@ body.sq-locked {
  * 而且 orange 在设计系统里本来就是缺口的专用色，语义正好。 */
 .sq-hole-glow {
   fill: url("#sqHoleGrad");
-  opacity: 0.34;
+  /* 0.34 → 0.2。
+     人形放大到 49px 之后，原来这个亮度让橙色地灯成了画面里最扎眼的东西 ——
+     比在场的人还抢视线。而缺口是「空位」，是**弱信号**：
+     它该让人注意到「这儿少一个」，不该让人只看到它。 */
+  opacity: 0.2;
   transform-origin: center;
   transform-box: fill-box;
   animation: sq-hole-glow 3.6s ease-in-out infinite;
 }
 
 @keyframes sq-hole-glow {
-  0%, 100% { opacity: 0.20; }
-  50%      { opacity: 0.46; }
+  0%, 100% { opacity: 0.13; }
+  50%      { opacity: 0.28; }
 }
 
 /* 本体：**单一径向渐变一次成型**。
@@ -1204,7 +1208,7 @@ body.sq-locked {
  * 径向渐变没有「层与层的边界」，从中心暖到边缘透明是一次连续过渡。 */
 .sq-hole-void {
   fill: url("#sqHoleGrad");
-  opacity: 0.9;
+  opacity: 0.66;
 }
 
 /* 芯与沿都不再需要：一个渐变已经把这盏地灯说清楚了。 */
@@ -1218,7 +1222,7 @@ body.sq-locked {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .sq-hole-glow { animation: none; opacity: 0.26; }
+  .sq-hole-glow { animation: none; opacity: 0.16; }
 }
 
 /* ------------------------------ 光与尘埃 ------------------------------ */
@@ -1284,8 +1288,8 @@ body.sq-locked {
      三层亮度叠在同一个位置时，每一层都要按「加上去之后」来定，不能各自看。 */
   background: radial-gradient(
     ellipse at center,
-    rgba(208, 220, 248, 0.20) 0%,
-    rgba(168, 186, 224, 0.10) 42%,
+    rgba(208, 220, 248, 0.13) 0%,
+    rgba(168, 186, 224, 0.065) 42%,
     rgba(0, 0, 0, 0) 74%
   );
 }
@@ -1353,13 +1357,25 @@ body.sq-locked {
 }
 
 /* 浮标标题：问题标题是视觉主体，所以放在人群**上方**而不是塞进圆里。
-   宽度给到 15em 就换行 —— 再宽，相邻两簇的标题会撞在一起。 */
+ *
+ * ## 为什么需要一块底衬
+ *
+ * 人形放大到 49px 之后，**跨簇间隙比降到 1.02** —— 相邻两簇的视觉占位刚好
+ * 不相交，也就是一簇的人形可以贴到邻居标题的正下方。实测截图里多处标题
+ * 被人头顶住。
+ *
+ * 靠拉大簇间距解决是错的方向（刚把簇收紧了 30%）；底衬才是对症的：
+ * 它让标题在**任何人形后面**都可读，与布局无关。
+ * 这也贴合原本的隐喻 —— 标题本来就是立在广场边上的指示牌。
+ *
+ * 用极淡的暗底（而不是描边或发光）：设计系统禁止发光与阴影堆叠。
+ */
 .sq-crowd-label {
   position: absolute;
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   display: flex;
   align-items: flex-start;
   gap: 6px;
@@ -1367,6 +1383,10 @@ body.sq-locked {
   /* 12em ≈ 156px。簇间距约 215px，留出这个宽度之后相邻两簇的标题才不会撞上；
      再窄一点长标题就要折成三行，反而更挤。 */
   max-width: 12em;
+  padding: 3px 8px 4px;
+  border-radius: 7px;
+  /* 0.82 而不是全不透明：招牌要压住底下的人形，但还留一点「浮在场上」的通透感。 */
+  background: rgba(7, 8, 15, 0.82);
 }
 
 .sq-crowd-label .sq-cluster-dot {

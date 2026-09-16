@@ -40,13 +40,29 @@ export interface ThemeSpec {
  * 理论下限：22 张卡平均 170px 边长，40% 填充率下需要半径约 700 的圆盘，
  * 即直径 ~1500px —— 所以布局尺度就该在这个量级，而不是 4000+。
  */
-export const THEMES: ThemeSpec[] = [
-  { key: "tech", label: "科技", angle: Math.PI * 1.75, radius: 330, accent: "blue" },
-  { key: "career", label: "职场", angle: Math.PI * 1.25, radius: 350, accent: "violet" },
-  { key: "money", label: "钱", angle: Math.PI * 0.25, radius: 340, accent: "green" },
-  { key: "life", label: "生活", angle: Math.PI * 0.75, radius: 320, accent: "orange" },
-  { key: "mind", label: "情绪", angle: Math.PI * 0.5, radius: 300, accent: "violet" },
-  { key: "society", label: "社会", angle: Math.PI * 1.0, radius: 310, accent: "blue" },
+export /**
+ * 六个街区。
+ *
+ * ## radius 为什么从 300–350 收到 214–244
+ *
+ * 实测（`scripts/audit-square-visual.mjs`）：一屏只看到 10/22 簇，中央四周是大片空地。
+ * 根因不是「布局推得太开」（最近邻/理论下限 = 0.94，簇之间是紧的），
+ * 而是**广场的外径本身太大** —— 最外一圈簇离中心 1000+ 世界像素 = 5 个卡片那么远，
+ * 它们之外什么都没有。
+ *
+ * ⚠️ 注意 `homeViewport` 的 scale 是**固定 0.92、不随包围盒变化**的（实验证实），
+ * 所以「把布局缩小就能自动拉近镜头」并不成立 ——
+ * 缩 radius 的作用是**让同样一屏里落下更多簇**，不是让镜头变近。
+ *
+ * 收紧后由 `relaxOverlaps` 兜底保证不重叠（MIN_GAP = 1.1 × 卡宽）。
+ */
+const THEMES: ThemeSpec[] = [
+  { key: "tech", label: "科技", angle: Math.PI * 1.75, radius: 232, accent: "blue" },
+  { key: "career", label: "职场", angle: Math.PI * 1.25, radius: 244, accent: "violet" },
+  { key: "money", label: "钱", angle: Math.PI * 0.25, radius: 238, accent: "green" },
+  { key: "life", label: "生活", angle: Math.PI * 0.75, radius: 226, accent: "orange" },
+  { key: "mind", label: "情绪", angle: Math.PI * 0.5, radius: 214, accent: "violet" },
+  { key: "society", label: "社会", angle: Math.PI * 1.0, radius: 220, accent: "blue" },
 ];
 
 export const THEME_BY_KEY = new Map(THEMES.map((t) => [t.key, t]));
@@ -332,9 +348,12 @@ export function layoutSquare(
       ordered.reduce((s, t) => s + (SIZE_MIN + (SIZE_MAX - SIZE_MIN) * heatOf(t, maxAnswers) * 0.52), 0) /
       ordered.length;
     const PER_RING = 3;
-    // 环间距：略大于平均卡宽即可（1.16 倍留出 16% 的缝）。
-    // 用 1.34 时画布直径被推到 4000+，「全景」缩到 27% 就什么都看不清了。
-    const RING_GAP = avgSize * 1.16;
+    // 环间距：略大于平均卡宽即可。
+    // 1.34 时画布直径被推到 4000+，「全景」缩到 27% 什么都看不清；
+    // 1.16 时单个环看着舒服，但 6 街区 × 2 环叠起来把广场外径撑得很大 ——
+    // 外圈那几环周围什么都没有，实测一屏只看到 10/22 簇。
+    // 1.06 是「贴着但不叠」，最后由 relaxOverlaps 兜底（MIN_GAP = 1.1）。
+    const RING_GAP = avgSize * 1.06;
 
     // 扇区张角随卡片数变宽，但不超过 100°：再宽就会伸进邻居的地盘，
     // 街区就糊成一片了。

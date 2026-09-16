@@ -124,8 +124,15 @@ export function lightReach(nodes: Array<Pick<TopicNode, "x" | "y">>, light: Ligh
  * 为什么绑在人高上而不是绝对像素：远处的人本来就小，给他一条固定长度的影子
  * 会像一根插在地上的棍子。绑在人高上，影子才永远是「这个人自己的影子」。
  */
-const SHADOW_BASE = 0.58;
-const SHADOW_GROWTH = 1.15;
+const SHADOW_BASE = 0.5;
+/**
+ * 1.15 → 0.85。
+ *
+ * 人形从 33px 提到 49px 之后，影长按 `height × k` 同比例放大 ——
+ * 截图里远处那几簇的影子甩得比人还长，读起来像「一根根棍子」而不是投影。
+ * 影长必须**相对人高**收敛，不能跟着人一起放大。
+ */
+const SHADOW_GROWTH = 0.85;
 /** 影长相对人高的上下限 —— 防止极近/极远时影子短到看不见或长到穿场。 */
 const SHADOW_MIN_K = 0.42;
 const SHADOW_MAX_K = 1.85;
