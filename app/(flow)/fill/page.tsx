@@ -19,8 +19,13 @@ import { SHIFT } from "@/lib/motion/tokens";
  * 提交后立刻回写回答、缺口、Mesh 与贡献值，全部走同一份领域模型。
  *
  * 2026-09-15：从主流程的第 3 步降级为子页面。真人补充不是每个问题都会发生 ——
- * 只有某一场的某个缺口需要真人时才进入这里。入口只有两个：工作台的缺口卡片，
- * 以及单篇回答页的「我来接管」。因此不再出现在顶部流程条里。
+ * 只有某一场的某个缺口需要真人时才进入这里。因此不再出现在顶部流程条里。
+ *
+ * ⚠️ 2026-09-16 更正：上面这段曾写「入口只有两个：工作台的缺口卡片 + 回答页的我来接管」，
+ * 但**当时两个都没实现**（`GapCard` 在无候选人时只给一句说明、不给链接；
+ * `answer` 页那个「我来接管」是指向 `/fill` 的，确实存在）。于是 `/fill` 一度是孤岛：
+ * 页面完全可用，却只能靠手输 URL 到达。现已把工作台那一侧的入口补上
+ * （`GapCard` 的 `fillHref`）。**改这一页的入口前，先 grep 谁指向 `/fill`。**
  */
 
 const QUICK_TEMPLATES = [
@@ -102,7 +107,16 @@ function FillContent() {
         </p>
         <div className="grid grid-3" style={{ marginTop: 24 }}>
           <Link className="btn btn-primary" href="/mirror">回工作台看搬运</Link>
-          <Link className="btn" href="/me?tab=mesh">查看 Mesh 变化</Link>
+          {/*
+            这里原先指向 `/me?tab=mesh`，但**那张图不会因为这次补充而变化**：
+            `/me` 用的是 `buildCorpusMesh(history)`，只看关键词共现，
+            完全不读 `contributions`、`answers[].status === "human"` 或 `gap.filledBy`
+            —— 实测补一条真人后，它的「节点 / 关系」数字一个都没动，页面上也搜不到补充者的名字。
+            真正长出真人节点的是**本场的关系图**（`/mirror` 的 `buildMesh`）。
+            上面那段文案承诺「Human Mesh 长出新的边」，链接就必须指向那张真的长出边的图，
+            否则等于把用户送到一个看不见变化的地方（铁律 4）。
+          */}
+          <Link className="btn" href="/mirror#mesh">查看 Mesh 变化</Link>
           {/* 原先这里指向 /feed —— 该路由不存在，点了必然 404。改成真实存在的广场。 */}
           <Link className="btn btn-ghost" href="/square">回广场看看</Link>
         </div>
