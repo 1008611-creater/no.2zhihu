@@ -83,6 +83,37 @@ sudo bash scripts/deploy-server.sh --update
 > **不要在服务器上直接改代码**。所有改动走「本地 → GitHub → 服务器」，
 > 否则 `--update` 的 `git reset --hard` 会覆盖掉。
 
+### 为什么更新是「原子」的（部署不打断在途会话）
+
+Next.js 的产物默认写在 `.next/`。**如果更新时先删 `.next` 再构建，那 1~3 分钟的构建窗口里，
+已经在浏览器里打开页面的用户会直接坏掉** —— 旧 HTML 还在，但它引用的
+`/_next/static/chunks/*.js` 已经不在磁盘上了，用户点任何一下都会拿到 404
+（实测 `content-type: text/html`），前端抛 `ChunkLoadError`，白屏或卡死。
+
+`--update` 因此**不在原地构建**，而是转交 `scripts/deploy-atomic.sh`：
+
+| 步骤 | 做什么 | 为什么 |
+|---|---|---|
+| 1 | 用 `NEXT_DIST_DIR=.next.new npm run build` 构建到独立目录 | 线上 `.next` 全程不动，旧页面继续可用 |
+| 2 | 体检新产物（`BUILD_ID` / `static/chunks` / `server` / `routes-manifest`） | 切之前先确认新版本是完整的 |
+| 3 | `mv .next .next.old && mv .next.new .next` | 同一文件系统内的 rename 是**原子**的，不存在「半个 `.next`」的中间态 |
+| 4 | 重启 + 等健康检查；失败就用 `.next.old` 换回去 | 回滚点一直在原地 |
+| 5 | 成功后删掉 `.next.old` | 服务器磁盘已用 88%，不宜长期留两份 |
+
+**实测对照**（本机复刻两种流程，构建窗口内轮询那个 chunk 是否还在）：
+
+| 流程 | 构建窗口内「chunk 不可达」占比 | 切换耗时 |
+|---|---|---|
+| 旧：先删 `.next` 再构建 | **46.5%** | — |
+| 新：构建到独立目录再原子切换 | **0.0%** | **45.3 ms** |
+
+> 命名有个硬约束：`distDir` 只能用**固定名字**（`.next.new`），不能用带时间戳的目录。
+> Next 14 会把 `<distDir>/types/**/*.ts` **追加**进 `tsconfig.json` 的 `include` ——
+> 同名重复构建是幂等的，换名字就多一条，最终会把 `tsconfig.json` 撑爆并弄脏工作区。
+> 这条已由 `scripts/check-atomic-deploy.mjs` 守着（含反例）。
+
+本地自查：`npm run check:deploy`
+
 ## 六、安全清单
 
 - [ ] 服务器 root 密码足够强，并**已启用 SSH 密钥登录**。
