@@ -658,11 +658,11 @@ export function homeViewport(
 ): Viewport {
   const home = layout.nodes.find((n) => n.mine) ?? layout.nodes[0];
   if (!home) return fitViewport(layout.bounds, vw, vh);
-  // 1.02：广场只占屏幕 75%（1440 下约 1080px），比改造前独占视口时窄了三成。
-  // 沿用旧的 0.88 会让整个人群偏小、标题偏糊 —— 实测截图里一簇人只有二十来像素，
-  // 看不出是人。抬到 1.02 之后一簇人约 40px、标题 13px 清晰可读，
-  // 四周仍能露出 2–3 个邻居。
-  const scale = clampScale(1.02);
+  // 0.92：实测截图（1440×900）在 1.02 时视野里只有约 10 簇，且中央四周大片空白 ——
+  // 画面读起来是「虚空里散着几摊人」，不是「一座广场」。
+  // 拉到 0.92 之后入画约 14–16 簇，人形仍有 ~40px（标题 12–13px 可读），
+  // 而地面上的光池、影子、尘埃有了足够的场地铺开。
+  const scale = clampScale(0.92);
   return {
     scale,
     x: vw / 2 - home.x * scale,

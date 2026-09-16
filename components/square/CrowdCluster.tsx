@@ -3,6 +3,8 @@
 import { memo } from "react";
 import type { CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
 import { crowdSummary } from "@/lib/domain/crowd";
+import type { LightSource } from "@/lib/domain/light";
+import { groundOpacityAt, shadowOf } from "@/lib/domain/light";
 import type { TopicNode } from "@/lib/domain/square-layout";
 
 /**
@@ -19,6 +21,28 @@ import type { TopicNode } from "@/lib/domain/square-layout";
  * 是产品说明里明确的画布选型判据；同时 canvas 里的人群不可聚焦、不可被读屏
  * 软件识别，会同时丢掉可点击性与可访问性。
  *
+ * ## 这一版加了什么（2026-09-15 第三轮 · 视觉重做）
+ *
+ *   ① **姿态与体态**：四种姿态 symbol + 每人独立的身高/肩宽/倾斜
+ *      （由稳定 key 派生，见 `light.ts` 的 `shapeOf`）。上一版 97 个一模一样
+ *      的剪影 = 一个图标复制 97 次，这是被说「平庸」的直接原因之一。
+ *   ② **影子**：每个人朝背离光源的方向在地上甩出一条硬影。
+ *      影子用 **CSS transform + transition**，所以光源一移，全场影子是
+ *      **转过去**的而不是瞬间跳过去的 —— 那一下是整个广场的记忆点。
+ *   ③ **缺口 = 地上的洞**：不再画空心小人，而是画地面上一个透着暖光的洞。
+ *      **所有人都投下影子，只有那几个位置地上是空的** —— 一眼就知道
+ *      「这儿少了一个人」，不需要任何解释。
+ *      ⚠️ 这只改**渲染**，不改 `crowd.ts` 里 `kind: "gap"` 的语义 ——
+ *      那个字段是另一个线程（PR #53）的自检依赖的，动它会跨线程弄坏别人的守卫。
+ *   ④ **纵深**：整簇按 y 坐标缩放（远处小），并按纵深降明度（远处暗）。
+ *
+ * ## 呼吸为什么在「簇」这一层，而不是每个人
+ *
+ * GSAP 官方技能的性能规范明确写着：**不要为几百个元素各建一条 tween，
+ * 用 stagger**。这里同理 —— 97 个独立动画元素会造出 97 个合成层，
+ * 而 22 个（每簇一个、错相）在视觉上完全够：一整片人群在缓慢起伏，
+ * 正是「广场活着」的信号。幅度刻意压到 1.2px，低于这个就看不出动。
+ *
  * ## 命中区为什么是一个圆形按钮
  *
  * 外层容器 `pointer-events: none`，只有一个人形大小的圆形 `<button>` 接事件。
@@ -27,22 +51,33 @@ import type { TopicNode } from "@/lib/domain/square-layout";
  *      22 个簇会把广场铺满，用户根本找不到地方下手指。
  *   ② 用真的 `<button>` 而不是给 `<div>` 加 `role`，键盘与读屏软件天然可用
  *      （WCAG 2.2 要求拖拽之外必须有单指针/键盘路径）。
- *
- * 标签是注释，不参与交互（`pointer-events: none`），所以它不会挡住相邻簇。
  */
 
 /** 每簇内部坐标系边长。与 `<symbol viewBox>` 无关，只影响 `<use>` 的换算。 */
 const BOX = 200;
 
-/** 人形宽高比，必须与 `SquareCanvas` 里 `#sq-figure` 的 viewBox 一致。 */
+/** 人形宽高比，必须与 `SquareCanvas` 里各姿态 symbol 的 viewBox 一致。 */
 const GLYPH_ASPECT = 12 / 20;
+
+/** 姿态 → symbol id。四个 symbol 都在 `SquareCanvas` 的 `<defs>` 里定义一次。 */
+const POSE_HREF: Record<string, string> = {
+  stand: "#sq-fig-stand",
+  turn: "#sq-fig-turn",
+  fold: "#sq-fig-fold",
+  lean: "#sq-fig-stand",
+};
 
 export interface CrowdClusterProps {
   cluster: CrowdClusterData;
   node: TopicNode;
+  /** 当前光源；null = 广场还没铺开 */
+  light: LightSource | null;
+  /** 光源到最远簇的距离，用来归一化影长 */
+  reach: number;
   focused: boolean;
   dimmed: boolean;
   hovered: boolean;
+  reduced: boolean;
   onHover: (id: string | null) => void;
   onSelect: () => void;
 }
@@ -50,9 +85,12 @@ export interface CrowdClusterProps {
 function CrowdClusterImpl({
   cluster,
   node,
+  light,
+  reach,
   focused,
   dimmed,
   hovered,
+  reduced,
   onHover,
   onSelect,
 }: CrowdClusterProps) {
@@ -62,6 +100,10 @@ function CrowdClusterImpl({
   // 字号跟着簇走：中央那场大一些，外圈的略小。上下限收得很紧，
   // 因为标题是「同一批问题」的标签，忽大忽小会让人以为层级不同。
   const titleSize = Math.round(11.5 + (r / 115) * 3.5);
+
+  // 纵深 → 明度。远处的簇淡入背景（大气透视），这是「地面向远处退去」
+  // 最便宜也最有效的一半；另一半是尺度（已在 crowd.ts 里算进 height）。
+  const depthOpacity = groundOpacityAt(cluster.depth);
 
   return (
     <div
@@ -75,11 +117,14 @@ function CrowdClusterImpl({
         width: d,
         height: d,
         transform: `translate(${cluster.x - r}px, ${cluster.y - r}px)`,
+        // 整簇的纵深明度挂在这里（而不是 svg 上），这样悬停/聚焦的
+        // 透明度变化可以和它相乘，不会互相覆盖。
+        ["--sq-depth-opacity" as string]: depthOpacity,
       }}
     >
       <div className="sq-crowd-body">
-        {/* 地面圈：用虚线圆标出「这场讨论占的那块地」。
-            没有它的话，外圈小簇在大片深色地面上会像漂浮的点。 */}
+        {/* 地面：人群占的那块地被压暗一点。
+            没有它，外圈小簇在大片地面上会像漂浮的点。 */}
         <span className="sq-crowd-ground" />
         {focused && <span className={"sq-crowd-ring r-" + node.theme.accent} />}
 
@@ -88,28 +133,89 @@ function CrowdClusterImpl({
           viewBox={`0 0 ${BOX} ${BOX}`}
           aria-hidden="true"
           focusable="false"
+          style={reduced ? undefined : { animationDelay: `-${(cluster.depth * 4.6).toFixed(2)}s` }}
         >
-          {cluster.figures.map((f) => {
-            // crowd.ts 给的 dy 是「脚底中点」的世界坐标偏移，这里换算到 BOX 空间。
-            const h = (f.height / d) * BOX;
-            const w = h * GLYPH_ASPECT;
-            const fx = BOX / 2 + (f.dx / r) * (BOX / 2);
-            const fy = BOX / 2 + (f.dy / r) * (BOX / 2);
-            const isGap = f.kind === "gap";
-            return (
-              <use
-                key={f.key}
-                href={isGap ? "#sq-figure-gap" : "#sq-figure"}
-                x={fx - w / 2}
-                y={fy - h}
-                width={w}
-                height={h}
-                // 类名直接由 kind 派生，颜色写死在 CSS 里：
-                // 在场 = 中性剪影，缺口 = 空心橙（见 crowd.ts 文件头）。
-                className={"sq-figure sq-figure-" + f.kind}
-              />
-            );
-          })}
+          {/* 先画影子与洞，再画人 —— 顺序即层次：人站在地上，
+              影子和洞都属于地面。 */}
+          {light &&
+            cluster.figures
+              .filter((f) => f.kind === "persona")
+              .map((f) => {
+                const h = (f.height / d) * BOX;
+                const fx = BOX / 2 + (f.dx / r) * (BOX / 2);
+                const fy = BOX / 2 + (f.dy / r) * (BOX / 2);
+                const s = shadowOf(
+                  { x: f.dx, y: f.dy },
+                  f.height,
+                  { id: light.id, x: light.x - cluster.x, y: light.y - cluster.y },
+                  reach,
+                );
+                const sw = (s.width / d) * BOX;
+                const sl = (s.length / d) * BOX;
+                return (
+                  <rect
+                    key={"sh-" + f.key}
+                    className="sq-shadow"
+                    x={-sw / 2}
+                    y={0}
+                    width={sw}
+                    height={sl}
+                    rx={sw / 2}
+                    style={{
+                      transform: `translate(${fx}px, ${fy}px) rotate(${s.angle}deg)`,
+                    }}
+                  />
+                );
+              })}
+
+          {/* 缺口 → 地上的洞。三层椭圆叠出「往下漏光」的纵深：
+              外圈暖光、洞口的暗、洞里最深的一层。 */}
+          {cluster.figures
+            .filter((f) => f.kind === "gap")
+            .map((f) => {
+              const h = (f.height / d) * BOX;
+              const fx = BOX / 2 + (f.dx / r) * (BOX / 2);
+              const fy = BOX / 2 + (f.dy / r) * (BOX / 2);
+              const hw = h * GLYPH_ASPECT * 1.15;
+              return (
+                <g key={"hole-" + f.key}>
+                  <ellipse
+                    className="sq-hole-glow"
+                    cx={fx}
+                    cy={fy}
+                    rx={hw * 1.55}
+                    ry={hw * 0.62}
+                    style={reduced ? undefined : { animationDelay: `-${(f.shape.phase * 3.6).toFixed(2)}s` }}
+                  />
+                  <ellipse className="sq-hole-void" cx={fx} cy={fy} rx={hw} ry={hw * 0.4} />
+                  <ellipse className="sq-hole-deep" cx={fx} cy={fy} rx={hw * 0.58} ry={hw * 0.23} />
+                  <ellipse className="sq-hole-rim" cx={fx} cy={fy} rx={hw} ry={hw * 0.4} />
+                </g>
+              );
+            })}
+
+          {cluster.figures
+            .filter((f) => f.kind === "persona")
+            .map((f) => {
+              // crowd.ts 给的 dy 是「脚底中点」的世界坐标偏移，这里换算到 BOX 空间。
+              const h = (f.height / d) * BOX;
+              const w = h * GLYPH_ASPECT * f.shape.widthScale;
+              const fx = BOX / 2 + (f.dx / r) * (BOX / 2);
+              const fy = BOX / 2 + (f.dy / r) * (BOX / 2);
+              return (
+                <use
+                  key={f.key}
+                  href={POSE_HREF[f.shape.pose] ?? "#sq-fig-stand"}
+                  x={fx - w / 2}
+                  y={fy - h}
+                  width={w}
+                  height={h}
+                  className="sq-figure sq-figure-persona"
+                  // 倾斜绕**脚底**转 —— 绕中心转会让人像飘起来。
+                  transform={`rotate(${f.shape.lean.toFixed(2)} ${fx.toFixed(2)} ${fy.toFixed(2)})`}
+                />
+              );
+            })}
         </svg>
       </div>
 
@@ -143,7 +249,7 @@ function CrowdClusterImpl({
 }
 
 /**
- * `memo` 是必要的，不是优化洁癖：拖动广场时父组件每帧都会重渲染，
+ * `memo` 是必要的，不是优化洁癖：拖动广场时父组件每帧都会重新渲染，
  * 22 簇 × 每个 100 来个子元素会跟着重算 —— 而它们的输入（位置、计数）
  * 在拖动过程中**一点都没变**。这一层 memo 把拖动的代价压回「改一个 transform」。
  */
