@@ -207,6 +207,20 @@ export default function MirrorPage() {
               gap={g}
               index={i}
               onInvite={(gap) => setInvited(gap.candidates[0]?.id ?? null)}
+              /*
+               * 「没有匹配到真人」时也要有一条真实的路可走。
+               * 过去这里不给出口，于是缺口卡片最需要人参与的那一档反而是死胡同 ——
+               * 而 /fill 正是为此存在的，且完全可用。
+               *
+               * 待补的那一篇优先选**状态仍是 ai** 的第一条：那是还没被真人碰过的，
+               * 补它信息增量最大；都补过了就退回第一条（让链接始终可用，不指向空）。
+               */
+              fillHref={
+                "/fill?answerId=" +
+                encodeURIComponent(
+                  (mirror.answers.find((a) => a.status === "ai") ?? mirror.answers[0])?.id ?? "",
+                )
+              }
             />
           ))}
           {mirror.gaps.length === 0 && (
@@ -241,7 +255,10 @@ export default function MirrorPage() {
       </section>
 
       {mesh && (
-        <section className="section">
+        /* id 供 /fill 的「查看 Mesh 变化」深链过来 —— 见 fill/page.tsx 里那段说明：
+           本场的真人节点画在**这一张**图上，而 /me 那张是「我创作过什么」的创作轨迹，
+           不含本场真人。两者不是一张图。 */
+        <section className="section" id="mesh">
           <div className="section-head">
             <h2 className="no-tail">这场生成出来的关系</h2>
             {/*

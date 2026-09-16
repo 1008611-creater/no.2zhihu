@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { motion } from "motion/react";
 import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import { GAP_SPRING, GAP_PAUSE, STAGGER } from "@/lib/motion/tokens";
@@ -16,8 +17,25 @@ const KIND_LABEL: Record<Gap["kind"], string> = {
   entity: "偏题缺口"
 };
 
-/** 看山发现的缺口 + 匹配到的真人候选。 */
-export function GapCard({ gap, onInvite, index = 0 }: { gap: Gap; onInvite?: (gap: Gap) => void; index?: number }) {
+/**
+ * 看山发现的缺口 + 匹配到的真人候选。
+ *
+ * `fillHref` 是给「没有匹配到真人」那条路径用的出口 —— 见下方 `candidates.length === 0`
+ * 分支的注释：过去这里只留一句「需要更多人参与才能补上」，却不给任何可以点的东西，
+ * 于是产品叙事里的第 ⑨ 步（真人接管）在**最需要它的时候**断了。
+ */
+export function GapCard({
+  gap,
+  onInvite,
+  fillHref,
+  index = 0,
+}: {
+  gap: Gap;
+  onInvite?: (gap: Gap) => void;
+  /** 缺口的补充入口（通常是 `/fill`）。不传则该分支只作说明、不给出口。 */
+  fillHref?: string;
+  index?: number;
+}) {
   const filled = Boolean(gap.filledBy);
   const reduced = useReducedMotion();
   return (
@@ -60,7 +78,22 @@ export function GapCard({ gap, onInvite, index = 0 }: { gap: Gap; onInvite?: (ga
 
       {gap.candidates.length === 0 && (
         <div className="notice" style={{ fontSize: 12 }}>
-          还没有匹配到合适的真人 —— 这个缺口需要更多人参与才能补上。
+          <p style={{ marginBottom: gap.filledBy || !fillHref ? 0 : 10 }}>
+            还没有匹配到合适的真人 —— 这个缺口需要更多人参与才能补上。
+          </p>
+          {/*
+            ⚠️ 这个分支过去**只说明、不给出口**：文案写着「需要更多人参与」，
+            却没有任何可点的东西，而 /fill（「补上 AI 答不了的那一段」）本来就是
+            为这件事存在的、且完全可用。结果是产品闭环的第 ⑨ 步在最需要它的时候断掉。
+            /fill 页自己的注释也写着「入口只有两个：工作台的缺口卡片 + 回答页的我来接管」——
+            而后一个入口当时并不存在。
+            这里补的就是工作台这一侧：没有候选人时，人自己就是候选人。
+          */}
+          {!gap.filledBy && fillHref && (
+            <Link className="btn btn-sm btn-primary" href={fillHref}>
+              我来补上这一段 →
+            </Link>
+          )}
         </div>
       )}
     </motion.div>

@@ -420,6 +420,98 @@ const isTrue = (cond, label) => {
 }
 
 console.log("\n" + "=".repeat(74));
+console.log("⑩ 真人补充这一环必须真的有入口（`/fill` 不得成为孤岛）");
+console.log("=".repeat(74));
+/**
+ * 为什么值得一条守卫：
+ *
+ * `/fill`（「补上 AI 答不了的那一段」）是产品闭环的第 ⑨ 步，实现完整、提交链路可用，
+ * 但 2026-09-16 实测发现它**一个入口都没有**：`/mirror` 上 11 个站内链接里没有一条
+ * 指向 `/fill`，缺口卡片在「没有匹配到真人」时只给一句
+ * 「还没有匹配到合适的真人 —— 这个缺口需要更多人参与才能补上」，**零可交互元素**。
+ *
+ * 也就是说：产品对着用户说「需要更多人参与」，却不给任何参与的地方 ——
+ * 而那一页就在仓库里、能跑、能提交（实测 17/17 通过）。
+ *
+ * 这类退化**不报错、不白屏**，页面看起来完全正常，只是闭环断了一环，
+ * 靠人眼评审很难发现。所以用断言钉住两件事：
+ *   ① `GapCard` 在无候选人时必须能渲染出口（有 `fillHref` 支持）；
+ *   ② `/mirror` 必须真的把 `fillHref` 传下去，且值指向 `/fill`。
+ */
+{
+  const gapCardSrc = readFileSync(join(here, "..", "components", "mirror", "GapCard.tsx"), "utf8");
+  const mirrorSrc = readFileSync(join(here, "..", "app", "(flow)", "mirror", "page.tsx"), "utf8");
+  const fillSrc = readFileSync(join(here, "..", "app", "(flow)", "fill", "page.tsx"), "utf8");
+
+  // ① /fill 页面本身必须存在且是可提交的（不是空壳）
+  if (!/提交补充/.test(fillSrc)) {
+    bad("/fill 页面里找不到「提交补充」—— 补充链路可能被改坏");
+  } else {
+    ok("/fill 仍是可提交的补充页（「提交补充」在）");
+  }
+
+  // ② GapCard 必须支持外部传入出口
+  const hasProp = /fillHref\??:\s*string/.test(gapCardSrc);
+  if (!hasProp) {
+    bad("GapCard 没有 fillHref 属性 —— 无候选人时又会变成只说明、不给出口");
+  } else {
+    ok("GapCard 支持 fillHref（无候选人时可给出出口）");
+  }
+
+  // ③ GapCard 的无候选人分支里必须真的把 link 渲染出来（而不是只声明属性）
+  const emptyBranch = gapCardSrc.slice(
+    gapCardSrc.indexOf("gap.candidates.length === 0"),
+    gapCardSrc.indexOf("gap.candidates.length === 0") + 900,
+  );
+  if (!/href=\{fillHref\}/.test(emptyBranch)) {
+    bad("GapCard 的无候选人分支没有渲染 fillHref 链接 —— 出口声明了却没用上");
+  } else {
+    ok("无候选人分支真的渲染了补充入口");
+  }
+
+  // ④ /mirror 必须把入口接上去，且指向 /fill
+  if (!/fillHref=/.test(mirrorSrc)) {
+    bad("/mirror 没有给 GapCard 传 fillHref —— /fill 又成了孤岛（本轮修复的正是这条）");
+  } else if (!/["']\/fill\?answerId=/.test(mirrorSrc)) {
+    bad("/mirror 传了 fillHref 但值不指向 /fill?answerId=");
+  } else {
+    ok("/mirror 把缺口出口接到 /fill?answerId=（并带上待补的那一篇）");
+  }
+
+  // ⑤ 反向：入口不能反过来落在已填的缺口上（否则重复引导）
+  if (/fillHref=\{[^}]*filledBy/.test(mirrorSrc)) {
+    bad("/mirror 的 fillHref 依赖 filledBy —— 已填缺口不该再引导补充");
+  } else {
+    ok("fillHref 不依赖 filledBy（由 GapCard 内部按 filledBy 决定是否显示）");
+  }
+
+  /**
+   * ⑥ 「查看 Mesh 变化」必须指向**真的会变的那张图**。
+   *
+   * 实测（2026-09-16）：/fill 提交后会承诺「Human Mesh 长出新的边」，
+   * 而那个链接当时指向 `/me?tab=mesh` —— 那张图走 `buildCorpusMesh(history)`，
+   * 只看关键词共现，**完全不读** `contributions` / `answers[].status === "human"` /
+   * `gap.filledBy`。补一条真人后它的「节点 / 关系」数字一个都没动，页面上也搜不到补充者名字。
+   *
+   * 真正长出真人节点的是**本场关系图**（`/mirror` 的 `buildMesh`，实测会多出 `g[role=button]`
+   * 且标签就是补充者）。所以链接必须落在 `/mirror#mesh`，且该锚点要真实存在。
+   */
+  const meshLinkOk = /href="\/mirror#mesh"/.test(fillSrc);
+  const anchorOk = /id="mesh"/.test(mirrorSrc);
+  const pointsToMe = /href="\/me\?tab=mesh"/.test(fillSrc);
+
+  if (pointsToMe) {
+    bad("「查看 Mesh 变化」仍指向 /me?tab=mesh —— 那张图不含真人补充，点了看不到任何变化");
+  } else if (!meshLinkOk) {
+    bad("「查看 Mesh 变化」没有指向 /mirror#mesh —— 承诺了「长出新的边」却没指向会变的那张图");
+  } else {
+    ok("「查看 Mesh 变化」指向 /mirror#mesh（真的会变的那张图）");
+  }
+  if (anchorOk) ok("/mirror 的本场关系图有 id=\"mesh\" 锚点，深链可用");
+  else bad("/mirror 的关系图缺少 id=\"mesh\" —— /mirror#mesh 深链会落到页顶");
+}
+
+console.log("\n" + "=".repeat(74));
 console.log(fail === 0 ? "全部通过（0 处问题）" : "发现 " + fail + " 处问题");
 console.log("=".repeat(74));
 process.exit(fail === 0 ? 0 : 1);
