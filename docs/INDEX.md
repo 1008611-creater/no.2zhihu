@@ -12,6 +12,7 @@
 | 3 | [prd.md](prd.md) | 产品是什么、给谁用、核心闭环、知乎能力映射 |
 | 4 | [skill-engineering.md](skill-engineering.md) | **Skill 工程总纲（唯一权威）**：分层模型、7 个 skill 索引、按任务路由表、读法与边界、组合纪律、审计记录、缺口清单 |
 | 5 | [threads/README.md](threads/README.md) | **线程状态板**：多线程协作机制 —— 开工前先读它，看有没有人正在改你要改的文件 |
+| 6 | [backlog.md](backlog.md) | **需求台账**：owner 提过什么要求、做完没有。**开工前查一下欠着什么** |
 
 > 技术决策看 [architecture.md](architecture.md)（唯一事实源）。
 > **只剩交付时**：直接看 [../DEPLOY.md](../DEPLOY.md)（三步）与 [acceptance.md](acceptance.md)（验收）。
