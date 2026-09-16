@@ -150,12 +150,17 @@ export function hydrateLibraryEntry(entry: LibraryEntry): MirrorQuestion {
   /**
    * 回答带回来的来源，按 skillId 归拢，稍后回填到 skill 上。
    *
-   * 为什么必须回填：镜像页的「证据时间轴」（`EvidenceOverview`）读的是
-   * `skill.sources`，它的标题写着「来自本次回答的实际记录」——
-   * 所以这里要放的正是**这一次检索回来的证据**。
+   * 为什么必须回填：`skill.sources` 的约定就是「**本次回答检索到的证据**」。
+   * 它的真实读者是：
+   *   · `app/(flow)/answer/[id]/page.tsx` —— 渲染「证据覆盖 N%」
+   *   · `lib/domain/mesh.ts` —— 关键词共现连线与真人候选
+   *
+   * ⚠️ `components/mirror/EvidenceOverview.tsx` 里也读它，但那个组件**全仓零引用
+   *（死组件）**（2026-09-16 核实：`grep -rn EvidenceOverview` 只有它自己和这里的注释）。
+   * 别再把「镜像页证据时间轴」当成它的存在理由 —— 那段话曾误导过两轮排查。
    *
    * 与人格语料的区别（2026-09-15 #52 之后人格语料已非空，别混淆）：
-   *   · `skill.sources`       = 本次回答检索到的证据 → 证据时间轴用它
+   *   · `skill.sources`          = 本次回答检索到的证据
    *   · `persona.corpus.sources` = 蒸馏该人格所用的语料 → `SkillCard` /
    *     `PersonaPopover` 直接读 `persona.corpus`，**不受这里影响**，两者各归各位。
    *
@@ -184,13 +189,25 @@ export function hydrateLibraryEntry(entry: LibraryEntry): MirrorQuestion {
     const persona = s.persona ? PERSONA_BY_HANDLE.get(s.persona.handle) : undefined;
     if (persona) {
       // 人格定义里有完整的 lens / keywords / tone，优先用它，别用裁剪版。
-      // 但 sources / confidence 要用**这次检索到的**，不能用人格语料派生出来的 ——
-      // `skillFromPersona` 的 confidence 来自 `corpus.sampleSize`（人格蒸馏质量），
-      // 而这个页面问的是「本次回答覆盖了多少可核对证据」，两者不是一回事。
+      //
+      // ⚠️ 但 `sources` 与 `confidence` **一律以回答侧为准，没有例外** ——
+      // 绝不能像 2026-09-16 之前那样写成
+      //   `sources.length ? { ...full, sources, confidence } : full`
+      // 那个「没有来源就整个用 full」的兜底会同时制造两个错误：
+      //
+      //   ① `skill.sources` 变成 `persona.corpus.sources`（蒸馏该人格用的语料）。
+      //      字段名与「本次证据」共用，`mesh.ts` 会把它当本次证据用 ——
+      //      issue #70（实测 1/22 场：`mirror-826745` 的 `persona:splitter`，
+      //      回答侧 0 条 / 技能侧 5 条，且那 5 条标题与当场问题毫无关系）。
+      //   ② `confidence` 保留人格蒸馏质量。`skillFromPersona` 的公式是
+      //      `0.4 + corpus.sampleSize * 0.015` —— 它衡量的是**人格蒸馏得好不好**，
+      //      不是本次证据覆盖。30 条样本 → 0.85，于是回答页出现
+      //      「证据覆盖 85%」而同一页的来源区写着「没有可核对的来源」。
+      //      这个矛盾是**用户可见**的，issue #70 只查了 mesh.ts、低估了它。
+      //
+      // `confidenceOf([]) === 0`，所以零来源时两个数字一起归零、与来源区一致。
       const full = skillFromPersona(persona);
-      const withEvidence: Skill = sources.length
-        ? { ...full, sources, confidence: confidenceOf(sources) }
-        : full;
+      const withEvidence: Skill = { ...full, sources, confidence: confidenceOf(sources) };
       return s.accent ? { ...withEvidence, accent: s.accent } : withEvidence;
     }
     // 找不到人格定义（公共人物视角 / 降级视角）时，用条目自称的信息兜一个最小 Skill。
