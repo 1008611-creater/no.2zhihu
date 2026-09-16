@@ -8,8 +8,29 @@
   - `components/mirror/GapCard.tsx` + `app/(flow)/mirror/page.tsx`（「邀请补充」改指向搬运区域）
   - `lib/store/mirror-store.tsx` / `lib/domain/types.ts`（`confirmed` 状态失去生产者 → 一并清理）
   - `lib/domain/handoff.ts`（邀请文案生成，纯函数）
-- **状态**：**开工中**（声明先行，避免与其他线程撞车）
-- **最后更新**：2026-09-16 18:00
+- **状态**：**已提 PR #96**（CI 全绿）—— 5 项全部落实，等审计线程合并
+- **最后更新**：2026-09-17 00:50
+
+## 交付摘要
+
+| 清单条 | 落实情况 |
+|---|---|
+| 3.1 | 删掉两处「我已在知乎发布」按钮 + `confirmHandoffFor` 的 UI 调用 + `published` 死字段；`confirmed` 状态随之没有生产者 |
+| 3.2 | 新增纯函数 `toInviteText()`；主按钮改为「复制邀请文案」，**不设 disabled**（清单原文：「不该以 status===human 为前置条件」） |
+| 3.3 | `INVITE_COPIED_FEEDBACK` + 局部态（**不改 mirror 状态**） |
+| 3.4 | `HANDOFF_BOUNDARY_SHORT` 逐字用清单原文；长版留在 `HANDOFF_NOTE` 与 `docs/api-audit.md` |
+| 3.5 | 搬运区域加 `id="handoff"`；入口改 `href="#handoff"`；新增 `inviteAnswerId` 支持按回答定位 |
+
+**验证**：`tsc` rc=0 ｜ `check:logic` 9 条全绿 ｜ `next build` rc=0
+｜ 新守卫 **§⑫**（编号避开 #87 的 §⑪）10 条断言、**6/6 负向验证**全拦
+｜ CDP 真机（注入真实 `square-library.json` 经 `hydrateLibraryEntry` 造数据，零额度）**6/6 + 3.3 点击反馈**
+
+## ⚠️ 本 PR 换过两次基线（值得其他线程注意）
+
+`scripts/check-square-crowd.mjs` 与 `app/(flow)/mirror/page.tsx` **被 #87 与 #95 先后改过**。
+第一次提交基于旧 main，会**静默回退掉 #87 的 96 行** —— 已重做两遍，并在提交前后各加断言核过
+「§⑪ 仍在」。**教训：提交前 `assert main == BASE`，提交后回读新树断言别人的改动还在。**
+
 
 ## 认领的是哪一块
 
