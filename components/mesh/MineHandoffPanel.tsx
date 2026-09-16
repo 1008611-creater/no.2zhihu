@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { zhihuQuestionUrl } from "@/lib/domain/handoff";
+import { collectSources, zhihuQuestionUrl } from "@/lib/domain/handoff";
 import { useMirror } from "@/lib/store/mirror-store";
 import type { AnswerDraft, MirrorQuestion } from "@/lib/domain/types";
 
@@ -42,16 +42,12 @@ function toItem(mirror: MirrorQuestion): Item | null {
   const body = answers.map((a) => `## ${a.skillName}\n\n${a.body.trim()}`).join("\n\n---\n\n");
 
   // 来源归属：分身回答里检索到的真实知乎来源，按票数排序去重。
-  const seen = new Set<string>();
-  const sources = ([] as Array<{ title: string; author: string; url: string; voteUp: number }>)
-    .concat(
-      ...answers.map((a) =>
-        (a.evidence ?? [])
-          .filter((e) => !!e.url && !seen.has(e.url) && (seen.add(e.url), true))
-          .map((e) => ({ title: e.title, author: e.author, url: e.url, voteUp: e.voteUp })),
-      ),
-    )
-    .sort((x, y) => y.voteUp - x.voteUp);
+  //
+  // 这里过去有一份手写的内联副本，只过滤了 `!e.url` 而没看作者名 ——
+  // 而这段文字是用户**直接粘贴到知乎发布**的，空署名贴出去就是无出处引用（铁律 3）。
+  // 复用 lib/domain/handoff.ts 的 collectSources()，与 /mirror 的搬运面板同一口径，
+  // 免得两处各判一次、迟早漂移成「一个面板带署名、另一个不带」。
+  const sources = collectSources({ ...mirror, answers });
 
   const parts = [body];
   if (sources.length > 0) {
