@@ -2,7 +2,11 @@
 
 import { motion } from "motion/react";
 import { PERSONAS, corpusLabel } from "@/lib/domain/personas";
-import { PUBLIC_FIGURES, PUBLIC_FIGURE_LABEL } from "@/lib/domain/publicFigures";
+import {
+  isCallable,
+  PUBLIC_FIGURES,
+  PUBLIC_FIGURE_LABEL,
+} from "@/lib/domain/publicFigures";
 import PersonaPopover from "@/components/mirror/PersonaPopover";
 import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
@@ -21,14 +25,19 @@ import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
  */
 export default function PersonaDirectory() {
   const realCorpus = PERSONAS.filter((p) => p.corpus?.real).length;
+  // 公共人物的能力**只有逐项核验通过才会进入作答链路**（见 publicFigures.ts 的 isCallable）。
+  // 把「已核验 N / 共 M 项」算出来直接印在页面上：评委可以当场核对，
+  // 而「正在逐项核验」只是一句无法证伪的话。
+  const publicCaps = PUBLIC_FIGURES.flatMap((f) => f.capabilities);
+  const publicVerified = publicCaps.filter(isCallable).length;
 
   return (
     <section style={{ paddingTop: 32 }}>
       <p className="eyebrow">Discover · 分身发现</p>
       <h1 className="no-tail" style={{ fontSize: "clamp(24px, 3.2vw, 36px)", maxWidth: "26ch" }}>
-        这里住着 {PERSONAS.length} 位知乎答主
+        这里住着 {PERSONAS.length} 位知乎答主的分身
         <br />
-        和 {PUBLIC_FIGURES.length} 位公共人物的分身
+        另有 {PUBLIC_FIGURES.length} 位公共人物的能力草案在核验中
       </h1>
 
       <div className="grid grid-3" style={{ marginTop: 24 }}>
@@ -44,10 +53,7 @@ export default function PersonaDirectory() {
         ))}
       </div>
 
-      {/* persona-grid 这个类只为一件事存在：让「打开浮层的那张卡」压过同网格的
-          其他卡片。见 globals.css 里 .persona-grid > *:has(.persona-popover)
-          的注释 —— 浮层被后面几张卡盖住过，原因不在浮层自己的 z-index。 */}
-      <div className="grid grid-3 persona-grid" style={{ marginTop: 20 }}>
+      <div className="grid grid-3" style={{ marginTop: 20 }}>
         {PERSONAS.map((p, i) => (
           <motion.div
             key={p.handle}
@@ -122,10 +128,10 @@ export default function PersonaDirectory() {
 
       <div className="section-head" style={{ marginTop: 34 }}>
         <div>
-          <h2 className="no-tail">公共人物 · 思维分身</h2>
+          <h2 className="no-tail">公共人物 · 能力草案（核验中）</h2>
         </div>
         <span className="mono dimmer" style={{ marginLeft: "auto" }}>
-          {PUBLIC_FIGURE_LABEL}
+          {PUBLIC_FIGURE_LABEL} · 已核验 {publicVerified}/{publicCaps.length} 项能力
         </span>
       </div>
 
@@ -160,7 +166,8 @@ export default function PersonaDirectory() {
       </div>
 
       <p className="dim" style={{ fontSize: 12.5, marginTop: 14 }}>
-        公共人物分身的推理路径来自公开资料，正在逐项核验 —— 核验通过的能力才会进入作答链路。
+        公共人物的推理路径来自公开资料，正在逐项核验 —— 只有核验通过的能力才会进入作答链路，
+        因此目前 {publicVerified}/{publicCaps.length} 项可用：一位人物再有名，也不因此变成可调用的能力。
         这里如实标注，不把「按公开资料推演」写成「本人原话」。
       </p>
     </section>

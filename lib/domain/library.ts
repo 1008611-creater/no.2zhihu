@@ -12,7 +12,6 @@
  * 改 `slim()` 必须同步改这里，否则会出现「字段在库里、读不出来」的静默缺失。
  */
 
-import { confidenceOf, splitSources } from "./evidence";
 import { PERSONA_BY_HANDLE } from "./personas";
 import { skillFromPersona } from "./skills";
 import type {
@@ -33,24 +32,6 @@ export interface LibrarySkill {
   persona?: { handle: string; displayName: string };
 }
 
-/**
- * 库里的一条来源。字段对齐 `SkillSource`，但**不含正文** ——
- * 正文是体积最大的一块，而 AGENTS.md §1 铁律 3 要的是「来源与作者」。
- *
- * ⚠️ `author` 允许为空串：开放平台对**同一条内容**可能一次返回作者名、一次返回空串
- *（实测：`question/482967753/answer/2096000577` 两次请求，一次 "Jackie Lee"、一次空）。
- * 所以空串只能理解为「本次没取到署名」，**不得**用 `"匿名用户"` 顶替 ——
- * 那会对着一位实名作者说他是匿名，属于编造（铁律 2）。
- * 展示与否交给 `isDisplayableSource()` 判定。
- */
-export interface LibrarySource {
-  title: string;
-  author: string;
-  url: string;
-  voteUp: number;
-  editTime: number;
-}
-
 export interface LibraryAnswer {
   id: string;
   skillId: string;
@@ -64,8 +45,9 @@ export interface LibraryAnswer {
   round?: number;
   replyToName?: string;
   evidenceCount?: number;
-  /** 检索到的全部来源（含署名/链接暂缺的），展示与否由 `isDisplayableSource` 决定。 */
-  sources?: LibrarySource[];
+  evidenceTitles?: string[];
+  /** 真实来源（标题 / 作者 / 链接 / 赞同）。构建时最多留 2 条，正文留在仓外。 */
+  evidence?: Array<{ title: string; author?: string; url?: string; voteUp?: number }>;
 }
 
 export interface LibraryGap {
@@ -122,11 +104,9 @@ export function statsOf(entry: LibraryEntry): LibraryStats {
 
   const answers = entry.answers ?? [];
   const sourceCount = answers.reduce((n, a) => {
-    // 只数**可核对**的来源（作者名与链接齐全），与回答页实际展示的条数一致 ——
-    // 否则会出现「右栏写 195 条来源、回答页只列得出 190 条」这种自相矛盾。
-    // `evidenceCount` 是构建时的**检索**条数，只在老的库文件（没有 sources）里当兜底。
-    if (a.sources?.length) return n + splitSources(a.sources).displayable.length;
-    const c = a.evidenceCount ?? 0;
+    // evidenceCount 是构建时的计数；缺失时退回标题数组长度。
+    // 两个都没有就记 0 —— 不猜、不补位。
+    const c = a.evidenceCount ?? a.evidenceTitles?.length ?? 0;
     return n + (Number.isFinite(c) && c > 0 ? c : 0);
   }, 0);
 
@@ -147,51 +127,12 @@ export function statsOf(entry: LibraryEntry): LibraryStats {
  * 没必要为此付首屏代价。这里按需重建，字段与 `build-library.mjs` 对齐。
  */
 export function hydrateLibraryEntry(entry: LibraryEntry): MirrorQuestion {
-  /**
-   * 回答带回来的来源，按 skillId 归拢，稍后回填到 skill 上。
-   *
-   * 为什么必须回填：镜像页的「证据时间轴」（`EvidenceOverview`）读的是
-   * `skill.sources`，它的标题写着「来自本次回答的实际记录」——
-   * 所以这里要放的正是**这一次检索回来的证据**。
-   *
-   * 与人格语料的区别（2026-09-15 #52 之后人格语料已非空，别混淆）：
-   *   · `skill.sources`       = 本次回答检索到的证据 → 证据时间轴用它
-   *   · `persona.corpus.sources` = 蒸馏该人格所用的语料 → `SkillCard` /
-   *     `PersonaPopover` 直接读 `persona.corpus`，**不受这里影响**，两者各归各位。
-   *
-   * 不回填的后果是**同一页自相矛盾**：回答页写着「3 条真实知乎来源」，
-   * 镜像页写着「当前没有可核对的来源」。
-   */
-  const sourcesBySkill = new Map<string, LibrarySource[]>();
-  for (const a of entry.answers ?? []) {
-    if (a.sources?.length) sourcesBySkill.set(a.skillId, a.sources);
-  }
-
-  /** 把一条回答的来源转成 `SkillSource`；正文不进库，故 excerpt 为空。 */
-  const toSkillSources = (list: LibrarySource[] | undefined) =>
-    (list ?? []).map((s) => ({
-      title: s.title,
-      author: s.author,
-      url: s.url,
-      excerpt: "",
-      voteUp: s.voteUp ?? 0,
-      editTime: s.editTime ?? 0,
-      confidence: 0,
-    }));
-
   const skills: Skill[] = entry.skills.map((s, i) => {
-    const sources = toSkillSources(sourcesBySkill.get(s.id));
     const persona = s.persona ? PERSONA_BY_HANDLE.get(s.persona.handle) : undefined;
     if (persona) {
       // 人格定义里有完整的 lens / keywords / tone，优先用它，别用裁剪版。
-      // 但 sources / confidence 要用**这次检索到的**，不能用人格语料派生出来的 ——
-      // `skillFromPersona` 的 confidence 来自 `corpus.sampleSize`（人格蒸馏质量），
-      // 而这个页面问的是「本次回答覆盖了多少可核对证据」，两者不是一回事。
       const full = skillFromPersona(persona);
-      const withEvidence: Skill = sources.length
-        ? { ...full, sources, confidence: confidenceOf(sources) }
-        : full;
-      return s.accent ? { ...withEvidence, accent: s.accent } : withEvidence;
+      return s.accent ? { ...full, accent: s.accent } : full;
     }
     // 找不到人格定义（公共人物视角 / 降级视角）时，用条目自称的信息兜一个最小 Skill。
     return {
@@ -203,8 +144,8 @@ export function hydrateLibraryEntry(entry: LibraryEntry): MirrorQuestion {
       keywords: [],
       tone: [],
       accent: s.accent ?? ACCENTS[i % ACCENTS.length],
-      sources,
-      confidence: confidenceOf(sources),
+      sources: [],
+      confidence: 0,
       supplementary: true,
     } satisfies Skill;
   });
@@ -216,15 +157,22 @@ export function hydrateLibraryEntry(entry: LibraryEntry): MirrorQuestion {
     accent: a.accent ?? ACCENTS[i % ACCENTS.length],
     handle: a.handle,
     body: a.body,
-    /**
-     * 来源：带上库里存的**真名与真链接**。
-     *
-     * ⚠️ 署名/链接缺失的条目照样还原（不在这里丢数据），由消费端用
-     * `isDisplayableSource()` 决定是否渲染成卡片并如实报出未归属条数。
-     * 绝不能拿 `skillName` 冒充来源作者 —— 那是张冠李戴（铁律 3）。
-     * 正文（excerpt）不进库，所以这里恒为空串，UI 不得渲染一个孤零零的「…」。
-     */
-    evidence: toSkillSources(a.sources),
+    // 证据正文没有随 JSON 下发，但**作者与链接有**（见 build-library.mjs 的 slim()）——
+    // 它们是把证据卡片渲染成「可点回原文」的唯一依据。
+    // 老数据只有标题时退回标题，且 author / url 一律留空：
+    // ⚠️ 绝不能拿 skillName 冒充来源作者（那是张冠李戴，违反保留来源的硬要求）。
+    evidence: (a.evidence?.length
+      ? a.evidence
+      : (a.evidenceTitles ?? []).map((title) => ({ title, author: "", url: "", voteUp: 0 }))
+    ).map((e) => ({
+      title: e.title,
+      author: e.author ?? "",
+      url: e.url ?? "",
+      excerpt: "",
+      voteUp: e.voteUp ?? 0,
+      editTime: 0,
+      confidence: 0,
+    })),
     createdAt: a.createdAt ?? entry.createdAt,
     status: a.status ?? "ai",
     generatedBy: a.generatedBy ?? "retrieval",
