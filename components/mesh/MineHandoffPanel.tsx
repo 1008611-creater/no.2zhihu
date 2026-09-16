@@ -101,7 +101,7 @@ export default function MineHandoffPanel({
   /** 本机全部镜像问题 —— 搬运清单覆盖「我的分身答过的所有问题」。 */
   history?: MirrorQuestion[];
 }) {
-  const { markHandoffOpenedFor, confirmHandoffFor } = useMirror();
+  const { markHandoffOpenedFor } = useMirror();
   const [copied, setCopied] = useState<string | null>(null);
 
   /** 清单来源：优先用全量 history；只有单场数据时退回单场。 */
@@ -118,7 +118,9 @@ export default function MineHandoffPanel({
       answers: items.reduce((n, i) => n + i.answers.length, 0),
       chars: items.reduce((n, i) => n + i.body.length, 0),
       sources: items.reduce((n, i) => n + i.sources, 0),
-      published: items.filter((i) => i.mirror.handoff?.status === "confirmed").length,
+      // 3.1：`published` 原本按 `handoff.status === "confirmed"` 计数 —— 那个状态
+      // 已随「我已在知乎发布」按钮一起移除（产品无从得知用户有没有真的发出去）。
+      // 留一个恒为 0 的字段没有意义，故整个去掉；界面若需要数字请另找真实来源。
     }),
     [items],
   );
@@ -167,7 +169,7 @@ export default function MineHandoffPanel({
       ) : (
         <div style={{ display: "grid", gap: 14 }}>
           {items.map((item) => {
-            const confirmed = item.mirror.handoff?.status === "confirmed";
+            // 3.1：不再有 confirmed 分支（那一档状态已无生产者）
             const opened = item.mirror.handoff?.status === "opened";
             const isOpenCopied = copied === "open:" + item.mirror.id;
             return (
@@ -176,8 +178,8 @@ export default function MineHandoffPanel({
                   style={{ display: "flex", gap: 12, alignItems: "baseline", flexWrap: "wrap", marginBottom: 10 }}
                 >
                   <strong style={{ fontSize: 15, marginRight: "auto" }}>{item.mirror.title}</strong>
-                  <span className={"chip " + (confirmed ? "chip-green" : opened ? "chip-blue" : "")}>
-                    {confirmed ? "已发布" : opened ? "已打开知乎" : "可以搬运"}
+                  <span className={"chip " + (opened ? "chip-blue" : "")}>
+                    {opened ? "已打开知乎" : "可以搬运"}
                   </span>
                 </div>
 
@@ -198,13 +200,6 @@ export default function MineHandoffPanel({
                       : item.questionUrl
                         ? "复制正文并打开知乎问题页"
                         : "复制正文并打开知乎"}
-                  </button>
-                  <button
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => confirmHandoffFor(item.mirror.id)}
-                    disabled={confirmed}
-                  >
-                    {confirmed ? "已标记为已发布" : "我已在知乎发布"}
                   </button>
                   {item.questionUrl && (
                     <a

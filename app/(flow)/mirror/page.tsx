@@ -33,7 +33,11 @@ import { SHIFT } from "@/lib/motion/tokens";
 export default function MirrorPage() {
   const { mirror, ready, appendInvite, appendReplies } = useMirror();
   const [step, setStep] = useState(FLOW_STATES.length);
-  const [invited, setInvited] = useState<string | null>(null);
+  /*
+   * 3.5：记「被邀请的具体那位」而不只是 id —— 界面要显示他的名字，
+   * 搬运区域还要按他定位（「同一份当前回答的搬运区域」）。
+   */
+  const [invited, setInvited] = useState<{ id: string; name: string } | null>(null);
   const [drawerOpen, setDrawerOpen] = useInviteUrl();
   const [inviteNote, setInviteNote] = useState<string | null>(null);
 
@@ -202,7 +206,10 @@ export default function MirrorPage() {
               key={g.id}
               gap={g}
               index={i}
-              onInvite={(gap) => setInvited(gap.candidates[0]?.id ?? null)}
+              onInvite={(gap) => {
+                const c = gap.candidates[0];
+                setInvited(c ? { id: c.id, name: c.name } : null);
+              }}
               /*
                * 「没有匹配到真人」时也要有一条真实的路可走。
                * 过去这里不给出口，于是缺口卡片最需要人参与的那一档反而是死胡同 ——
@@ -235,11 +242,19 @@ export default function MirrorPage() {
             <p className="eyebrow">Human invite</p>
             <h2 className="no-tail">真人邀请已生成</h2>
             <p className="lede" style={{ marginTop: 12 }}>
-              这个缺口 AI 补不了。进入补充页，用「最小填空」或「完整编辑」把这一段补完，
-              补完的内容会并进这一场的最终稿。
+              {invited.name} 这个缺口 AI 补不了。先在下面的搬运区域**复制一段邀请文案**
+              发给他本人；他补完的那一段会并进这一场的最终稿。
             </p>
             <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
-              <Link className="btn btn-primary" href="/fill">进入真人补充页</Link>
+              {/*
+                3.5：「邀请补充」入口应进入**当前回答的搬运区域**。
+                所以主入口指向 #handoff，并把被邀请的这位传过去，
+                让搬运区域默认就准备好他的邀请文案。
+                /fill（真人补充页）保留为次要入口 —— 那是「真人当面补」的另一条路，
+                且已通过验收（见 #79），本清单没要求删。
+              */}
+              <a className="btn btn-primary" href="#handoff">去搬运区域复制邀请文案</a>
+              <Link className="btn btn-ghost" href="/fill">我自己替他补充</Link>
               <button className="btn btn-ghost" onClick={() => setInvited(null)}>稍后再说</button>
             </div>
           </div>
