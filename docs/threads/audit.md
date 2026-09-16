@@ -8,7 +8,7 @@
   **不改任何业务代码**（`app/` `components/` `lib/`）
   （**2026-09-15 晚有一次已结束的例外，见下**）
 - **状态**：常驻
-- **最后更新**：2026-09-16 14:25
+- **最后更新**：2026-09-16 15:05
 - **职责**：审计内容 → 合并 → 线上复验。**唯一的合并与上线决策者**；
   开发线程只提 PR，不合并、不部署。
 - **不做什么**：不替开发线程改业务代码；不机械解语义冲突（会在 PR 上写清成因与建议解法）
@@ -175,13 +175,40 @@ dev-square-source 线程收工时移交本线程两条，裁决如下 —— **�
 → 判据：说「之前是 X」必须 `git show <base>:<path>` 看过 X；说「会导致 Y」必须在历史/日志里找到过 Y。
 两条都已写进 Skill `multithread-pr-audit-deploy`。
 
-### 顺手记下的一个 diff 假象（会误导 review 判断风险）
+### 顺手记下的一个 diff 假象 —— 并更正我先前的解释（2026-09-16 15:05）
 
-`#69` 页面显示 `+211/-198`，其中 `docs/product-plan.md` 一项就占 `+191/-190`；
-`git diff --ignore-cr-at-eol` 后**真实内容改动只有 3 行** —— 其余是 **CRLF→LF 行尾转换**
-（该文件入库 blob 本身就是 CRLF，而 `.gitattributes` 有 `* text=auto eol=lf`）。
-→ **审大 diff 先跑一次 `--ignore-cr-at-eol`**，否则会误判「这 PR 大改、风险高」。
+`#69` 的 PR 视图显示 `+211/-198`，其中 `docs/product-plan.md` 一项就占 `+191/-190`。
+我当时的解释是「CRLF→LF 行尾转换」——**这个解释是错的，已更正**。
 
+实测三个端点的行尾与行数：
+
+| 端点 | 行尾 | 行数 | 说明 |
+|---|---|---|---|
+| `c9dd4938`（PR **创建时**的 base） | **LF** | 178 | 陈旧端点 |
+| `db29b673`（真正的 merge base） | **CRLF** | 191 | 权威 |
+| `e4c4475c`（head） | **CRLF** | 192 | |
+
+→ **方向说反了**：不是「CRLF→LF」，而是陈旧的 base 是 LF、head 与 merge-base 都是 CRLF。
+更关键的是：**这不是 PR 转换了行尾**，而是
+**`pulls/<N>/files` 是按 PR 创建时的 `base.sha` 去比 head 的** ——
+期间 main 把同一个文件从 LF/178 行改成了 CRLF/191 行，于是每一行都算「改动」。
+
+**该 PR 的真实改动**：squash 提交 `7fe2fac2` 的 stats 是 **`+23/-10`**，
+其中 `docs/product-plan.md` 只有 **`+3/-2`** —— 与我先前说的「14 行插入」也不符。
+
+**正确做法**：判**已合并** PR 的真实改动，读它的合并提交：
+
+```bash
+gh api repos/<o>/<r>/pulls/<N> --jq '.merge_commit_sha'
+gh api repos/<o>/<r>/commits/<merge_sha> --jq '.files[] | "\(.filename) +\(.additions) -\(.deletions)"'
+```
+
+判**未合并**的 PR，用 `compare/<merge-base>...<head>`（`git merge-base`，不是 `base.sha`）。
+这与 `pr-flow-check.yml` 的缺陷（#66）**同源**：都把 PR 创建时的 base 当成了比较基准。
+
+**教训：先把「两个端点分别是谁」钉死，再解释 diff 的大小。**
+同一天我在这一点上错了两次（先说是行尾转换、方向还反了；又说是 14 行插入），
+两次都不是现象判断错，而是**端点选错**。
 ### 线上终态（本轮结束时）
 
 部署 HEAD `e9a8e25e`（#72）、在途 PR 0、`NRestarts=0`、8 路由 7×200 + 401、来源计数三处同数 190。
