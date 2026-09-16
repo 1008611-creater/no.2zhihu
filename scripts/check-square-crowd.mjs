@@ -27,7 +27,7 @@ const { excerptOf, metaOf, sourceFromLibrary, toBroadcastItem } = await import(
   "../lib/domain/broadcast.ts"
 );
 const { statsOf, hydrateLibraryEntry } = await import("../lib/domain/library.ts");
-const { splitSources } = await import("../lib/domain/evidence.ts");
+const { splitSources, confidenceOf: confidenceOfOf } = await import("../lib/domain/evidence.ts");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, "..", "public", "square-library.json"), "utf8"));
@@ -319,6 +319,104 @@ for (const e of entries) {
 }
 if (hydratedMismatch === 0) {
   ok("库 → hydrate 往返一致，共还原出 " + hydratedEvidence + " 条可核对来源（含分身侧来源）");
+}
+
+console.log("\n" + "=".repeat(74));
+console.log("⑨ skill.sources / confidence 不得回落到人格语料（issue #70 的护栏）");
+console.log("=".repeat(74));
+/**
+ * 为什么单独立一节：
+ *
+ * `skill.sources` 的约定是「**本次回答检索到的证据**」，但 `hydrateLibraryEntry`
+ * 曾经写成「回答侧有来源才覆盖，没有就整个用 `skillFromPersona` 的产物」——
+ * 而那个产物里带的是 `persona.corpus.sources`（**蒸馏该人格用的语料**）。
+ * 于是某位答主一篇来源都没检索到时：
+ *
+ *   ① `skill.sources` = 人格语料（`mesh.ts` 会把它当本次证据算连线与真人候选）
+ *   ② `confidence`    = 人格蒸馏质量（公式 `0.4 + sampleSize * 0.015`）
+ *      → 回答页出现「证据覆盖 85%」而同一页来源区写着「没有可核对的来源」
+ *
+ * 实测全库 1/22 场命中（`mirror-826745` 的 `persona:splitter`：回答侧 0 条 / 技能侧 5 条）。
+ *
+ * 断言分两层：
+ *   A. **合成用例**（与库数据无关，永远会跑）——钉住契约本身；
+ *   B. **真实库数据**（有则核对、无则说明）——确认线上数据也满足该契约。
+ * 只做 B 是不行的：哪天库文件里恰好没有零来源的答主，B 就变成了空断言。
+ */
+
+// 本脚本原本只有 ok/bad，这里补两个断言助手（与 eq/truthy 等价）
+const eqNum = (actual, expected, label) => {
+  if (actual === expected) ok(label);
+  else bad(label + "：期望 " + expected + "，实得 " + actual);
+};
+const isTrue = (cond, label) => {
+  if (cond) ok(label);
+  else bad(label + "（应为真）");
+};
+
+// ---------- A. 合成用例：零来源不得回落到人格语料 ----------
+{
+  const { PERSONAS } = await import("../lib/domain/personas/index.ts");
+  const sample = PERSONAS.find((x) => x.corpus?.real && (x.corpus.sources?.length ?? 0) > 0);
+  if (!sample) {
+    bad("找不到「语料非空」的真实答主做合成用例，本节守卫失效");
+  } else {
+    const hid = sample.handle;
+    const fakeEntry = {
+      id: "unit-zero-source",
+      title: "单元用例：该答主一篇来源都没检索到",
+      createdAt: 0,
+      routing: { intent: "测试", summary: "测试" },
+      skills: [{ id: `persona:${hid}`, name: sample.displayName, kind: "persona", persona: { handle: hid, displayName: sample.displayName } }],
+      answers: [{ id: "a-zero", skillId: `persona:${hid}`, skillName: sample.displayName, body: "正文。", sources: [] }],
+      gaps: [],
+    };
+    const q = hydrateLibraryEntry(fakeEntry);
+    const sk = q.skills[0];
+    // 这个用例本身要成立：该人格的语料确实非空（否则回落到空数组，测不出东西）
+    if ((sample.corpus.sources?.length ?? 0) === 0) {
+      bad("合成用例失效：该答主语料为空，回落与正确实现不可区分");
+    } else {
+      eqNum(sk.sources.length, 0, `零来源的答主 skill.sources 为空（人格语料 ${sample.corpus.sources.length} 条不得顶替）`);
+      eqNum(sk.confidence, 0, "零来源的答主 confidence 为 0（不得回落到人格蒸馏质量）");
+
+      // 反向对照：有来源时必须用**回答侧**的，而不是人格语料
+      const fake2 = { ...fakeEntry, answers: [{ id: "a1", skillId: `persona:${hid}`, skillName: sample.displayName, body: "正文。", sources: [
+        { title: "本次检索到的来源", author: "某作者", url: "https://www.zhihu.com/question/1/answer/1", voteUp: 1, editTime: 0 },
+      ] }] };
+      const sk2 = hydrateLibraryEntry(fake2).skills[0];
+      eqNum(sk2.sources.length, 1, "有来源时 skill.sources 用回答侧的 1 条（不是人格语料）");
+      isTrue(sk2.sources[0].title === "本次检索到的来源", "取到的确实是回答侧那条（标题可核对）");
+      eqNum(sk2.confidence, confidenceOfOf(sk2.sources), "confidence 由本次来源算出");
+    }
+  }
+}
+
+// ---------- B. 真实库数据：有零来源答主则逐位核对 ----------
+{
+  let checked = 0;
+  let offenders = 0;
+  for (const e of entries) {
+    const q = hydrateLibraryEntry(e);
+    for (const sk of q.skills) {
+      const answerSide = (e.answers ?? [])
+        .filter((a) => a.skillId === sk.id)
+        .reduce((n, a) => n + (a.sources ?? []).length, 0);
+      if (answerSide !== 0) continue;
+      checked++;
+      if (sk.sources.length !== 0 || sk.confidence !== 0) {
+        offenders++;
+        bad(
+          `answer 侧 0 条来源，但 skill.sources=${sk.sources.length} / confidence=${sk.confidence}` +
+            ` @ ${e.id.slice(0, 12)} / ${sk.name}（疑似回落到人格语料）`,
+        );
+      }
+    }
+  }
+  if (offenders === 0) {
+    ok(`真实库数据：${checked} 个「零来源」分身，sources 与 confidence 都为 0` +
+      (checked === 0 ? "（当前库里没有这种样本，契约由上面的合成用例保证）" : ""));
+  }
 }
 
 console.log("\n" + "=".repeat(74));
