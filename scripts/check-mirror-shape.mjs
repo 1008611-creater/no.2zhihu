@@ -18,9 +18,9 @@
  */
 
 import { register } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync, statSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, extname, join, relative } from "node:path";
 
 // 被测模块必须动态 import —— 见 scripts/_ts-hook.mjs 的注释。
 register(new URL("./_ts-hook.mjs", import.meta.url));
@@ -206,6 +206,179 @@ else {
   else ok("回应构造带 round: 1（会渲染进「互相回应」区）");
   if (!/status:\s*"ai"/.test(replyBlock)) bad("回应构造里没有 status —— 卡片状态标签会显示为空");
   else ok("回应构造带 status: \"ai\"");
+}
+
+/* ========================================================================== */
+/**
+ * ⑤ 来源计数口径必须只有一套（2026-09-15 #53 之后补的守卫）。
+ *
+ * 当时把「只数可核对来源」统一到了 splitSources()，但漏了镜像页顶栏那一处：
+ * 它仍是 `skills.reduce(s => s.sources.length)`，把署名/链接缺失的条目也数进去
+ * （全库 195 条里有 5 条如此）。结果就是同一场讨论，顶栏写 9 条、回答页只列得出 8 条。
+ * 这类不一致**不报错、不崩**，只会让人怀疑数字是编的 —— 只能靠源码断言钉住。
+ */
+const mirrorPageSrc = readFileSync(join(here, "..", "app", "(flow)", "mirror", "page.tsx"), "utf8");
+if (!mirrorPageSrc.includes("条真实知乎来源")) {
+  bad("镜像页找不到「条真实知乎来源」这处统计，守卫失效（文案被改了？）");
+} else {
+  // 统计值必须来自 splitSources().displayable.length —— 这是「只数可核对来源」的唯一入口。
+  if (!/splitSources\([^)]*\)\.displayable\.length/.test(mirrorPageSrc)) {
+    bad("镜像页顶栏的来源统计没走 splitSources().displayable.length —— 会与回答页列出的条数不一致");
+  } else ok("镜像页顶栏的来源统计走 splitSources（与回答页同口径）");
+  if (!/from "@\/lib\/domain\/evidence"/.test(mirrorPageSrc)) {
+    bad("镜像页没有从 lib/domain/evidence 引入 splitSources");
+  } else ok("镜像页从 lib/domain/evidence 引入 splitSources");
+  if (/skills\.reduce\(\(a,\s*s\)\s*=>\s*a\s*\+\s*s\.sources\.length/.test(mirrorPageSrc)) {
+    bad("镜像页仍存在未过滤的 skills.reduce(sources.length) 计数");
+  } else ok("镜像页已无未过滤的 sources.length 计数");
+}
+
+/* ========================================================================== */
+/**
+ * ⑥ `lib/zhihu/` 每个文件首行必须 `import "server-only"`（AGENTS.md §2 明文规则）。
+ *
+ * 为什么值得一条守卫：2026-09-16 核查发现 `cache.ts` / `errors.ts` / `types.ts`
+ * 三个文件漏了这一行 —— 规则写在文档里、没人机械检查，就会一点点烂掉。
+ * 这三个文件当时都没有真的泄漏（只被 route handler 与 `import type` 引用），
+ * 但 `types.ts` 是被**客户端组件**（`FeedStream.tsx`）以 `import type` 引入的：
+ * 类型位置会被编译期擦除，所以加了也安全 —— 已用完整 `next build` 实测确认
+ * （客户端 bundle 里既无知乎域名也无密钥）。哪天有人把它改成**值引用**，
+ * server-only 会立刻在构建期报错，这正是我们要的护栏。
+ */
+const ZHIHU_DIR = join(here, "..", "lib", "zhihu");
+const zhihuFiles = readdirSync(ZHIHU_DIR).filter((f) => f.endsWith(".ts"));
+if (zhihuFiles.length < 5) {
+  bad("lib/zhihu 下只找到 " + zhihuFiles.length + " 个 ts 文件，守卫失效（目录被改？）");
+} else {
+  const missing = zhihuFiles.filter((f) => {
+    const first = readFileSync(join(ZHIHU_DIR, f), "utf8").split("\n")[0].trim();
+    return !/^import\s+["']server-only["'];?$/.test(first);
+  });
+  if (missing.length) {
+    bad("lib/zhihu 下这些文件首行缺 server-only：" + missing.join("、"));
+  } else {
+    ok("lib/zhihu 下 " + zhihuFiles.length + " 个文件首行都有 server-only");
+  }
+}
+
+/* ========================================================================== */
+/**
+ * ⑦ 来源署名只许如实、不许伪造（2026-09-16 补的守卫）。
+ *
+ * 背景：`item.AuthorName ?? "匿名用户"` 这个写法在仓库里存在过**两处**
+ *（`lib/server/mirror.ts` 与 `lib/server/persona.ts`）。它错在两点：
+ *   · `??` 只兜 null/undefined，而上游对**同一条内容**可能返回空串
+ *     （实测同一 answer 两次请求分别得到 "Jackie Lee" 与 ""）→ 空串照样穿过去，
+ *     渲染成一个空白胶囊；
+ *   · 就算兜住了，写「匿名用户」也是**编造** —— 那条内容的作者并不是匿名的，
+ *     是本次没取到署名（铁律 2）。
+ * 2026-09-15 修了 mirror 那处（#53），2026-09-16 才发现 persona 那处还在，
+ * 另有搬运稿两处只过滤 url 不看作者名。同一件事写多遍就会有这种漏 ——
+ * 所以下面同时断言「判据只有一个入口」。
+ */
+console.log("=".repeat(74));
+console.log("⑦ 来源署名只许如实、不许伪造");
+console.log("=".repeat(74));
+
+// A. 行为断言：collectSources() 必须剔除署名不全的条目。
+{
+  const mk = (id, author, url, title = "标题") => ({
+    id: `ans-${id}`,
+    skillId: `sk-${id}`,
+    skillName: "测试分身",
+    body: "正文",
+    status: "ai",
+    evidence: [{ title, author, url, excerpt: "摘录", voteUp: 1, editTime: 0, confidence: 0.8 }],
+  });
+
+  const good = collectSources({ answers: [mk("1", "半佛仙人", "https://www.zhihu.com/question/1/answer/1")] });
+  eq(good.length, 1, "正常来源（标题+作者+链接齐全）应被收录");
+
+  const noAuthor = collectSources({ answers: [mk("2", "", "https://www.zhihu.com/question/2/answer/2")] });
+  eq(noAuthor.length, 0, "作者名为空串的来源必须被剔除（不得渲染空署名）");
+
+  const blankAuthor = collectSources({ answers: [mk("3", "   ", "https://www.zhihu.com/question/3/answer/3")] });
+  eq(blankAuthor.length, 0, "作者名只有空白的来源必须被剔除");
+
+  const noUrl = collectSources({ answers: [mk("4", "半佛仙人", "")] });
+  eq(noUrl.length, 0, "链接为空的来源必须被剔除（否则渲染出点不动的空链接）");
+
+  const noTitle = collectSources({ answers: [mk("5", "半佛仙人", "https://www.zhihu.com/question/5/answer/5", "")] });
+  eq(noTitle.length, 0, "标题为空的来源必须被剔除");
+
+  const mixed = collectSources({
+    answers: [
+      mk("6", "张佳玮", "https://www.zhihu.com/question/6/answer/6"),
+      mk("7", "", "https://www.zhihu.com/question/7/answer/7"),
+      mk("8", "贱贱", "https://www.zhihu.com/question/8/answer/8"),
+    ],
+  });
+  eq(mixed.length, 2, "混杂输入只剔除不合格的 1 条，其余 2 条必须保留");
+  truthy(mixed.every((x) => x.author.trim() && x.url.trim()), "留下的每一条都带署名与链接");
+
+  const noneOk = collectSources({
+    answers: [mk("9", "", "https://www.zhihu.com/question/9/answer/9")],
+  });
+  eq(noneOk.length, 0, "全部不合格 → 返回空数组（如实降级，不编造一条来源）");
+}
+
+// B. 源码断言：假署名兜底不得回潮。
+{
+  const walk = (dir, out = []) => {
+    for (const name of readdirSync(dir)) {
+      if (["node_modules", ".next", ".git", ".tools", ".personas-raw"].includes(name)) continue;
+      const p = join(dir, name);
+      if (statSync(p).isDirectory()) walk(p, out);
+      else if ([".ts", ".tsx", ".mjs", ".js"].includes(extname(p))) out.push(p);
+    }
+    return out;
+  };
+  const root = join(here, "..");
+  const srcFiles = walk(root).map((f) => ({
+    abs: f,
+    rel: relative(root, f).replace(/\\/g, "/"),
+  }));
+
+  // 只匹配**代码里的赋值**，不匹配注释里引用这个写法的说明文字。
+  const FAKE = /(author|Author)\s*:\s*[^,\n]*\?\?\s*["']匿名用户["']/;
+  const offenders = [];
+  for (const f of srcFiles) {
+    const d = readFileSync(f.abs, "utf8");
+    for (const [i, line] of d.split("\n").entries()) {
+      const code = line.split("//")[0];
+      if (FAKE.test(code)) offenders.push(f.rel + ":" + (i + 1) + "  " + line.trim());
+    }
+  }
+  if (offenders.length === 0) ok('全仓没有 `?? "匿名用户"` 式的假署名兜底');
+  else for (const o of offenders) bad("假署名兜底回潮：" + o);
+
+  const handoff = readFileSync(join(root, "lib", "domain", "handoff.ts"), "utf8");
+  if (!/isDisplayableSource/.test(handoff)) {
+    bad("lib/domain/handoff.ts 的 collectSources 没有走 isDisplayableSource（会放过空署名来源）");
+  } else ok("搬运稿来源清单走 isDisplayableSource（与回答页同一判据）");
+
+  const panel = readFileSync(join(root, "components", "mesh", "MineHandoffPanel.tsx"), "utf8");
+  // ⚠️ 判据必须是**赋值调用**而不是「文件里出现过这个词」：
+  // 回退成自写过滤时，注释里往往还留着「复用 collectSources()」的说明，
+  // 用 includes 会恒真、永远抓不到（本节负向测试实测漏过一次）。
+  if (/const\s+sources\s*=\s*collectSources\(/.test(panel)) {
+    ok("「我的 Mesh」搬运面板复用 collectSources（不再自写一份过滤）");
+  } else {
+    bad("MineHandoffPanel 又自己过滤来源了 —— 两处各判一次迟早漂移");
+  }
+  if (/\.flatMap\(\(a\)\s*=>\s*a\.evidence/.test(panel)
+      || /\.filter\(\(e\)\s*=>\s*!!e\.url/.test(panel)) {
+    bad("MineHandoffPanel 里仍有自写的来源过滤（只判 url、不看作者名）");
+  } else {
+    ok("MineHandoffPanel 里没有自写的来源过滤");
+  }
+
+  const personaSrv = readFileSync(join(root, "lib", "server", "persona.ts"), "utf8");
+  if (/normalizeAuthorName\(/.test(personaSrv)) {
+    ok("persona.ts 的 toSource 走 normalizeAuthorName（与 mirror.ts 同一写法）");
+  } else {
+    bad("persona.ts 的 toSource 没有走 normalizeAuthorName");
+  }
 }
 
 /* ========================================================================== */

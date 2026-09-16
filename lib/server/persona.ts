@@ -1,6 +1,7 @@
 import "server-only";
 
 import type { Accent, Persona, SkillSource } from "@/lib/domain/types";
+import { normalizeAuthorName } from "@/lib/domain/evidence";
 import { hasCredentials, zhidaText, zhihuSearch } from "@/lib/zhihu/client";
 import type { SearchItem } from "@/lib/zhihu/types";
 
@@ -55,7 +56,12 @@ function authoredBy(item: SearchItem, handle: string, displayName: string): bool
 function toSource(item: SearchItem): SkillSource {
   return {
     title: item.Title ?? "（无标题）",
-    author: item.AuthorName ?? "匿名用户",
+    // ⚠️ 不要写 `item.AuthorName ?? "匿名用户"`：那位作者并不是匿名的，是**本次没取到署名**
+    //（上游对同一条内容可能一次返回作者名、一次返回空串，实测见 lib/domain/evidence.ts）。
+    // `??` 只兜 null/undefined，空串会原样穿过去 → 落盘成 `author: "匿名用户"`，
+    // 把实名作者标成匿名，是编造（铁律 2）。
+    // 与 lib/server/mirror.ts:toSource 保持同一写法，由消费端判定能否展示。
+    author: normalizeAuthorName(item.AuthorName),
     url: item.Url ?? "",
     excerpt: (item.ContentText ?? "").replace(/\s+/g, " ").slice(0, 220),
     voteUp: item.VoteUpCount ?? 0,

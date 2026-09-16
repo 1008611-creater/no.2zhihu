@@ -19,6 +19,12 @@ name: 流程变更声明
 #   红叉让审计线程以为这个 PR 坏了（实测 #35 / #40 都因此被多看一眼），
 #   而它其实完全不影响合并（分支保护只要求 build）。
 #   现在 check 恒绿，提醒改在 PR 对话里出现，且**补上声明后会自动删除**。
+#
+# 2026-09-16：修「判断改了哪些文件」的基准缺陷。
+#   原本用 `git diff base.sha head.sha` —— base.sha 是 PR **创建时**的 base，
+#   差异包含此后 main 前进的提交 → 只改业务文件的 PR 也误判「改了基础设施」。
+#   改为 `git merge-base`。此前该缺陷只造成多余的提醒 comment（不阻断），
+#   但它会把「谁改了什么」说错，等于给下一个线程递了错误路标。
 
 on:
   pull_request:
@@ -40,9 +46,16 @@ jobs:
         id: infra
         run: |
           set -euo pipefail
+          # ⚠️ 基准必须是**三路合并基**，不能用 base.sha。
+          # `base.sha` 是 PR 创建那一刻的 base —— 差异会包含此后 main 上前进的提交，
+          # 于是「只改了业务文件」的 PR 也会被算进别人的基础设施改动，误留提醒。
+          # 实测（#53，base=14645fcc / head=d3743561）：
+          #   diff(base, head)       → 32 个文件 / 5 处基础设施命中（其中 3 处是别人的）
+          #   diff(merge-base, head) → 12 个文件 / 2 处基础设施命中（这才是本 PR 自己的）
           base="${{ github.event.pull_request.base.sha }}"
           head="${{ github.event.pull_request.head.sha }}"
-          changed=$(git diff --name-only "$base" "$head" || true)
+          mb=$(git merge-base "$base" "$head" || echo "$base")
+          changed=$(git diff --name-only "$mb" "$head" || true)
           echo "本次改动文件："
           echo "$changed"
           hit=false

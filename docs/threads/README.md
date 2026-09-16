@@ -54,6 +54,30 @@ docs/threads/
 | `scripts/verify-merge.mjs` | 合并会不会回退别人的内容 | 提 PR 前 |
 | 审计线程 | 改动对不对、有没有踩铁律 | 合并前 |
 
+## 有反馈回路（2026-09-15 新增）
+
+机制的死法是「**没人填**」。前车之鉴就在同一天：`docs/collaboration.md` 写着「WIP ≤ 2」，
+而队列到过 7 个 —— **被无视的规则比没有规则更糟**，它会让人以为有保护。
+
+所以给它一个反馈回路：
+
+| 情况 | CI 行为 |
+|---|---|
+| 改了**业务文件**（`app/` `components/` `lib/` `public/`）但本 PR 没有 `docs/threads/` 下的声明 | 在 PR 上留一条**提醒**（**不阻断**，不影响合并） |
+| 补上声明并推送 | 提醒**自动删除** |
+| 只动 `docs/` `scripts/` `.github/` 根配置 | 不要求声明，不会提醒 |
+
+**为什么不阻断**：它是协作提醒，不是质量门禁。声明缺失不影响任何运行时行为，
+拿它挡合并是过度约束；而用红叉表达提醒会让人以为 PR 坏了
+（`pr-flow-check.yml` 踩过同一个坑，已从 failure 改成 comment）。
+
+**本地自查**（提交前想确认）：
+
+```bash
+node scripts/check-thread-declaration.mjs          # 与 origin/main 比
+node scripts/check-thread-declaration.mjs --strict # 缺失时 exit 1（给自己用）
+```
+
 ## 一条硬规则
 
 **声明与实际不符 = 比没有声明更糟。** 所以：

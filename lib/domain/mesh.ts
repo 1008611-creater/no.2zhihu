@@ -158,17 +158,28 @@ export function buildMesh(mirror: MirrorQuestion): MeshGraph {
 
     if (skill.persona) {
       const pid = `p:${skill.persona.handle}`;
+      /**
+       * `corpus?.` 是必须的，不是洁癖。
+       *
+       * `Persona.corpus` 在类型上是必填，但 `buildMesh` 读的是**用户浏览器里
+       * 已经落盘的历史会话** —— 旧版本写下的、或被人手改过的数据里可能就是没有。
+       * 少了它，这里是 `Cannot read properties of undefined (reading 'real')`，
+       * 而 buildMesh 在 `/mirror` 的渲染路径上，整页会掉进错误边界（白屏）。
+       * 这与「互相回应缺 evidence」是同一类事故：**类型正确，数据不一定合法**。
+       * 缺语料时按「预置人格」呈现（权重 0.5、标签「预置人格」）—— 如实，且正确。
+       */
+      const real = skill.persona.corpus?.real === true;
       add({
         id: pid,
         label: skill.persona.displayName,
         type: "persona",
-        weight: skill.persona.corpus.real ? 0.85 : 0.5,
+        weight: real ? 0.85 : 0.5,
         accent: skill.accent
       });
       link(
         `s:${skill.id}`,
         pid,
-        skill.persona.corpus.real ? `蒸馏 ${skill.persona.corpus.sampleSize} 条` : "预置人格",
+        real ? `蒸馏 ${skill.persona.corpus?.sampleSize ?? 0} 条` : "预置人格",
         0.8
       );
     }
