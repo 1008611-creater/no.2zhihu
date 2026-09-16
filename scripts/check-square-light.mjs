@@ -29,9 +29,8 @@ register(new URL("./_ts-hook.mjs", import.meta.url));
 
 const { layoutSquare } = await import("../lib/domain/square-layout.ts");
 const { crowdLayout } = await import("../lib/domain/crowd.ts");
-const { lightSourceOf, lightReach, shadowOf, depthOf, groundScaleAt, shapeOf } = await import(
-  "../lib/domain/light.ts"
-);
+const { lightOfCluster, hottestId, lightReach, shadowOf, depthOf, groundScaleAt, shapeOf } =
+  await import("../lib/domain/light.ts");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, "..", "public", "square-library.json"), "utf8"));
@@ -68,76 +67,109 @@ const layout = layoutSquare(topics, (h) => h, () => []);
 const nodes = layout.nodes;
 const clusters = crowdLayout(nodes);
 
-head("① 光源：优先聚焦的那一场，否则最热那一场");
+head("① 光源：**每个话题自己发光**（2026-09-16 修正）");
 {
-  const auto = lightSourceOf(nodes, null);
-  const hottest = nodes.reduce((a, b) => (b.size > a.size ? b : a));
-  if (!auto) bad("没有选出光源");
-  else if (auto.id !== hottest.id) bad("默认光没落在最热那一场：" + auto.id + " vs " + hottest.id);
-  else ok("默认落在最热那一场（size=" + Math.round(hottest.size) + "）");
+  // 为什么这条断言最要紧：原设计是「全广场一盏灯」，会导致离灯最远的那十几簇
+  // 影子平行甩向同一方向（像被风吹倒的草）。改成每簇自发光之后，
+  // 若有人改回共享光源，下面第②节的「同簇内方向不一致」会立刻失败。
+  const l1 = lightOfCluster(100, 200, 0.8);
+  if (l1.x !== 100 || l1.y !== 200) bad("簇光源没落在簇心");
+  else ok("簇光源就在簇心（x=" + l1.x + ", y=" + l1.y + "）");
 
-  const target = nodes[nodes.length - 1];
-  const focused = lightSourceOf(nodes, target.id);
-  if (!focused || focused.id !== target.id) bad("聚焦后光没移过去");
-  else ok("聚焦 " + target.id.slice(0, 14) + " 后光移过去了");
+  if (Math.abs((l1.intensity ?? 0) - 0.8) > 1e-9) bad("光晕强度没透传");
+  else ok("光晕强度透传（intensity=0.8）");
 
-  if (lightSourceOf([], null) !== null) bad("空广场应该没有光源");
-  else ok("空广场没有光源（不造一个假光）");
+  // 每簇的光源必须各不相同 —— 这是「自发光」与「共享一盏灯」的分水岭
+  const lights = clusters.map((c) => lightOfCluster(c.x, c.y, 0.6));
+  const uniq = new Set(lights.map((l) => l.x + "," + l.y));
+  if (uniq.size !== clusters.length) bad("有簇共用同一个光源（那就退回成一盏灯了）");
+  else ok(clusters.length + " 簇各有各的光源，无一重复");
+
+  // hottestId 仍存在，但只服务看山的注视目标
+  const hot = hottestId(nodes);
+  const expect = nodes.reduce((a, b) => (b.size > a.size ? b : a)).id;
+  if (hot !== expect) bad("hottestId 选错：" + hot + " vs " + expect);
+  else ok("hottestId 仍可用（供看山注视）→ " + hot.slice(0, 16));
+
+  if (hottestId([]) !== null) bad("空广场应无最热");
+  else ok("空广场没有最热（不造一个假值）");
 }
 
-head("② 影子方向必须真的背离光源");
+head("② 影子必须背离**本簇**光源，且同簇内方向各异");
 {
-  const light = lightSourceOf(nodes, null);
-  const reach = lightReach(nodes, light);
   let checked = 0;
   // ⚠️ 初值必须是 +Infinity 而不是 0。
   // 第一版写成 0，于是 `if (dot < worst)` 永远不成立、worst 永远是 0，
   // 末了的 `worst >= 0.999` 永远为假 —— **断言一次都没跑，却什么都没报**。
   // 自检里「静默通过」比「报错」危险得多：它让人以为验过了。
   let worst = Infinity;
+  /** 每一簇里影子的方向集合 —— 用来验证「从物件向外辐射」 */
+  const anglesPerCluster = [];
   for (const c of clusters) {
+    const light = lightOfCluster(c.x, c.y, 0.6);
+    const reach = lightReach(c.radius);
+    const angles = [];
     for (const f of c.figures) {
       if (f.kind !== "persona") continue;
-      const foot = { x: c.x + f.dx, y: c.y + f.dy };
-      const s = shadowOf(foot, f.height, light, reach);
+      // 用簇内相对坐标（光源也在簇内，所以两者要同一坐标系）
+      const foot = { x: f.dx, y: f.dy };
+      const s = shadowOf(foot, f.height, { id: light.id, x: 0, y: 0, intensity: light.intensity }, reach);
 
-      // 影子的方向向量（从脚底沿 angle 甩出去，画面的 +Y 是向下）
       const rad = (s.angle * Math.PI) / 180;
       const dir = { x: Math.sin(rad), y: Math.cos(rad) };
-      // 从光源指向脚底的方向
-      const away = { x: foot.x - light.x, y: foot.y - light.y };
+      const away = { x: foot.x, y: foot.y };
       const len = Math.hypot(away.x, away.y) || 1;
-      const dot = (dir.x * away.x + dir.y * away.y) / len; // 1 = 完全背离
+      const dot = (dir.x * away.x + dir.y * away.y) / len;
 
       checked++;
       if (dot < worst) worst = dot;
       if (dot < 0.999) {
-        bad("影子没背离光源（cos=" + dot.toFixed(3) + "）@ " + f.key.slice(0, 22));
+        bad("影子没背离本簇光源（cos=" + dot.toFixed(3) + "）@ " + f.key.slice(0, 22));
       }
+      angles.push(s.angle);
     }
+    if (angles.length >= 2) anglesPerCluster.push({ id: c.id, angles });
   }
   if (checked === 0) bad("一条影子都没验到 —— 断言空转");
   else if (worst >= 0.999) {
-    ok(checked + " 条影子全部精确背离光源（最小 cos=" + worst.toFixed(4) + "）");
+    ok(checked + " 条影子全部精确背离**本簇**光源（最小 cos=" + worst.toFixed(4) + "）");
+  }
+
+  // ⭐ 本次最要紧的新断言：同簇内的影子**方向必须不同**（从物件向外辐射）。
+  // 如果哪天退回「全广场一盏灯」，同一簇里所有人的影子会同向 —— 这条会失败。
+  let flat = 0;
+  for (const a of anglesPerCluster) {
+    const spread = Math.max(...a.angles) - Math.min(...a.angles);
+    // 一圈 360°，同簇内至少该有 20° 的扇开（实测 3 人时约 120°+）
+    if (spread < 20) flat++;
+  }
+  if (flat > 0) bad(flat + " 个簇里的影子方向几乎一致（光源可能退回成共享的）");
+  else {
+    const spreads = anglesPerCluster.map((a) =>
+      Math.round(Math.max(...a.angles) - Math.min(...a.angles)),
+    );
+    ok(
+      anglesPerCluster.length + " 个簇的影子各自向外辐射（扇角 " +
+        Math.min(...spreads) + "°–" + Math.max(...spreads) + "°）",
+    );
   }
 
   // 光源正下方：不能是随机方向
-  const under = shadowOf({ x: light.x, y: light.y }, 30, light, reach);
+  const under = shadowOf({ x: 0, y: 0 }, 30, { id: "cluster", x: 0, y: 0 }, 100);
   if (under.angle !== 0) bad("站在光源正下方时影子方向不是 0");
   else ok("光源正下方 → 影子朝正下方（确定性，不随机）");
 }
 
 head("③ 影长不能失控");
 {
-  const light = lightSourceOf(nodes, null);
-  const reach = lightReach(nodes, light);
   let minK = Infinity;
   let maxK = 0;
   let extreme = 0;
   for (const c of clusters) {
+    const reach = lightReach(c.radius);
     for (const f of c.figures) {
       if (f.kind !== "persona") continue;
-      const s = shadowOf({ x: c.x + f.dx, y: c.y + f.dy }, f.height, light, reach);
+      const s = shadowOf({ x: f.dx, y: f.dy }, f.height, { id: "cluster", x: 0, y: 0 }, reach);
       const k = s.length / f.height;
       minK = Math.min(minK, k);
       maxK = Math.max(maxK, k);
@@ -150,8 +182,8 @@ head("③ 影长不能失控");
   else ok("全部在 [0.42, 1.85]×人高 之内");
 
   // 归一化距离为 0 与 1 时的两端
-  const near = shadowOf({ x: light.x + 1, y: light.y + 1 }, 20, light, reach);
-  const far = shadowOf({ x: light.x + reach, y: light.y }, 20, light, reach);
+  const near = shadowOf({ x: 1, y: 1 }, 20, { id: "cluster", x: 0, y: 0 }, 100);
+  const far = shadowOf({ x: 100, y: 0 }, 20, { id: "cluster", x: 0, y: 0 }, 100);
   if (!(far.length > near.length)) bad("远处的影子没有比近处的长");
   else ok("远处影子更长（" + Math.round(near.length) + " → " + Math.round(far.length) + "px）");
 }

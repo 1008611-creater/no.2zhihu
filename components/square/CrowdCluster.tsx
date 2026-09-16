@@ -4,7 +4,10 @@ import { memo } from "react";
 import type { CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
 import { crowdSummary } from "@/lib/domain/crowd";
 import type { LightSource } from "@/lib/domain/light";
-import { groundOpacityAt, shadowOf } from "@/lib/domain/light";
+import { groundOpacityAt, lightOfCluster, shadowOf } from "@/lib/domain/light";
+import { interactionsOf, type Gesture } from "@/lib/domain/dialogue";
+import { relicOf } from "@/lib/domain/relic";
+import TopicRelic from "./TopicRelic";
 import type { TopicNode } from "@/lib/domain/square-layout";
 
 /**
@@ -70,10 +73,6 @@ const POSE_HREF: Record<string, string> = {
 export interface CrowdClusterProps {
   cluster: CrowdClusterData;
   node: TopicNode;
-  /** 当前光源；null = 广场还没铺开 */
-  light: LightSource | null;
-  /** 光源到最远簇的距离，用来归一化影长 */
-  reach: number;
   focused: boolean;
   dimmed: boolean;
   hovered: boolean;
@@ -85,8 +84,6 @@ export interface CrowdClusterProps {
 function CrowdClusterImpl({
   cluster,
   node,
-  light,
-  reach,
   focused,
   dimmed,
   hovered,
@@ -104,6 +101,29 @@ function CrowdClusterImpl({
   // 纵深 → 明度。远处的簇淡入背景（大气透视），这是「地面向远处退去」
   // 最便宜也最有效的一半；另一半是尺度（已在 crowd.ts 里算进 height）。
   const depthOpacity = groundOpacityAt(cluster.depth);
+
+  /**
+   * **本簇自己的光源** —— 就在中心那件发光物件上。
+   *
+   * 2026-09-16 修正：原先是全广场一盏灯。后果是离灯远的那十几簇，
+   * 所有人的影子互相平行地甩向同一方向，读起来像一片被风吹倒的草。
+   * 现在每簇自发光，影子从物件向外辐射，每簇的光影自己就闭合了。
+   */
+  const relic = relicOf(node.title, node.size);
+  const light = lightOfCluster(cluster.x, cluster.y, relic.intensity);
+  // 影长的归一化尺度 = 簇半径（不再是「到最远簇的距离」，见 light.ts）
+  const reach = Math.max(cluster.radius, 1);
+
+  /**
+   * 小动作。**只给在场分身** —— 缺口的人还没来，给他动作等于假装他已站在这儿。
+   *
+   * 62% 的人只是静立（见 dialogue.ts）：人人都动就不像人群，像机器人展。
+   */
+  const acts = interactionsOf(
+    node.id,
+    cluster.figures.filter((f) => f.kind === "persona").map((f) => f.key),
+  );
+  const actOf = new Map(acts.map((a) => [a.from, a]));
 
   return (
     <div
@@ -128,6 +148,19 @@ function CrowdClusterImpl({
         <span className="sq-crowd-ground" />
         {focused && <span className={"sq-crowd-ring r-" + node.theme.accent} />}
 
+        {/* **话题中心那件发光的东西**。
+            放在人群底座之下、人形之上 —— DOM 顺序上先于 svg，
+            所以光晕会被后面的人形压住一层，人因而「站在光里」而不是「浮在光上」。
+            尺寸取簇直径的 30%（`RELIC_RADIUS_RATIO` 的两倍，含光晕余量）。 */}
+        <TopicRelic
+          relic={relic}
+          title={node.title}
+          size={d * 0.34}
+          focused={focused}
+          hovered={hovered}
+          reduced={reduced}
+        />
+
         <svg
           className="sq-crowd"
           viewBox={`0 0 ${BOX} ${BOX}`}
@@ -135,8 +168,8 @@ function CrowdClusterImpl({
           focusable="false"
           style={reduced ? undefined : { animationDelay: `-${(cluster.depth * 4.6).toFixed(2)}s` }}
         >
-          {/* 先画影子与洞，再画人 —— 顺序即层次：人站在地上，
-              影子和洞都属于地面。 */}
+          {/* 中心那件发光的东西。画在人**之前**（人在它外侧站着），
+              但它自己带光晕，会盖到人脚下 —— 这正是「围着它」的观感来源。 */}
           {light &&
             cluster.figures
               .filter((f) => f.kind === "persona")
@@ -202,29 +235,55 @@ function CrowdClusterImpl({
               const w = h * GLYPH_ASPECT * f.shape.widthScale;
               const fx = BOX / 2 + (f.dx / r) * (BOX / 2);
               const fy = BOX / 2 + (f.dy / r) * (BOX / 2);
+              const act = actOf.get(f.key);
+              const g: Gesture = act?.gesture ?? "breeze";
               return (
-                <use
+                <g
                   key={f.key}
-                  href={POSE_HREF[f.shape.pose] ?? "#sq-fig-stand"}
-                  x={fx - w / 2}
-                  y={fy - h}
-                  width={w}
-                  height={h}
-                  className="sq-figure sq-figure-persona"
-                  // 倾斜绕**脚底**转 —— 绕中心转会让人像飘起来。
-                  transform={`rotate(${f.shape.lean.toFixed(2)} ${fx.toFixed(2)} ${fy.toFixed(2)})`}
-                />
+                  // 动作的类挂在 <g> 上、旋转挂在 <use> 上 —— 两者都是 transform，
+                  // 放同一个元素会互相覆盖（CSS transform 会盖掉 attribute transform）。
+                  className={"sq-act sq-act-" + g}
+                  style={
+                    reduced || !act
+                      ? undefined
+                      : {
+                          animationDelay: `-${(act.phase * act.period).toFixed(2)}s`,
+                          animationDuration: `${act.period}s`,
+                        }
+                  }
+                >
+                  <use
+                    href={POSE_HREF[f.shape.pose] ?? "#sq-fig-stand"}
+                    x={fx - w / 2}
+                    y={fy - h}
+                    width={w}
+                    height={h}
+                    className="sq-figure sq-figure-persona"
+                    // 倾斜绕**脚底**转 —— 绕中心转会让人像飘起来。
+                    transform={`rotate(${f.shape.lean.toFixed(2)} ${fx.toFixed(2)} ${fy.toFixed(2)})`}
+                  />
+                </g>
               );
             })}
         </svg>
       </div>
 
-      {/* 浮标标题：问题标题是视觉主体，所以放在簇的上方而不是塞进圆里 */}
+      {/* 浮标标题：问题标题是视觉主体，所以放在簇的上方而不是塞进圆里。
+          ⚠️ 下面那行真名**全部来自库里已有的 `skills[].name`** ——
+          一个字都不是我们编的。半佛仙人没说过的话，不能由我们替他写。 */}
       <div className="sq-crowd-label">
         <span className={"sq-cluster-dot a-" + node.theme.accent} />
         <span className="sq-crowd-title" style={{ fontSize: titleSize }}>
           {node.title}
         </span>
+        {node.avatarNames.length > 0 && (
+          <span className="sq-crowd-who">
+            {node.avatarNames.slice(0, 4).join(" · ")}
+            {node.personaCount > node.avatarNames.length
+              ? " 等 " + node.personaCount + " 位"
+              : ""}
+          </span>
+        )}
       </div>
 
       {/* 唯一接事件的元素。aria-label 把「谁在这儿、还缺什么」一并说清楚 ——
