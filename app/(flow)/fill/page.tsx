@@ -16,7 +16,7 @@ import { SHIFT } from "@/lib/motion/tokens";
  *     降低参与门槛，让「顺手补一句」成立。
  *   - 完整编辑：直接在 AI 草稿上改写成自己的版本，适合愿意写长文的答主。
  *
- * 提交后立刻回写回答、缺口、Mesh 与贡献值，全部走同一份领域模型。
+ * 提交后立刻回写回答、缺口与贡献值，全部走同一份领域模型。
  *
  * 2026-09-15：从主流程的第 3 步降级为子页面。真人补充不是每个问题都会发生 ——
  * 只有某一场的某个缺口需要真人时才进入这里。因此不再出现在顶部流程条里。
@@ -99,24 +99,23 @@ function FillContent() {
         initial={{ opacity: 0, y: SHIFT.md }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <p className="eyebrow">Mesh updated</p>
+        <p className="eyebrow">Saved</p>
         <h1>补充已写入</h1>
         <p className="lede" style={{ marginTop: 14 }}>
           {done} 补完了「{target.skillName}」这一段。回答状态已变为「真人已补充」，
-          缺口标记为已填，Human Mesh 长出新的边，贡献值 +8。
+          缺口标记为已填，这一段已并进最终稿，贡献值 +8。
         </p>
         <div className="grid grid-3" style={{ marginTop: 24 }}>
           <Link className="btn btn-primary" href="/mirror">回工作台看搬运</Link>
           {/*
-            这里原先指向 `/me?tab=mesh`，但**那张图不会因为这次补充而变化**：
-            `/me` 用的是 `buildCorpusMesh(history)`，只看关键词共现，
+            这里原先还有一个「查看 Mesh 变化」按钮，指向 `/mirror#mesh`。
+            2026-09-17 本场关系图下线后它必须一起删，而且**不能**改成指向 `/me?tab=mesh`：
+            `/me` 那张是 `buildCorpusMesh(history)`，只看关键词共现，
             完全不读 `contributions`、`answers[].status === "human"` 或 `gap.filledBy`
-            —— 实测补一条真人后，它的「节点 / 关系」数字一个都没动，页面上也搜不到补充者的名字。
-            真正长出真人节点的是**本场的关系图**（`/mirror` 的 `buildMesh`）。
-            上面那段文案承诺「Human Mesh 长出新的边」，链接就必须指向那张真的长出边的图，
-            否则等于把用户送到一个看不见变化的地方（铁律 4）。
+            —— 实测补一条真人后，它的「节点 / 关系」数字一个都没动。
+            也就是说：删图之后，**没有任何一张图会因为这次补充而变化**。
+            所以正确的改法不是换链接，而是把上面那句「会多出节点和边」的承诺一起撤掉（铁律 4）。
           */}
-          <Link className="btn" href="/mirror#mesh">查看 Mesh 变化</Link>
           {/* 原先这里指向 /feed —— 该路由不存在，点了必然 404。改成真实存在的广场。 */}
           <Link className="btn btn-ghost" href="/square">回广场看看</Link>
         </div>

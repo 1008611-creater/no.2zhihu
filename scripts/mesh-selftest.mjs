@@ -1,16 +1,21 @@
 #!/usr/bin/env node
 /**
- * `lib/domain/mesh.ts` 的自测 —— 把问题 3 的验收标准变成可复现的断言。
+ * `lib/domain/mesh.ts` 的自测 —— 现在只测「我的 Mesh」这一张网。
  *
  * 运行：node scripts/mesh-selftest.mjs
  *
- * 覆盖（对应审计提示词第二批 · 问题 3 的验收标准）：
- *   1. 关键词之间的连线数 > 关键词与答主之间的连线数
- *   2. 图上能读出至少一条两跳以上的关键词路径
- *   3. 答主节点数量不增加、同一答主不重复出现
- *   4. 节点总数 ≤ 25，且截断规则是「轮转」而非「砍掉某位答主」
- *   5. 图例类型与实际渲染的节点类型一一对应（取 nodes 里出现过的 type 集合）
- *   6. /me 的 buildCorpusMesh 不受影响（改动前后节点数与类型分布一致）
+ * 2026-09-17：本场关系图（`buildMesh`）已下线（owner：「这场生成出来的关系，
+ * 功能一直没太做好，可以先删」）。原来那份脚本的一半断言都在测它，一并删掉；
+ * 它的**删除本身**由 `check-square-crowd.mjs` 的守卫⑥守住（不许留死链、不许留假承诺）。
+ *
+ * 这里剩下的是 `/me`「我的 Mesh」的验收：
+ *   1. 同一份历史必须得到同一张网（评委要能复现同一个画面）
+ *   2. 空历史 → 空图（不是报错、也不是编一条出来）
+ *   3. 问题节点数 == 历史条数，一人一问不重不漏
+ *   4. 关键词全部来自真实 `skill.keywords`，一个都不许编
+ *   5. 关键词节点数受 MAX_KEYWORDS 限制（不画成毛线团）
+ *   6. 每条边的两端节点都必须真实存在（不许有悬空边）
+ *   7. 边的数量 == 各问题命中的保留关键词之和（多一条少一条都说明口径漂了）
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -54,7 +59,7 @@ const find = (name) => {
 };
 
 const req = createRequire(import.meta.url);
-const { buildMesh, buildCorpusMesh } = req(find("mesh.js"));
+const { buildCorpusMesh } = req(find("mesh.js"));
 const { PERSONA_SKILLS } = req(find("skills.js"));
 
 /* ------------------------------ 断言 ------------------------------ */
@@ -66,7 +71,7 @@ const check = (label, ok, detail = "") => {
   else failures.push(`${label}${detail ? " —— " + detail : ""}`);
 };
 
-/* ------------------------------ 用真实人格造一场镜像问答 ------------------------------ */
+/* --------------------------- 用真实人格造一份历史 --------------------------- */
 
 const HANDLES = ["banfoxianren", "shui-qian-xiao-xi", "wen-yi-fei-31", "mulianghai"];
 const skills = HANDLES.map((h) => {
@@ -82,22 +87,22 @@ const skills = HANDLES.map((h) => {
   };
 });
 
-const mirror = {
-  id: "mirror-test",
-  title: "网络小说怎么写",
+const makeMirror = (id, title) => ({
+  id,
+  title,
   origin: "typed",
-  createdAt: Date.now(),
+  createdAt: 1700000000000,
   routing: { mode: "auto", intent: "how", picks: skills.map((s) => ({ skillId: s.id, reason: "", score: 1 })), summary: "", queries: [] },
   skills,
-  answers: skills.map((s, i) => ({
-    id: "ans-" + s.id,
+  answers: skills.map((s) => ({
+    id: `ans-${id}-${s.id}`,
     skillId: s.id,
     skillName: s.name,
     accent: s.accent,
     handle: s.persona?.handle,
     body: "正文",
     evidence: [],
-    createdAt: Date.now(),
+    createdAt: 1700000000000,
     status: "ai",
     generatedBy: "zhida",
     round: 0,
@@ -105,118 +110,71 @@ const mirror = {
   gaps: [],
   handoff: { status: "not-ready", note: "" },
   contributions: [],
-};
+});
 
-const g = buildMesh(mirror);
-const byType = (t) => g.nodes.filter((n) => n.type === t);
-const kwIds = new Set(byType("keyword").map((n) => n.id));
-const isKw = (id) => kwIds.has(id);
+const history = [
+  makeMirror("mirror-a", "网络小说怎么写"),
+  makeMirror("mirror-b", "30 岁从大厂转行做独立开发，值得吗"),
+  makeMirror("mirror-c", "为什么现在很多年轻人不想结婚"),
+];
 
-const kk = g.edges.filter((e) => isKw(e.source) && isKw(e.target));
-// 「答主」按提示词口径 = 人格节点 + 真人节点（Skill 分身是路由层的分身，单列）
-const answererIds = new Set([...byType("persona"), ...byType("human")].map((n) => n.id));
-const kAnswerer = g.edges.filter(
-  (e) => (isKw(e.source) && answererIds.has(e.target)) || (isKw(e.target) && answererIds.has(e.source)),
-);
-const kSkill = g.edges.filter(
-  (e) => (isKw(e.source) && byType("skill").some((s) => s.id === e.target)) ||
-         (isKw(e.target) && byType("skill").some((s) => s.id === e.source)),
-);
-
-console.log("== 节点分布 ==");
-for (const t of ["question", "keyword", "skill", "persona", "answer", "human"]) {
-  console.log(`  ${t.padEnd(9)} ${byType(t).length}`);
-}
-console.log(`  合计 ${g.nodes.length} 节点 / ${g.edges.length} 条边`);
-console.log(`  关键词—关键词 ${kk.length} 条；关键词—答主 ${kAnswerer.length} 条；关键词—Skill ${kSkill.length} 条`);
-
-/* 验收 1 */
-check("关键词之间的连线数 > 关键词与答主之间的连线数", kk.length > kAnswerer.length, `${kk.length} vs ${kAnswerer.length}`);
-check("关键词之间的连线数 > 关键词与 Skill 之间的连线数", kk.length > kSkill.length, `${kk.length} vs ${kSkill.length}`);
-
-/* 验收 2：关键词子图里的最长路径（两跳以上） */
-const adj = new Map();
-for (const e of kk) {
-  if (!adj.has(e.source)) adj.set(e.source, []);
-  if (!adj.has(e.target)) adj.set(e.target, []);
-  adj.get(e.source).push(e.target);
-  adj.get(e.target).push(e.source);
-}
-let best = [];
-for (const start of adj.keys()) {
-  const seen = new Set([start]);
-  const q = [[start, [start]]];
-  while (q.length) {
-    const [cur, p] = q.shift();
-    if (p.length > best.length) best = p;
-    for (const nx of adj.get(cur) ?? []) {
-      if (seen.has(nx)) continue;
-      seen.add(nx);
-      q.push([nx, [...p, nx]]);
-    }
-  }
-}
-const labelOf = (id) => g.nodes.find((n) => n.id === id)?.label ?? id;
-console.log(`\n== 最长关键词链路（${best.length} 个节点 / ${Math.max(0, best.length - 1)} 跳） ==`);
-console.log("  " + best.map(labelOf).join("  →  "));
-check("存在两跳以上的关键词路径", best.length >= 3, `实际 ${best.length} 个节点`);
-// 跨答主：链路上至少两个关键词来自不同的 Skill 簇
-const ownerOf = new Map();
-for (const e of kSkill) ownerOf.set(isKw(e.source) ? e.source : e.target, isKw(e.source) ? e.target : e.source);
-const owners = new Set(best.map((id) => ownerOf.get(id)).filter(Boolean));
-check("该链路跨了至少两位答主", owners.size >= 2, `实际跨 ${owners.size} 位`);
-
-/* 验收 3 */
-const personaCount = byType("persona").length;
-const handles = new Set(byType("persona").map((n) => n.id));
-check("答主节点不重复（按 handle 去重）", personaCount === handles.size);
-check("答主节点数 ≤ 本场答主数", personaCount <= skills.length, `${personaCount} > ${skills.length}`);
-const skillIds = byType("skill").map((n) => n.id);
-check("Skill 节点不重复", skillIds.length === new Set(skillIds).size);
-check(
-  "每位答主都有主题簇（轮转截断不整簇砍掉）",
-  skills.every((s) => [...ownerOf.values()].includes(`s:${s.id}`)),
-);
-
-/* 验收 4 */
-check("节点总数 ≤ 25", g.nodes.length <= 25, `实际 ${g.nodes.length}`);
-check("关键词是节点数量最大的一类", byType("keyword").length > Math.max(...["skill", "persona", "answer", "human"].map((t) => byType(t).length)));
-
-/* 验收 5：图例类型与实际节点类型一一对应 */
-const LEGEND_TYPES = ["question", "skill", "persona", "human", "keyword", "answer"];
-const present = new Set(g.nodes.map((n) => n.type));
-check("出现的节点类型都在图例表里", [...present].every((t) => LEGEND_TYPES.includes(t)), [...present].join(","));
-
-/* 边界：关键词必须来自真实 skill.keywords，不得编造 */
-const realKw = new Set(skills.flatMap((s) => s.keywords));
-check(
-  "关键词全部来自真实 skill.keywords",
-  byType("keyword").every((n) => realKw.has(n.full ?? n.label)),
-);
-
-/* 验收 6：/me 的图不受影响 —— 同一份历史数据，节点数与类型分布应可复现 */
-const history = [mirror];
+/* 验收 1：可复现 */
 const before = buildCorpusMesh(history);
 const after = buildCorpusMesh(history);
 check(
-  "/me 的 buildCorpusMesh 输出可复现（节点数/类型分布一致）",
+  "同一份历史得到同一张网（节点数 / 边数 / 类型分布一致）",
   before.nodes.length === after.nodes.length &&
+    before.edges.length === after.edges.length &&
     JSON.stringify(before.nodes.map((n) => n.type).sort()) ===
       JSON.stringify(after.nodes.map((n) => n.type).sort()),
 );
-console.log(`\n== /me 图（buildCorpusMesh） ==`);
-console.log(`  ${before.nodes.length} 节点 / ${before.edges.length} 条边；类型分布 ${JSON.stringify(
+
+/* 验收 2：空历史 */
+const empty = buildCorpusMesh([]);
+check("空历史得到空图（不报错、也不编一条出来）", empty.nodes.length === 0 && empty.edges.length === 0);
+
+const byType = (g, t) => g.nodes.filter((n) => n.type === t);
+const ids = new Set(before.nodes.map((n) => n.id));
+
+/* 验收 3：一人一问 */
+const qCount = byType(before, "question").length;
+check("问题节点数 == 历史条数", qCount === history.length, `${qCount} vs ${history.length}`);
+check("问题节点 id 不重复", qCount === new Set(byType(before, "question").map((n) => n.id)).size);
+
+/* 验收 4：关键词不许编 */
+const realKw = new Set(history.flatMap((m) => m.skills.flatMap((s) => s.keywords.slice(0, 3).map((k) => k.trim()))));
+const kws = byType(before, "keyword");
+check(
+  "关键词全部来自真实 skill.keywords",
+  kws.length > 0 && kws.every((n) => realKw.has(n.label)),
+  kws.filter((n) => !realKw.has(n.label)).map((n) => n.label).join(","),
+);
+
+/* 验收 5：不许画成毛线团 */
+check("关键词节点数 ≤ 24（MAX_KEYWORDS）", kws.length <= 24, `实际 ${kws.length}`);
+
+/* 验收 6：不许有悬空边 */
+const dangling = before.edges.filter((e) => !ids.has(e.source) || !ids.has(e.target));
+check("没有悬空边（每条边的两端节点都存在）", dangling.length === 0, `${dangling.length} 条悬空`);
+
+/* 验收 7：边数与口径一致 —— 每个问题连到它命中的保留关键词 */
+const keptKw = new Set(kws.map((n) => n.id));
+let expected = 0;
+for (const m of history) {
+  const hit = new Set();
+  for (const s of m.skills) for (const k of s.keywords.slice(0, 3)) if (k.trim()) hit.add(`ck:${k.trim()}`);
+  expected += [...hit].filter((id) => keptKw.has(id)).length;
+}
+check("边数 == 各问题命中的保留关键词之和", before.edges.length === expected, `${before.edges.length} vs ${expected}`);
+
+console.log("\n== 我的 Mesh（buildCorpusMesh） ==");
+console.log(`  ${before.nodes.length} 节点 / ${before.edges.length} 条边`);
+for (const t of ["question", "keyword"]) {
+  console.log(`  ${t.padEnd(9)} ${byType(before, t).length}`);
+}
+console.log(`  类型分布 ${JSON.stringify(
   before.nodes.reduce((a, n) => ((a[n.type] = (a[n.type] ?? 0) + 1), a), {}),
 )}`);
-
-/* 预算边界：极端情况（4 位答主 + 4 篇回答 + 真人）仍然 ≤ 25 */
-console.log("\n== 预算边界 ==");
-for (const n of [1, 2, 3, 4]) {
-  const m = { ...mirror, skills: skills.slice(0, n), answers: mirror.answers.slice(0, n) };
-  const gg = buildMesh(m);
-  console.log(`  ${n} 位答主 → ${gg.nodes.length} 节点 / ${gg.edges.length} 条边`);
-  check(`${n} 位答主的图 ≤ 25 节点`, gg.nodes.length <= 25, `实际 ${gg.nodes.length}`);
-}
 
 console.log(`\n===== 通过 ${pass} 项，失败 ${failures.length} 项 =====`);
 if (failures.length) {

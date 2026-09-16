@@ -486,29 +486,43 @@ console.log("=".repeat(74));
   }
 
   /**
-   * ⑥ 「查看 Mesh 变化」必须指向**真的会变的那张图**。
+   * ⑥ 本场关系图已下线 —— 不许有「指过去却什么都没有」的残留。
    *
-   * 实测（2026-09-16）：/fill 提交后会承诺「Human Mesh 长出新的边」，
-   * 而那个链接当时指向 `/me?tab=mesh` —— 那张图走 `buildCorpusMesh(history)`，
+   * 2026-09-17 owner 判「这场生成出来的关系，功能一直没太做好，可以先删」。
+   * 删一块 UI 最危险的不是删不干净，而是**删了图却留着承诺**：
+   *   1. `/mirror#mesh` 的锚点没了，但 `/fill` 还留着「查看 Mesh 变化」按钮 → 点了落到页顶；
+   *   2. 「 Human Mesh 长出新的边」这句文案还在 → 承诺了一个不存在的变化（铁律 4）。
+   *
+   * 为什么不能改成指向 `/me?tab=mesh` 了事：`/me` 那张走 `buildCorpusMesh(history)`，
    * 只看关键词共现，**完全不读** `contributions` / `answers[].status === "human"` /
-   * `gap.filledBy`。补一条真人后它的「节点 / 关系」数字一个都没动，页面上也搜不到补充者名字。
-   *
-   * 真正长出真人节点的是**本场关系图**（`/mirror` 的 `buildMesh`，实测会多出 `g[role=button]`
-   * 且标签就是补充者）。所以链接必须落在 `/mirror#mesh`，且该锚点要真实存在。
+   * `gap.filledBy` —— 实测补一条真人后它的「节点 / 关系」数字一个都没动。
+   * 也就是：**删图之后没有任何一张图会因这次补充而变化**，所以只能撤承诺，不能换链接。
    */
-  const meshLinkOk = /href="\/mirror#mesh"/.test(fillSrc);
-  const anchorOk = /id="mesh"/.test(mirrorSrc);
-  const pointsToMe = /href="\/me\?tab=mesh"/.test(fillSrc);
+  const meshSrc = readFileSync(join(here, "..", "lib", "domain", "mesh.ts"), "utf8");
+  const statesSrc = readFileSync(join(here, "..", "components", "kanshan", "states.ts"), "utf8");
 
-  if (pointsToMe) {
-    bad("「查看 Mesh 变化」仍指向 /me?tab=mesh —— 那张图不含真人补充，点了看不到任何变化");
-  } else if (!meshLinkOk) {
-    bad("「查看 Mesh 变化」没有指向 /mirror#mesh —— 承诺了「长出新的边」却没指向会变的那张图");
-  } else {
-    ok("「查看 Mesh 变化」指向 /mirror#mesh（真的会变的那张图）");
-  }
-  if (anchorOk) ok("/mirror 的本场关系图有 id=\"mesh\" 锚点，深链可用");
-  else bad("/mirror 的关系图缺少 id=\"mesh\" —— /mirror#mesh 深链会落到页顶");
+  const stillExports = /export function buildMesh\b/.test(meshSrc);
+  const anchorLeft = /id="mesh"/.test(mirrorSrc);
+  const meshGraphLeft = /MeshGraph/.test(mirrorSrc);
+  const deadLink = /href="\/mirror#mesh"/.test(fillSrc);
+  const misdirect = /href="\/me\?tab=mesh"/.test(fillSrc);
+  const promiseLeft = /长出新的边/.test(fillSrc) || /长出新的边/.test(statesSrc) || /长出新的边/.test(mirrorSrc);
+
+  if (stillExports) bad("lib/domain/mesh.ts 仍在导出 buildMesh —— 本场关系图已裁定下线");
+  else ok("lib/domain/mesh.ts 只留 buildCorpusMesh（本场关系图已下线）");
+
+  if (anchorLeft) bad('/mirror 仍留着 id="mesh" 锚点 —— 指向它的深链会落到一个不存在的区块');
+  else ok('/mirror 已无 id="mesh" 锚点');
+
+  if (meshGraphLeft) bad("/mirror 仍在渲染 MeshGraph —— 本场关系图应已移除");
+  else ok("/mirror 不再渲染本场关系图");
+
+  if (deadLink) bad("/fill 仍有 href=\"/mirror#mesh\" —— 那个锚点已不存在，点了落到页顶");
+  else if (misdirect) bad("/fill 又把链接改回 /me?tab=mesh —— 那张图不含真人补充，点了看不到任何变化");
+  else ok("/fill 不再把用户送去任何一张「关系图」");
+
+  if (promiseLeft) bad("仍写着「长出新的边」—— 删图之后没有任何一张图会因补充而变化，这句承诺是假的");
+  else ok("「长出新的边」的承诺已随本场关系图一起撤掉");
 }
 
 console.log("\n" + "=".repeat(74));

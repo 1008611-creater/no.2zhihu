@@ -20,7 +20,7 @@ export function KanshanStage({ step, size = 190, running = false }: KanshanStage
   const current = flowStateAt(step);
   const caption =
     step < 0 ? "看山在等你的问题" : step >= FLOW_STATES.length ? "这一轮闭环完成" : FLOW_STATES[step].caption;
-  const label = step < 0 ? "Standby" : step >= FLOW_STATES.length ? "Mesh updated" : FLOW_STATES[step].label;
+  const label = step < 0 ? "Standby" : step >= FLOW_STATES.length ? "Done" : FLOW_STATES[step].label;
 
   return (
     <div className="card" style={{ display: "grid", gap: 16, justifyItems: "center", padding: 22 }}>

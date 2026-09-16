@@ -77,7 +77,7 @@ FLOW_STATES 是 8 步产品流程，每步给出 key（KanshanState）、label�
 | 5 | answering | 生成多视角 · 每个分身按自己的文风作答 |
 | 6 | gap | 缺口识别 · 这一段只有真人能答 |
 | 7 | inviting | 邀请真人 · 按公开回答匹配到具体的人 |
-| 8 | celebrate | 更新 Mesh · 补充完成，关系图长出新的边 |
+| 8 | celebrate | 补充已写入 · 这一段并进最终稿，闭环完成 |
 
 flowStateAt(step) 是唯一的状态推导函数：step < 0 返回 idle，超过最后一步返回 celebrate，其余返回当前步的 key。
 

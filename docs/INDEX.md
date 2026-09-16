@@ -93,7 +93,8 @@ app/                 Next.js App Router 页面与 API 路由
 components/          UI 组件
   kanshan/           看山角色引擎（官方素材映射，10 状态）
   mirror/            分身卡 / 回答卡 / 缺口卡 / 搬运面板
-  mesh/              Human Mesh 关系图 + 我的搬运清单（MineHandoffPanel）
+  mesh/              「我的 Mesh」关系图（buildCorpusMesh）+ 我的搬运清单（MineHandoffPanel）
+                     ※ 2026-09-17 本场关系图（buildMesh）已下线，见 docs/backlog.md A5
   ui/                TopBar / QuotaBadge 等通用件
 lib/server/          服务端编排（mirror.ts：唯一同时接触 IO 与领域规则的层）
 lib/zhihu/           知乎开放平台客户端（server-only）

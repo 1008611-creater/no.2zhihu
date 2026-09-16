@@ -102,5 +102,7 @@ export const FLOW_STATES: Array<{ key: KanshanState; label: string; caption: str
   { key: "answering", label: "生成多视角", caption: "每个分身按自己的文风作答" },
   { key: "gap", label: "缺口识别", caption: "这一段只有真人能答" },
   { key: "inviting", label: "邀请真人", caption: "按公开回答匹配到具体的人" },
-  { key: "celebrate", label: "更新 Mesh", caption: "补充完成，关系图长出新的边" },
+  // 2026-09-17：原为「更新 Mesh」+「关系图会跟着多出节点和边」。本场关系图下线后
+  // 那句就成了假承诺 —— 没有任何一张图会因为补一段真人而变化。改成如实描述这一落点。
+  { key: "celebrate", label: "补充已写入", caption: "这一段并进最终稿，闭环完成" },
 ];

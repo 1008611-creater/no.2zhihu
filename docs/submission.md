@@ -118,7 +118,7 @@
 
 参考 `grok-icon-study` 的**架构思路**（表驱动状态机 + 停留时长区间 + 弹簧过渡），
 为刘看山**原创定义** 10 个状态、眼神目标表与姿态表，全部几何与配色自绘。
-看山不是装饰，而是**流程主持人**：接入 → 路由 → 检索 → 比对 → 作答 → 发现缺口 → 邀请真人 → 更新 Mesh，
+看山不是装饰，而是**流程主持人**：接入 → 路由 → 检索 → 比对 → 作答 → 发现缺口 → 邀请真人 → 补充已写入，
 状态与产品步骤一一对应（`components/kanshan/states.ts` 的 `FLOW_STATES`）。
 动效由 Motion 的 `useSpring` / `useTransform` / `useAnimationFrame` 驱动，
 指针跟随写入 MotionValue，不触发 React 重渲染；`prefers-reduced-motion` 时关闭随机切换与跟随。
