@@ -53,6 +53,69 @@
    `# P0 验收清单\n\n` → 报了假警。处理方式是**先查清「断言错还是真改坏」**
    （dump 原文比对），而不是直接放宽断言；改成「换回后逐字节还原」后一次通过。
 
+## 环境变化实测（2026-09-16 晚）：**本机沙箱 git 已可用，两个工具能跑了**
+
+这条影响所有线程的做法，所以单独记一段。**以前引用过的「本机跑不了 preflight」这个前提，
+今天实测已经不成立。**
+
+### 历史故障四项，逐个复测 → 全部不再复现
+
+| 历史上会坏的操作 | 2026-09-16 晚实测 |
+|---|---|
+| `git checkout -b` 报成功但 ref 不落盘 | ✅ 分支真的出现在 `.git/refs/heads/`（连测 3 次，`rev-parse` 均正确） |
+| `git reset --hard` 报成功但落在旧提交 | ✅ 落在正确的 sha（`git log -1` 与预期一致） |
+| HEAD 变 unborn → `git status` 把整个仓库显示成新增 | ✅ `git status --porcelain` 输出 0 行（正常） |
+| `preflight.mjs` / `verify-merge.mjs` 依赖 `git diff` 跑不了 | ✅ **两个都端到端跑通**，见下 |
+
+### 两个工具的实测输出（用真 sha，不是空跑）
+
+```bash
+$ node scripts/preflight.mjs --base 132223e5 --head d4cd63fd
+[1/3] 查重  ✗ 与 #84 重叠 1 个文件（≥50%）
+[2/3] 接线  ✓ 新增导出 9 个，全部「定义 1 次 + 有调用」
+              crowdOf 8 / depthOf 7 / groundOpacityAt 2 / groundScaleAt 5 /
+              lightReach 7 / lightSourceOf 11 / phaseOf 1 / shadowOf 10 / shapeOf 8
+[3/3] 产物  - 未传 --text
+退出码 1（有硬性失败项）
+
+$ node scripts/verify-merge.mjs feat-square-ui --main __main_base
+[3/4] main 上 PR 尚未包含的提交 …共动 4 个文件
+[4/4] 禁用词扫描（.next 产物）✓ 5 个词各 0 命中
+结论：可以合并，但 base 落后 main 4 个提交
+退出码 0
+```
+
+**`preflight` 的第 [2/3] 项「接线」正是 owner 在 #77 上要求补的那个检查** —— 而它现在能在本机跑。
+
+### 用法（给其他线程）
+
+```bash
+# 修 refs / 让工作区等于某个提交（四件套，缺一不可）
+git fetch origin <sha>
+git update-ref refs/heads/main <sha>      # ① 先修分支 ref（漏了这步 status 一直是脏的）
+git read-tree --reset -u <sha>            # ② 再重置索引 + 工作区
+git checkout-index -a -f                  # ③ 补写文件
+git log --oneline -1 && git status --porcelain   # ④ 必须复核（status 应为空）
+
+# 提 PR 前
+node scripts/preflight.mjs --base <main-sha> --head <my-sha> --text "<要验的文案>"
+node scripts/verify-merge.mjs <branch> --main <main-ref>     # 专治「静默回退别人的修复」
+
+# 本地与 CI 跑同一条链（9 条）
+npm run check:logic
+```
+
+⚠️ **两个我踩到的读数陷阱**（与本条环境变化配套）：
+
+1. **`update-ref` 写错 sha 会静默检出旧提交**，而 `git log -1` 会如实显示那个旧提交 ——
+   看起来「正常」，实际你读的是旧文件。**改完 ref 必须 `git rev-parse HEAD` 复核**。
+   （我这轮就因为漏了这步，差点用旧提交的 `package.json` 得出错误结论。）
+2. **`echo rc=$?` 接在管道后面读到的是 `tail` 的退出码，不是被跑脚本的。**
+   要拿真实退出码就别接管道，或用 `PIPESTATUS[0]`。
+
+> 注：`docs/threads/audit.md` 里那条「`preflight.mjs` / `verify-merge.mjs` 在这里跑不了」
+> 是审计线程自己的文件，**我不代改** —— 请审计线程按自己的判断更新（上面是实测依据）。
+
 ## 未决项（移交，不自行裁决）
 
 - `docs/acceptance.md` 头部「截止 2026-09-15 10:00」已过去，现处**评审期 09-15→09-17**。
