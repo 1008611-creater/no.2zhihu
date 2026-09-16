@@ -1,29 +1,35 @@
-# 线程：dev-square-source（广场来源署名）
+# 线程：dev-square-source（来源署名口径）
 
 - **工作区**：`E:\codex\_dev2`（clone；`node_modules` 是指向主工作区的 junction，
   删这个目录会连带删掉主工作区的 `node_modules`）
-- **分支**：`fix/square-source-attribution` @ 基线 `529df3f`（PR #53，**已合并** `c474450`）
-  ｜`docs/submission-persona-facts` @ 基线 `1a5bd3a`（PR #61，**已合并** `4f4cdfd`）
+- **分支**：`fix/attribution-leaks` @ 基线 `f5bb428`（main tip）
 - **正在改**：
-  - `lib/domain/evidence.ts`（新增：来源可用性判定，纯函数，供 domain 与展示层共用）
-  - `lib/domain/library.ts`（`evidenceTitles` → `sources`；按「可展示」口径统计）
-  - `lib/server/mirror.ts`（`toSource()` 不再把空作者写成「匿名用户」）
-  - `lib/domain/broadcast.ts`（右栏计数与回答页同一口径）
-  - `app/(flow)/answer/[id]/page.tsx`（只渲染有出处来源，其余披露条数）
-  - `components/mirror/EvidenceOverview.tsx`（先筛后去重）
-  - `components/square/FeedStream.tsx`（死文件，同步类型，已标注）
-  - `public/square-library.json`（数据：195 条来源，190 条可取回署名，97.4%）
-  - `docs/submission.md`（PR #61：提交物改称「15 位蒸馏 + 蒋校长预置」，原写 16 位全部蒸馏）
-- **状态**：**本线程收工** —— 两个 PR 均已合并
-  ｜PR #53（广场来源署名）`c474450`；线上核对：22 场 / 66 回答、195 条来源、190 条可核对（97.4%）
-  ｜PR #61（提交物事实对齐）`4f4cdfd`；`docs/submission.md` 改称「15 位蒸馏 + 蒋校长预置」
-  ｜下面两条待办已移交审计线程（两个 PR 的描述里也各写了一份）
-- **最后更新**：2026-09-15 21:05
-- **备注**：修 `/square` 来源署名缺失 —— `slim()` 过去只留标题，导致 22 场 / 66 篇的
-  `sources` 全空、广场回答点不到原文（违反铁律 3）。回填走的是「标题全等」再检索，
-  没有重跑 66 次直答。
-- **留给审计线程的两个未决项**（我不自行裁决）：
-  1. 额度口径不一致：`AGENTS.md` §1.5 写直答 100/天，而 `/api/v1/quota` 实测 5000/天。
-     我在 `mirror.ts` 里两个数字都记了，预算一律按更小的（100/天）算，UI 文案未动。
-  2. `docs/submission.md:87/94` 仍写「预置 16 位…由本人公开回答蒸馏」—— 实际是
-     15 位蒸馏 + `jiangxiaozhang` 预置（他没有可用公开语料）。提交物与事实不符，需改。
+  - `lib/server/persona.ts`（`toSource()` 不再把空作者写成「匿名用户」）
+  - `lib/domain/handoff.ts`（`collectSources()` 只收署名齐全的来源）
+  - `components/mesh/MineHandoffPanel.tsx`（复用 `collectSources()`，删掉自写的那份过滤）
+  - `scripts/check-mirror-shape.mjs`（§⑦ 守卫：署名不得伪造 + 搬运稿来源必须齐全）
+- **状态**：进行中（等 PR 合并）
+- **最后更新**：2026-09-16 11:20
+- **备注**：#53 修了 `lib/server/mirror.ts` 的假署名与展示层口径，但**同一件事在仓库里有
+  多处平行实现，当时只改了一处**。本轮补上剩下三处：
+  ① `persona.ts` 有同一句 `?? "匿名用户"`（在线蒸馏走这条路径）；
+  ② `handoff.ts` 的搬运来源清单只判 `!e.url`，不看作者名；
+  ③ `MineHandoffPanel` 自写了一份同样的过滤。
+  ②③ 的产物是**用户直接粘贴到知乎发布的正文**，空署名贴出去就是无出处引用（铁律 3）。
+  已加 §⑦ 守卫，并通过负向验证（故意回退三处写法，三次都被拦住）。
+
+## 已完成
+
+| PR | 内容 | 结果 |
+|---|---|---|
+| #53 | `/square` 来源署名缺失（生产者→数据→消费者→展示四层 + 护栏） | 合并 `c474450`，线上 190/195 可核对 |
+| #61 | 提交物事实对齐（16 位 → 15 蒸馏 + 1 预置） | 合并 `4f4cdfd` |
+| #62 | 线程声明状态收尾 | 合并 |
+
+## 留给审计线程的未决项（我不自行裁决）
+
+1. **直答额度口径不一致**：`AGENTS.md` §1.5 写「直答 100/天」，而 `GET /api/v1/quota`
+   实测 zhida_openai 是 **5000/天**（差 50 倍）。`voice-selftest` 的额度测算按 100/天算，
+   `mirror.ts` 里我把两个数字都记了、预算按更小的算，UI 文案未动 ——
+   改 L0 铁律的数字不是我的权限。
+2. **`docs/product-plan.md` 的语料表述**：已在 PR #69 处理（该 PR 在途）。

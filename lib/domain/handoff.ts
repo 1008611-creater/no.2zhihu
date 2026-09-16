@@ -1,4 +1,5 @@
 import type { AnswerDraft, MirrorQuestion } from "./types";
+import { isDisplayableSource } from "./evidence";
 
 /**
  * 「搬运回知乎」的真实可行路径。
@@ -63,13 +64,21 @@ export function toZhihuDraft(mirror: MirrorQuestion): string {
   return parts.join("\n\n");
 }
 
-/** 去重后的来源清单，供 UI 与导出共用。 */
+/**
+ * 去重后的来源清单，供 UI 与导出共用。
+ *
+ * ⚠️ 必须用 isDisplayableSource()（标题 + 作者名 + 链接齐全），不能只判 `!e.url`：
+ * 这个清单会被 `toZhihuDraft()` 拼成「· 《标题》 — 作者 / 链接」，
+ * 而那段文字是用户**直接粘贴到知乎发布**的。少一个作者名，贴出去的就是
+ * 一条无出处的引用 —— AGENTS.md 铁律 3 要求的正是「展示知乎内容必须带来源与作者」。
+ * 全库 195 条来源中有 5 条未取回署名（97.4%），只要命中的那场含这类条目就会露出来。
+ */
 export function collectSources(mirror: MirrorQuestion) {
   const seen = new Set<string>();
   const out: Array<{ title: string; author: string; url: string; voteUp: number }> = [];
   for (const a of mirror.answers) {
     for (const e of a.evidence) {
-      if (!e.url || seen.has(e.url)) continue;
+      if (!isDisplayableSource(e) || seen.has(e.url)) continue;
       seen.add(e.url);
       out.push({ title: e.title, author: e.author, url: e.url, voteUp: e.voteUp });
     }
