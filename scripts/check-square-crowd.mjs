@@ -512,6 +512,102 @@ console.log("=".repeat(74));
 }
 
 console.log("\n" + "=".repeat(74));
+console.log("⑪ 部署后旧 chunk 404：必须自愈 + 说人话（不是「重试一下」）");
+console.log("=".repeat(74));
+/**
+ * 为什么需要这一节：
+ *
+ * 本项目每次部署都会替换 `.next/static/chunks/*`，而线上实测
+ * HTML 带 `s-maxage=31536000`、chunk 带 `immutable` —— 于是**部署前打开、
+ * 部署后仍开着的标签页**手里握着一份过期清单，下一次客户端跳转必然取到已被删除的文件。
+ *
+ * 注意：#81（`fix/atomic-deploy`）已经把服务端改成「构建到独立目录再原子切换」，
+ * 消除了**切换瞬间**的窗口；但那**消除不了已经发出去的旧 HTML** ——
+ * 原子切换之后旧 chunk 依然被删，已打开的标签页依然会 404。两者互补，不重复。
+ *
+ * 实测（2026-09-16，从磁盘删掉一个页面级 chunk）：
+ *   · 抛 `Uncaught ChunkLoadError: Loading chunk 36 failed`
+ *   · **`app/error.tsx` 会捕获它**（不是 `global-error.tsx`，这点当初判断错了）
+ *   · 而它当时的文案是「这一步出了点问题……可以重试」—— `reset()` **不会**
+ *     重新下载那个已消失的 chunk，用户点几次都一样
+ *
+ * 这类退化的特征：**不白屏、不报错、界面看起来很正常**，只是把
+ * 「资产过期」讲成了「出了点问题」。只能靠断言钉住。
+ */
+{
+  const chunkSrc = readFileSync(join(here, "..", "lib", "domain", "chunk-reload.ts"), "utf8");
+  const errSrc = readFileSync(join(here, "..", "app", "error.tsx"), "utf8");
+  const globalErrSrc = readFileSync(join(here, "..", "app", "global-error.tsx"), "utf8");
+  const hookSrc = readFileSync(join(here, "..", "lib", "hooks", "useSquareLibrary.ts"), "utf8");
+
+  // ① 判定函数覆盖已知的错误形态
+  const forms = [/ChunkLoadError/, /Loading chunk/, /dynamically imported module/];
+  const missing = forms.filter((re) => !re.test(chunkSrc));
+  if (missing.length) bad("chunk-reload.ts 的判据缺 " + missing.length + " 种已知形态");
+  else ok("资产过期判据覆盖 ChunkLoadError / Loading chunk N failed / 动态 import 失败");
+
+  // ② 必须真的调用 reload（只判断不重载 = 没修）
+  if (!/window\.location\.reload\(\)/.test(errSrc)) {
+    bad("app/error.tsx 检测到资产过期却没有 reload() —— 用户还是只能干瞪眼");
+  } else ok("捕获资产过期后确实触发 reload()");
+
+  // ③ 必须有防死循环
+  if (!/markAutoReload/.test(errSrc)) {
+    bad("app/error.tsx 没有用 markAutoReload —— 缺少防死循环保护");
+  } else if (!/RELOAD_GUARD_MS/.test(chunkSrc)) {
+    bad("chunk-reload.ts 没有重载间隔常量");
+  } else ok("自动重载有防死循环（markAutoReload + 时间窗）");
+
+  // ④ 文案必须说人话
+  if (!/加载时更新过|更新过了/.test(errSrc)) {
+    bad("app/error.tsx 的文案没告诉用户「页面在加载时更新过了」——仍在讲「出了点问题」");
+  } else ok("文案讲清了成因（页面在加载时更新过了）");
+  if (!/数据没有丢/.test(errSrc)) {
+    bad("app/error.tsx 没有安抚数据安全 —— 用户会担心提问记录丢了");
+  } else ok("文案说明「你的数据没有丢」");
+
+  // ⑤ 两条路径分开：资产过期 ≠ 其他错误
+  if (!/isChunkLoadError\(error\)/.test(errSrc)) {
+    bad("app/error.tsx 没有区分「资产过期」与「其他错误」");
+  } else ok("区分了资产过期与一般错误（一般错误仍走 retry）");
+  if (!/onClick=\{reset\}/.test(errSrc)) {
+    bad("app/error.tsx 丢掉了原有的 retry 路径 —— 一般错误失去了恢复手段");
+  } else ok("一般错误仍保留 reset() 重试路径");
+
+  // ⑥ global-error 作为最后防线
+  if (!/isChunkLoadError/.test(globalErrSrc)) {
+    bad("app/global-error.tsx 没接同一套判据 —— 最后防线形同虚设");
+  } else ok("global-error.tsx 复用同一套判据（兜 error.tsx 自身加载失败的情况）");
+  if (/from "next\/link"/.test(globalErrSrc)) {
+    bad("global-error.tsx 用了 next/link —— 该层要在「客户端路由已坏」的假设下工作");
+  } else ok("global-error.tsx 用原生 <a>（不依赖已损坏的客户端路由）");
+
+  // ⑦ 广场侧第二道防线：加载超时
+  //
+  // 判据设计说明（我在这里踩过坑，写下来免得下次又写成恒真）：
+  //   ① 只搜常量名 → 改名成 `LOAD_TIMEOUT_MS_REMOVED` 仍匹配（包含原串）✗
+  //   ② 改成「常量 + setTimeout + 回调切 error」三条文本断言 → 删 setTimeout 能抓到，
+  //      但「只改声明处」仍会漏（使用处还留着那个字面量）✗
+  //   ③ 最终：抓**定时器回调体**这一段的实际内容，要求它既读 loading 又写 error。
+  const timerBody = (() => {
+    const m = hookSrc.match(/window\.setTimeout\(\s*\(\)\s*=>\s*\{([\s\S]*?)\}\s*,\s*[^)]+\)/);
+    return m ? m[1] : "";
+  })();
+  const hasTimeoutConst = /const\s+\w*TIMEOUT\w*\s*=\s*[\d_]+\s*;/.test(hookSrc);
+  if (!hasTimeoutConst) {
+    bad("useSquareLibrary 没有超时常量 —— chunk 失效时广场会永远停在「正在铺开广场…」");
+  } else if (!timerBody) {
+    bad("useSquareLibrary 没有可识别的 window.setTimeout 定时器 —— 超时是摆设");
+  } else if (!/loading/.test(timerBody)) {
+    bad("超时回调没有检查 loading 状态 —— 会把已成功的结果误判成超时");
+  } else if (!/["']error["']/.test(timerBody)) {
+    bad("超时回调没有把状态切成 error —— 转圈不会停");
+  } else {
+    ok("广场库加载有超时兜底（定时器回调确实把 loading 切成 error）");
+  }
+}
+
+console.log("\n" + "=".repeat(74));
 console.log(fail === 0 ? "全部通过（0 处问题）" : "发现 " + fail + " 处问题");
 console.log("=".repeat(74));
 process.exit(fail === 0 ? 0 : 1);
