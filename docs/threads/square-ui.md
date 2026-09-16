@@ -1,17 +1,18 @@
 # 线程：square-ui（虚拟广场界面）
 
 - **工作区**：`E:\codex\heikesong3\.tools\sq-arena`
-- **分支**：`feat/square-ui` @ 基线 `14645fc`
+- **分支**：`feat/square-ui` @ 基线 `0a6f33e`（已 merge main 追平；原基线 `14645fc`）
 - **正在改**：
-  - `lib/domain/light.ts`（新：光源 / 影子 / 纵深几何）
-  - `lib/domain/crowd.ts`（人形姿态与体型差异、呼吸相位）
+  - `lib/domain/light.ts`（新：光源 / 影子 / 纵深 / 体态几何）
+  - `lib/domain/crowd.ts`（纵深缩放、体态派生、摆放半径与高度基准拆成两个常量）
+  - `lib/domain/square-layout.ts`（homeViewport 取景 1.02 → 0.92）
   - `components/square/CrowdCluster.tsx`
   - `components/square/SquareCanvas.tsx`
   - `app/frontend-v2.css`
-  - `scripts/check-square-light.mjs`（新：光影几何自检）
+  - `scripts/check-square-light.mjs`（新：光影几何自检，7 节）
   - `docs/threads/square-ui.md`（本文件）
-- **状态**：进行中
-- **最后更新**：2026-09-15 21:50
+- **状态**：已提 PR **#77**（工程侧完备；视觉侧等 owner 给方向）
+- **最后更新**：2026-09-16 15:00
 - **备注**：
   广场视觉重做 —— 透视场地 + 光影物理（光在最热那一场、全场影子朝外）+ 缺口渲染成「地上的洞」
   + 人群呼吸 / 光柱脉动 / 尘埃。目标是「一眼就牛逼」。
