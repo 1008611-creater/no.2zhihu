@@ -173,10 +173,18 @@ if (/return\s*\{\s*\}\s*;/.test(layoutCode)) {
 } else {
   ok("layout.tsx 里没有 `return {}` 的空实现");
 }
-if (!/robots:\s*\{\s*index:\s*false/.test(layoutCode)) {
-  bad("layout.tsx 不再声明 noindex —— 未知 handle 会被收录");
+// noindex必须「条件化」：断言条件形态（meta.noindex ? { robots: … }），
+// 而不是「出现过 robots: { index: false」—— 后者判不住被改成无条件 noindex 的退化
+// （无条件时正则照样命中，但 16 位真实答主档案页会被误标 noindex，语义已反）。
+if (!/meta\.noindex\s*\?\s*\{\s*robots:\s*\{\s*index:\s*false/.test(layoutCode)) {
+  bad("layout.tsx 的 noindex 不再受 meta.noindex 条件约束 —— 会把真实答主档案页也标成 noindex");
 } else {
-  ok("layout.tsx 保留了未知 handle 的 noindex");
+  ok("layout.tsx 的 noindex 挂在 meta.noindex 条件下（只作用于未知 handle）");
+}
+if (/^\s*robots:\s*\{\s*index:\s*false/m.test(layoutCode)) {
+  bad("layout.tsx 出现无条件 noindex 声明");
+} else {
+  ok("layout.tsx 没有无条件 noindex");
 }
 
 const listPage = readFileSync(join(here, "..", "app", "(explore)", "personas", "page.tsx"), "utf8");
