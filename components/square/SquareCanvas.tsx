@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import CrowdCluster from "@/components/square/CrowdCluster";
 import { crowdSummary, type CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
+import { lightReach, lightSourceOf } from "@/lib/domain/light";
 import type { SquareLayout, SquareScope, TopicNode, Viewport } from "@/lib/domain/square-layout";
 import { SCOPE_LABELS, clampViewport, focusViewport, homeViewport, zoomAt } from "@/lib/domain/square-layout";
 
@@ -345,6 +346,18 @@ export default function SquareCanvas({
     [focused, clusters],
   );
 
+  /**
+   * 全广场唯一的那一盏灯。
+   *
+   * 优先落在**被聚焦**的那一场上，否则落在最热的那一场（`lightSourceOf`）。
+   * 这是整个广场唯一一个能被记住的动作：点开另一场讨论的瞬间，
+   * 光移过去、上百条影子同时转向。
+   */
+  const light = useMemo(() => lightSourceOf(layout.nodes, focusedId), [layout.nodes, focusedId]);
+
+  /** 光源到最远簇的距离 —— 把影长归一化，免得极端布局把影子拉成一条线。 */
+  const reach = useMemo(() => (light ? lightReach(layout.nodes, light) : 1), [layout.nodes, light]);
+
   const scopeLabel = SCOPE_LABELS.find((s) => s.key === scope)?.label ?? "";
 
   return (
@@ -366,28 +379,52 @@ export default function SquareCanvas({
             放在 defs 里而不是每个簇各画一遍：22 簇 × 约 5 人 = 110 份重复路径，
             既撑大 DOM，也让「改一次人形」变成改 110 处。
 
-            ⚠️ viewBox 的宽高比（12/20）必须与 CrowdCluster.tsx 的 GLYPH_ASPECT 一致，
-            否则人形会被拉伸成胖子或竹竿。改这里必须同时改那里。
+            ⚠️ 三个 symbol 的 viewBox 宽高比（12/20）必须与 CrowdCluster.tsx 的
+            GLYPH_ASPECT 一致，否则人形会被拉伸成胖子或竹竿。改这里必须同时改那里。
+
+            ## 为什么是三个姿态，不是一个
+
+            上一版只有一个剪影，97 个位置复用它 —— 读出来就是「一个用户图标被
+            复制了 97 次」，这是被评价「平庸」的直接原因。现在三种姿态：
+
+              · stand —— 正立（默认，最中性）
+              · turn  —— 上身微侧，头略偏（人群里有人在看别处）
+              · fold  —— 肩线放平、下摆外扩（像抱着手站着）
+
+            三种都是**几何微调**，不是插画：形状仍然只由圆、弧、直线构成，
+            符合设计系统的「形状来自圆/方/线/弧」。看向一侧只是把肩膀弧
+            变得不对称，不画五官、不画手。
 
             第一版是 10×24（细高个），实测截图里人形读起来像一根竖条加个点，
             不像人。加宽到 12×20、并把头和肩接上之后才有「人」的轮廓。 */}
         <svg className="sq-defs" aria-hidden="true" focusable="false">
           <defs>
-            {/* 实心：在场分身。圆头 + 肩弧 + 直身 —— 形状全部来自设计系统允许的圆/线/弧。 */}
-            <symbol id="sq-figure" viewBox="0 0 12 20">
+            <symbol id="sq-fig-stand" viewBox="0 0 12 20">
               <circle cx="6" cy="3.6" r="3.2" />
               <path d="M1.4 20 L1.4 12 A4.6 4.6 0 0 1 10.6 12 L10.6 20 Z" />
             </symbol>
-            {/* 空心：未补的缺口 —— 「还缺的那个真人」。
-                只描边不填色，一眼就能和在场的人区分开。 */}
-            <symbol id="sq-figure-gap" viewBox="0 0 12 20">
-              <circle cx="6" cy="3.6" r="3.2" fill="none" strokeWidth="1.7" />
-              <path
-                d="M1.4 20 L1.4 12 A4.6 4.6 0 0 1 10.6 12 L10.6 20 Z"
-                fill="none"
-                strokeWidth="1.7"
-              />
+            {/* 侧身：头略偏右、肩膀弧左右不对称（左肩更平、右肩更圆），
+                下摆略收 —— 一眼能看出「这个人朝那边」。 */}
+            <symbol id="sq-fig-turn" viewBox="0 0 12 20">
+              <circle cx="6.7" cy="3.7" r="3.05" />
+              <path d="M1.9 20 L2.5 12.4 A3.6 3.5 0 0 1 10.1 11.9 L10.4 20 Z" />
             </symbol>
+            {/* 抱手：肩线放平（不再用弧），下摆外扩 —— 站姿更「沉」。 */}
+            <symbol id="sq-fig-fold" viewBox="0 0 12 20">
+              <circle cx="6" cy="3.9" r="3.15" />
+              <path d="M1 20 L2.7 12.9 L9.3 12.9 L11 20 Z" />
+            </symbol>
+
+            {/* 地灯的渐变。
+                用默认的 objectBoundingBox（不是 userSpaceOnUse）：按每个椭圆自己的
+                包围盒缩放，不同尺寸的椭圆共用同一个渐变也不会错位。
+                上一版的甜甜圈不是缩放造成的，是**三层不同颜色**造成的 ——
+                一圈橙边裹一个暗心。一层渐变就没有「层与层的边界」。 */}
+            <radialGradient id="sqHoleGrad">
+              <stop offset="0" stopColor="#ffc9a3" stopOpacity="0.95" />
+              <stop offset="0.42" stopColor="#ff8a4c" stopOpacity="0.66" />
+              <stop offset="1" stopColor="#ff8a4c" stopOpacity="0" />
+            </radialGradient>
           </defs>
         </svg>
 
@@ -403,6 +440,96 @@ export default function SquareCanvas({
                 : "transform var(--dur-slow) var(--ease-out)",
           }}
         >
+          {/* 场地：一整块被照亮的圆形地面，中心亮、边缘渐隐入页面底色。
+              尺寸取包围盒的两倍而不是刚好的外接圆 —— 那圈渐变尾巴需要地方散开，
+              刚好铺满会让边缘出现一道硬边（看起来像一块地砖浮在虚空里）。
+
+              ⚠️ 这一块**是必须的**：上一版没有它，光池和影子都直接画在近黑的
+              页面底色上，实测截图里**一条影子都看不见** —— 黑色影子画在黑色
+              地面上等于隐身。**有影子必须有光，有光必须有能接住光的表面。** */}
+          <span
+            className="sq-field"
+            style={{
+              // ⚠️ 必须**按包围盒中心**定位，不能按左上角偏移。
+              // 世界坐标里包围盒围绕原点对称（minX≈-1200 / maxX≈+1200），
+              // 按左上角算会让整块场地偏到右下一大块，屏幕中心只蹭到它最亮的边缘 ——
+              // 实测「地面没有亮度」就是这么翻的车。
+              //
+              // 1.5 倍而不是 2.24：取太大时径向渐变整块落在屏幕外，
+              // 可见区域全落在最亮那一段，地面变成一片没有过渡的平色。
+              left: (bounds.minX + bounds.maxX) / 2 - (bounds.maxX - bounds.minX) * 0.75,
+              top: (bounds.minY + bounds.maxY) / 2 - (bounds.maxY - bounds.minY) * 0.75,
+              width: (bounds.maxX - bounds.minX) * 1.5,
+              height: (bounds.maxY - bounds.minY) * 1.5,
+            }}
+          />
+
+          {/* 地面：一池被照亮的地 + 光柱 + 尘埃。
+              这三层是整个广场「空间感」的来源 —— 没有它们，人群只是浮在网格上
+              的剪影；有了它们，人群是站在一块被照亮的场地上。
+
+              为什么光柱要「脉动」而不是常亮：常亮读起来像贴图，脉动读起来像
+              有光源在呼吸。这是 silk-design 的 ray-pulse 手法，幅度刻意很小。 */}
+          {light && (
+            <div
+              className="sq-light"
+              style={{ transform: `translate(${light.x}px, ${light.y}px)` }}
+              aria-hidden="true"
+            >
+              <span className="sq-light-pool" />
+              <svg className="sq-light-rays" viewBox="-200 -250 400 250" focusable="false">
+                {/* ⚠️ 渐变必须定义在光柱**自己的坐标系**里。
+                    上一版沿用外层世界的坐标（x1=300 y1=292…），
+                    在 viewBox="-200 -250 400 250" 里那个区间整块落在画布之外 ——
+                    填充退化成平色，8 根光柱糊成一个灰三角。
+                    现在改到本坐标系：从光源 (0,0) 向上到 (0,-250)。 */}
+                <defs>
+                  <linearGradient
+                    id="sqRayGrad"
+                    gradientUnits="userSpaceOnUse"
+                    x1="0"
+                    y1="0"
+                    x2="0"
+                    y2="-250"
+                  >
+                    <stop offset="0" stopColor="#e6ecff" stopOpacity="0.30" />
+                    <stop offset="0.45" stopColor="#dbe4f8" stopOpacity="0.09" />
+                    <stop offset="1" stopColor="#dbe4f8" stopOpacity="0" />
+                  </linearGradient>
+                </defs>
+                {[-124, -62, 0, 62, 124].map((x, i) => (
+                  <path
+                    key={x}
+                    className="sq-ray"
+                    d={`M0 0 L${x - 13} -250 L${x + 13} -250 Z`}
+                    style={reduced ? undefined : { animationDelay: `-${(i * 0.55).toFixed(2)}s` }}
+                  />
+                ))}
+              </svg>
+              <span className="sq-light-core" />
+              {!reduced &&
+                [
+                  [-38, -30, 0],
+                  [26, -14, -1.3],
+                  [-12, -58, -2.6],
+                  [44, -74, -3.9],
+                  [-52, -96, -5.2],
+                  [8, -112, -6.4],
+                ].map(([x, y, d]) => (
+                  <span
+                    key={d}
+                    className="sq-dust"
+                    style={{
+                      transform: `translate(${x}px, ${y}px)`,
+                      animationDelay: `${d}s`,
+                      width: 2.2,
+                      height: 2.2,
+                    }}
+                  />
+                ))}
+            </div>
+          )}
+
           {layout.nodes.map((n, i) => {
             const c = clusters[i];
             if (!c) return null;
@@ -411,9 +538,12 @@ export default function SquareCanvas({
                 key={n.id}
                 node={n}
                 cluster={c}
+                light={light}
+                reach={reach}
                 focused={focusedId === n.id}
                 dimmed={!!focusedId && focusedId !== n.id}
                 hovered={hovered === n.id}
+                reduced={!!reduced}
                 onHover={setHovered}
                 onSelect={() => selectNode(n)}
               />

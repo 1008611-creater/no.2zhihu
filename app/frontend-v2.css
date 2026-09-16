@@ -1066,13 +1066,24 @@ body.sq-locked {
   transform: scale(1.04);
 }
 
-/* 地面圈：虚线圆，标出「这场讨论占的那块地」。
-   没有它，外圈的小簇在大片深色地面上会像漂浮的点，看不出是个聚落。 */
+/* 地面：人群脚下的一圈**亮底**，把「这伙人占的那块地」托出来。
+ *
+ * ⚠️ 上一版这里是「压暗的椭圆」。翻转对比结构之后必须跟着反过来 ——
+ * 人已经是深色剪影，脚下还压暗的话，人和地会糊成一坨黑、
+ * 反而数不出有几个人。提亮之后人群才有「站立面」。 */
 .sq-crowd-ground {
   position: absolute;
-  inset: 5%;
-  border: 1px dashed var(--line-soft);
+  inset: 14%;
   border-radius: 50%;
+  /* 0.10 / inset 14%：这一层是最容易过曝的 —— 它贴在每一簇脚下，
+     而中央那簇脚下本来就已经叠了场地中心 + 光池两层。
+     收紧之后「站立面」还在，但不会再糊成一团白。 */
+  background: radial-gradient(
+    ellipse at 50% 58%,
+    rgba(200, 218, 255, 0.06) 0%,
+    rgba(172, 192, 238, 0.033) 50%,
+    rgba(0, 0, 0, 0) 78%
+  );
 }
 
 /* 聚焦环：只在当前打开的那一场上出现。 */
@@ -1097,41 +1108,274 @@ body.sq-locked {
   position: absolute;
   inset: 0;
   overflow: visible;
+  /* 纵深明度：远处那几簇淡入背景（大气透视）。
+     变量由 CrowdCluster 内联给（0.46–1.0），与 .sq-crowd-node-dimmed 的
+     opacity 相乘 —— 后者只在聚焦时出现，两者互不覆盖。 */
+  opacity: var(--sq-depth-opacity, 1);
+  /* 呼吸：整簇以同相缓慢起伏（错相由内联 animation-delay 给）。
+     幅度只有 1.2px —— 这是「广场活着」的信号，不是动画表演。
+     为什么不做成人人都动：GSAP 官方性能规范明确写着不要为几百个元素各建一条
+     tween；22 个（每簇一条）在观感上和 97 个没有区别，成本却小一个量级。 */
+  animation: sq-breathe 4.6s ease-in-out infinite;
 }
 
-/* 在场分身：**中性剪影，不染街区色**。
-   街区色里有 orange，而 orange 是缺口的专用色 —— 同色会让「谁在场、谁缺席」
-   这个核心论点读不出来（线上实测：21 个实心分身与 31 个空心缺口同为橙色）。
-   街区的颜色改在浮标小圆点与聚焦环上体现。 */
+@keyframes sq-breathe {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.2px); }
+}
+
+/* ------------------------------ 人形 ------------------------------ */
+
+/* 在场分身：**深色剪影**。
+ *
+ * 两条约束叠在一起决定了这个颜色：
+ *   ① 场地是亮的（见 .sq-field），所以人必须是**深色**才有对比 ——
+ *      浅色小人站在亮地面上会糊成一片。
+ *   ② 不能染街区色。街区色里有 orange，而 orange 是缺口的专用色；
+ *      线上实测过「21 个实心分身与 31 个空心缺口同为橙色」，
+ *      「谁在场、谁缺席」这个核心论点直接读不出来。
+ *      街区的颜色改在浮标小圆点与聚焦环上体现。
+ *
+ * 0.94 而不是 1：留一点透明，让地面亮度透过来，人群才像「站在地上」
+ * 而不是「贴在地上的黑纸片」。 */
 .sq-figure-persona {
-  fill: var(--text-300);
-  opacity: 0.55;
+  fill: #05070e;
+  opacity: 0.94;
   transition: opacity var(--dur-fast) var(--ease-standard);
 }
 
-.sq-crowd-node-hover .sq-figure-persona   { opacity: 0.82; }
+.sq-crowd-node-hover .sq-figure-persona   { opacity: 1; }
 .sq-crowd-node-focused .sq-figure-persona { opacity: 1; }
 
-/* 缺口：**全广场唯一使用 orange 的人形** —— 只描边不填色。
-   实心中性 vs 空心橙，两种人形在任何缩放下都不会混。 */
-.sq-figure-gap {
-  fill: none;
-  stroke: var(--orange);
-  opacity: 0.92;
+/* ------------------------------ 影子 ------------------------------ */
+
+/* 影子：人朝背离光源的方向在地上甩出的一条硬影。
+   fill 用纯黑而不是半透明黑 —— 地面本来就是深色，半透明黑会直接消失。
+   transition 让光源移动时影子是**转过去**的：这是全场唯一一个
+   「上百个元素同时响应一个动作」的时刻，也是整个广场的记忆点。 */
+.sq-shadow {
+  fill: #000000;
+  /* 0.55：地面已经被照亮，纯黑影子在亮地面上本来就够明显；
+     再加深会变成一条条硬边黑杠，读起来像污渍而不是影子。 */
+  opacity: 0.55;
+  transform-origin: 0 0;
+  transition: transform 560ms var(--ease-out);
 }
 
-/* 聚焦某一簇时，其余人群整体退到背景（由 .sq-crowd-node-dimmed 的
-   opacity 统一处理），所以缺口不需要单独降透明度 —— 降了反而会和
-   在场的实心人形混在一起。 */
+@media (prefers-reduced-motion: reduce) {
+  .sq-crowd { animation: none; }
+  .sq-shadow { transition: none; }
+}
+
+/* ------------------------------ 缺口 = 地上的洞 ------------------------------ */
+
+/* 缺口不再画成空心小人，而是地面上一个透着暖光的洞。
+   **所有人都投下影子，只有这几个位置地上是空的** —— 一眼就知道这里少了一个人，
+   不需要任何解释。这也是这个广场最不可能被别处抄走的一处。
+
+   场景翻转成「亮场地 + 深剪影」之后，洞的读法也跟着改：
+ *
+ * 上一版是「橙色圆 + 更小的黑圆叠在一起」，glow 取到 void 的 1.55 倍，
+ * 于是橙色从四周露出一整圈 —— 截图里读成**橙色甜甜圈**，完全不像洞。
+ *
+ * 现在按「地上一盏暖色的地灯」来做：glow（外溢暖光，只比本体大一点）
+ * → 本体（暖色实心，这是「有人该站这儿」的位置标记）→ 芯（一点暗，避免成纯色斑）。
+ *
+ * 为什么用暖色而不是黑色：场地是亮的，画一个黑点只会读成「地上有块脏东西」；
+ * 一盏暖色的地灯才读得出「这里留了个位置，在等人」。
+ * 而且 orange 在设计系统里本来就是缺口的专用色，语义正好。 */
+.sq-hole-glow {
+  fill: url("#sqHoleGrad");
+  /* 0.34 → 0.2。
+     人形放大到 49px 之后，原来这个亮度让橙色地灯成了画面里最扎眼的东西 ——
+     比在场的人还抢视线。而缺口是「空位」，是**弱信号**：
+     它该让人注意到「这儿少一个」，不该让人只看到它。 */
+  opacity: 0.2;
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: sq-hole-glow 3.6s ease-in-out infinite;
+}
+
+@keyframes sq-hole-glow {
+  0%, 100% { opacity: 0.13; }
+  50%      { opacity: 0.28; }
+}
+
+/* 本体：**单一径向渐变一次成型**。
+ *
+ * 上一版是三层不同尺寸的椭圆叠（橙 glow 1.55× / 暗橙 void 1.0× / 深棕芯 0.58×），
+ * 必然叠出一圈橙边裹一个暗心 —— 截图里就是**橙色甜甜圈**。
+ * 径向渐变没有「层与层的边界」，从中心暖到边缘透明是一次连续过渡。 */
+.sq-hole-void {
+  fill: url("#sqHoleGrad");
+  opacity: 0.66;
+}
+
+/* 芯与沿都不再需要：一个渐变已经把这盏地灯说清楚了。 */
+.sq-hole-deep {
+  fill: none;
+}
+
+.sq-hole-rim {
+  fill: none;
+  stroke: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-hole-glow { animation: none; opacity: 0.16; }
+}
+
+/* ------------------------------ 光与尘埃 ------------------------------ */
+
+/* 场地：一整块被照亮的圆形地面 —— 整个画面的**对比基准**。
+ *
+ * ⚠️ 这是本轮最要紧的一处修改：
+ *
+ * 上一版是「近黑的地 + 浅灰的小人 + 纯黑的影子」。实测结果 —— **一条影子都看不见**，
+ * 因为黑色影子画在黑色地面上等于隐身。当时的第一反应是把影子加深、把地面提亮一点点，
+ * 但那是在错路上多走一步。
+ *
+ * 舞台的物理是反过来的：**先有一块被照亮的场地，人站上去才是深色的剪影。**
+ * 场地亮 → 影子自然可见 → 对比够强，远处的小人也能看清。
+ * 所以这一版把两者**一起翻转**：地面明显亮起来，人形改成近黑剪影。
+ *
+ * 中心亮度取到约 #2c3552（页面底色 #07080f）—— **在 1440×900 截图上逐轮调出来的**：
+ * 低于 #222a3f 影子又看不见，高于 #37415f 就变成灰底白景、丢掉「夜色里的广场」这个基调。
+ * 改它必须重新看截图。
+ */
+.sq-field {
+  position: absolute;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(112, 134, 194, 0.50) 0%,
+    rgba(88, 108, 160, 0.42) 28%,
+    rgba(58, 72, 112, 0.27) 52%,
+    rgba(26, 32, 52, 0.10) 72%,
+    rgba(0, 0, 0, 0) 88%
+  );
+}
+
+/* 一池被照亮的地。它挂在 .sq-world 里（跟着视野一起平移缩放），
+   所以拖动时是「场地在动」而不是「光在追」。 */
+.sq-light {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  /* 光源移动由这里过渡 —— 与影子同一个时长同一条曲线，
+     否则光到了、影子还在半路，看起来像两个独立的东西。 */
+  transition: transform 560ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-light { transition: none; }
+}
+
+.sq-light-pool {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 380px;
+  height: 260px;
+  margin-left: -190px;
+  margin-top: -130px;
+  border-radius: 50%;
+  /* 0.20 而不是 0.32 —— 场地的中心已经有 0.50 的亮度，再叠 0.32
+     会让中央那簇脚下变成一大团发白的雾（截图里读起来像镜头起雾）。
+     三层亮度叠在同一个位置时，每一层都要按「加上去之后」来定，不能各自看。 */
+  background: radial-gradient(
+    ellipse at center,
+    rgba(208, 220, 248, 0.13) 0%,
+    rgba(168, 186, 224, 0.065) 42%,
+    rgba(0, 0, 0, 0) 74%
+  );
+}
+
+/* 光柱：从光源朝画面外射出的扇形，每根的脉动错相。
+   这是 silk-design 的 ray-pulse 手法 —— 幅度必须小，
+   大了就变成迪斯科球，与「文字几何」的克制冲突。 */
+.sq-light-rays {
+  position: absolute;
+  left: -170px;
+  top: -230px;
+  width: 340px;
+  height: 230px;
+  overflow: visible;
+}
+
+.sq-ray {
+  fill: url("#sqRayGrad");
+  opacity: 0.17;
+  animation: sq-ray 3.4s ease-in-out infinite;
+}
+
+@keyframes sq-ray {
+  0%, 100% { opacity: 0.09; }
+  50%      { opacity: 0.28; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-ray { animation: none; opacity: 0.15; }
+}
+
+.sq-light-core {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 9px;
+  height: 9px;
+  margin-left: -4.5px;
+  margin-top: -4.5px;
+  border-radius: 50%;
+  background: #eef1fa;
+  box-shadow: 0 0 18px 8px rgba(238, 241, 250, 0.22);
+}
+
+/* 尘埃：光里缓慢上升的微粒。七秒一轮，几乎察觉不到 ——
+   察觉到就嫌吵，察觉不到才叫「有空气」。 */
+.sq-dust {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  border-radius: 50%;
+  background: #dbe4f8;
+  opacity: 0;
+  animation: sq-dust 7s linear infinite;
+}
+
+@keyframes sq-dust {
+  0%   { opacity: 0; transform: translateY(6px) scale(0.8); }
+  30%  { opacity: 0.5; }
+  100% { opacity: 0; transform: translateY(-34px) scale(1.1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-dust { display: none; }
+}
 
 /* 浮标标题：问题标题是视觉主体，所以放在人群**上方**而不是塞进圆里。
-   宽度给到 15em 就换行 —— 再宽，相邻两簇的标题会撞在一起。 */
+ *
+ * ## 为什么需要一块底衬
+ *
+ * 人形放大到 49px 之后，**跨簇间隙比降到 1.02** —— 相邻两簇的视觉占位刚好
+ * 不相交，也就是一簇的人形可以贴到邻居标题的正下方。实测截图里多处标题
+ * 被人头顶住。
+ *
+ * 靠拉大簇间距解决是错的方向（刚把簇收紧了 30%）；底衬才是对症的：
+ * 它让标题在**任何人形后面**都可读，与布局无关。
+ * 这也贴合原本的隐喻 —— 标题本来就是立在广场边上的指示牌。
+ *
+ * 用极淡的暗底（而不是描边或发光）：设计系统禁止发光与阴影堆叠。
+ */
 .sq-crowd-label {
   position: absolute;
   bottom: 100%;
   left: 50%;
   transform: translateX(-50%);
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   display: flex;
   align-items: flex-start;
   gap: 6px;
@@ -1139,6 +1383,10 @@ body.sq-locked {
   /* 12em ≈ 156px。簇间距约 215px，留出这个宽度之后相邻两簇的标题才不会撞上；
      再窄一点长标题就要折成三行，反而更挤。 */
   max-width: 12em;
+  padding: 3px 8px 4px;
+  border-radius: 7px;
+  /* 0.82 而不是全不透明：招牌要压住底下的人形，但还留一点「浮在场上」的通透感。 */
+  background: rgba(7, 8, 15, 0.82);
 }
 
 .sq-crowd-label .sq-cluster-dot {

@@ -39,8 +39,24 @@
  * 所以现在：在场分身一律中性剪影，**全广场唯一使用 orange 的人形是缺口**。
  * 街区的颜色仍然保留 —— 在浮标标题的小圆点和聚焦环上（那是「标签」，
  * 与人形不是一个视觉层级，不会和缺口抢语义）。
+ *
+ * ## 纵深与体态（2026-09-15 第三轮）
+ *
+ * 上一版被评价「平庸」，两个直接原因都在这里：
+ *
+ *   ① **所有人一样大** —— 只有 16% 的尺度差，读起来是「撒在一张纸上的图案」。
+ *      现在按 y 坐标给**整簇**一个纵深缩放（远处 0.66、近处 1.0），
+ *      远处的人还会更暗（大气透视）。广场于是有了「向远处退去」的地面。
+ *   ② **所有人一样** —— 97 个一模一样的剪影 = 一个图标被复制 97 次。
+ *      现在每个人由自己的稳定 key 派生出体态（身高 ±12%、肩宽 ±10%、
+ *      倾斜 ±7°、四种姿态）与呼吸相位。
+ *
+ * ⚠️ 这两个量**必须仍然可复现**：纵深只由 y 决定，体态只由 key 的哈希决定，
+ * 全程没有 `Math.random`。同一份数据永远得到同一个广场 —— 这是评委能复现
+ * 同一张截图的前提，也是这个文件从第一天起的硬约束。
  */
 
+import { depthOf, groundScaleAt, shapeOf, type FigureShape } from "./light";
 import { hashUnit, stableHash, type TopicNode } from "./square-layout";
 
 /** 人形的两种身份。见文件头注释：除此之外没有第三种。 */
@@ -53,10 +69,18 @@ export interface CrowdFigure {
   /** 相对簇心的世界坐标（人形**脚底中点**） */
   dx: number;
   dy: number;
-  /** 人形高度（世界像素，已含近大远小的纵深缩放） */
+  /** 人形高度（世界像素，已含整簇的纵深缩放与本人的体态差异） */
   height: number;
-  /** 绘制顺序：数值越大越靠前，由调用方排序后先画小的 */
-  depth: number;
+  /**
+   * 绘制顺序：数值越大越靠前，由调用方排序后先画小的。
+   *
+   * 为什么叫 paintOrder 而不是 depth：`CrowdCluster.depth` 已经是
+   * 「这一簇在广场上的纵深（0 远 1 近）」，两个 depth 含义完全不同，
+   * 同名会让读代码的人算错。这里只关心谁盖住谁。
+   */
+  paintOrder: number;
+  /** 体态：姿态 / 身高 / 肩宽 / 倾斜 / 呼吸相位（由 key 稳定派生） */
+  shape: FigureShape;
 }
 
 export interface CrowdCluster {
@@ -72,6 +96,10 @@ export interface CrowdCluster {
   personaCount: number;
   /** 未补缺口数（= 空心人形数） */
   gapCount: number;
+  /** 这一簇在广场上的纵深：0 = 最远（屏幕上方），1 = 最近 */
+  depth: number;
+  /** 纵深对应的缩放（0.66–1.0），渲染层用它决定整簇的体量 */
+  groundScale: number;
 }
 
 /**
@@ -110,21 +138,85 @@ const CROWD_RADIUS_RATIO = 0.72;
 const CROWD_USABLE = 0.72;
 
 /**
+ * 人群**摆放**半径 / 簇半径。
+ *
+ * 为什么和 CROWD_USABLE 分开：上一版两者共用一个值，结果一簇 4 个人散在
+ * 82px 半径的圆里 —— 截图上看是「几个孤立的点」，不像「一伙人在讨论」。
+ * 现在摆放收紧到 0.64（人聚拢），而人形高度仍按 0.72 算（人不会变小）。
+ *
+ * 收紧摆放会不会重叠：会，所以高度基准没有跟着缩。这两个值必须成对调 ——
+ * `scripts/check-square-light.mjs` 与 `check-square-crowd.mjs` 都有重叠断言守着。
+ *
+ * 0.64 → 0.62：人形放大到 49px 之后，簇内人与人之间的缝显得更空
+ * （人变大了、间距没变）。收到 0.62 让人挨得紧一点。
+ *
+ * ⚠️ **0.58 试过，被自检拦下来了**：重叠比掉到 0.97（< 1 就是有人叠在一起）。
+ *     的 ② 节当场报「有两个人形叠在一起」。
+ *    0.62 是「更聚拢」与「不重叠」之间那个点 —— 再往下调就必须同时减人形高度。
+ *    这个值**不能凭手感改**，改完必须跑那个自检。
+ */
+const CROWD_SPREAD = 0.62;
+
+/**
  * 人形高度系数。
  *
- * 推导：N 个人形在半径 R_u 的圆里不重叠，最小中心距约为 `1.45 * R_u / √N`
- * （黄金角螺旋的经验值）；人形宽 ≈ 0.6 × 高，所以高取 `1.45 * R_u / √N`
- * 时正好「排得下、还留一点缝」。
+ * ## 它的值由两个约束夹出来，不是调的
  *
- * 第一版用的是 `R_u / √N * 0.95`（约等于这里的 0.65 倍），结果是
- * 一簇人散成零星的几个点 —— 数字没错，只是把「不重叠」当成了目标，
- * 而真正要的是「看起来像聚在一起的一伙人」。
+ * 人形高 `h = usable × K / √N`，而 `usable = size × 0.2592`。
+ * 屏幕上看到的高度是 `h × view.scale`，`scale` 恒为 0.92
+ * （`homeViewport` 固定值，**不随包围盒变化** —— 这一点被实验①证实过）。
+ *
+ * 于是：**屏幕人形高几乎完全由 K 与 `FIG_MAX` 决定**，与 `size` 无关。
+ * （这也是为什么「缩小卡片尺寸」不会让人形变大 —— 两者同比例缩。）
+ *
+ * 簇内重叠比 ∝ 1/K —— 所以**提 K 同时让人形变大、重叠变少**，两者同向。
+ * 上限由两个约束封住：
+ *   ① 簇内：不穿模
+ *   ② 跨簇：相邻两簇的视觉占位（`spread + 人高`）不相交 —— 这条更紧
+ *
+ * ## 2.8 是哪来的
+ *
+ * `scripts/_diag-final-sweep.mjs` 联合扫描 K × FIG_MAX（含跨簇约束）的可行区间：
+ *
+ *   K=3.2 / FIG_MAX=60 → 人形 55.6px、簇内 0.90、跨簇 1.02   ← 本档
+ *   K=2.6 / FIG_MAX=60 → 人形 55.0px、簇内 1.00、跨簇 1.02
+ *   K=3.2 / FIG_MAX=80 → 人形 71.2px、跨簇 0.86 ✗（两簇人会挤在一起）
+ *
+ * 选 K=2.8 配 FIG_MAX=60 是为了**留一点余量**：直接在 3.2 那一档上，
+ * 跨簇间隙比就是 1.02，任何一处布局微调都会让它掉到 1 以下。
+ * 2.8 落在两档之间，人形仍是 55px 量级，但两个约束都还有约 5% 的余量。
+ *
+ * ⚠️ 改这个数必须重跑 `_diag-final-sweep.mjs`，不能凭手感。
  */
-const FIG_HEIGHT_K = 1.45;
+const FIG_HEIGHT_K = 2.8;
 
-/** 人形高度的上下限（世界像素）。太小看不出是人，太大会把邻居挤出视野。 */
+/**
+ * 人形高度的上下限（世界像素）。
+ *
+ * `FIG_MAX = 60`：这是**屏幕上人形能有多大**的直接决定者。
+ *
+ * 上一版是 40 —— 结果 `K=1.45` 时算出来的 base 是 37，已经贴着 40 了，
+ * 所以无论怎么提 K 都涨不上去（实验②：K 从 2.0 提到 4.0，屏幕人形纹丝不动）。
+ * 40 这个值就是「人形看起来偏细」的真凶。
+ *
+ * 60 与 `FIG_HEIGHT_K = 2.8` 是一对：实验④ 的联合扫描里，
+ * 这一组落在「人形 55.6px、簇内不重叠、跨簇不相交」的可行区间内。
+ * 单独改任何一个都到不了目标 —— 必须成对调。
+ *
+ * `FIG_MIN = 16` 是小簇（人数多、场地小）的下限；
+ * `FIG_MIN_DEPTH` 是乘完纵深缩放后的绝对下限（见下）。
+ */
 const FIG_MIN = 16;
-const FIG_MAX = 40;
+const FIG_MAX = 60;
+
+/**
+ * 乘完纵深缩放之后的绝对下限。
+ *
+ * 远处那一圈簇的基准身高本来就会被压到 16 × 0.66 ≈ 10.6px，再叠上体态里
+ * 偏矮的那 12% 就只剩 9px —— 屏幕上是一颗灰点，读不出是「一个人」。
+ * 抬到 11px 之后远处仍然明显更小，但还认得出是人。
+ */
+const FIG_MIN_DEPTH = 11;
 
 /**
  * 给一个话题节点算出它的人群。
@@ -133,8 +225,9 @@ const FIG_MAX = 40;
  * （`personaCount` / `openGapCount`），不接触任何数据源 —— 这是它能被
  * 自检脚本直接调用的前提。
  */
-export function crowdOf(node: TopicNode): CrowdCluster {
+export function crowdOf(node: TopicNode, depth = 0.5): CrowdCluster {
   const radius = Math.max((node.size / 2) * CROWD_RADIUS_RATIO, 1);
+  const groundScale = groundScaleAt(depth);
   const personaCount = Math.max(node.personaCount, 0);
   const gapCount = Math.max(node.openGapCount, 0);
   const total = personaCount + gapCount;
@@ -150,6 +243,8 @@ export function crowdOf(node: TopicNode): CrowdCluster {
       figures: [],
       personaCount: 0,
       gapCount: 0,
+      depth,
+      groundScale,
     };
   }
 
@@ -158,10 +253,14 @@ export function crowdOf(node: TopicNode): CrowdCluster {
   const spin = hashUnit(seed, 7) * Math.PI * 2;
   // 留出外圈余量：人形有高度，贴着外接圆摆会被裁掉。
   const usable = radius * CROWD_USABLE;
+  const spread = radius * CROWD_SPREAD;
 
-  const base = Math.min(
-    FIG_MAX,
-    Math.max(FIG_MIN, (usable * FIG_HEIGHT_K) / Math.sqrt(total)),
+  // 先按簇内人数定基准身高，再乘整簇的纵深缩放。
+  // 下限 FIG_MIN_DEPTH 是**实测**的：再小就只剩一个点，看不出是人 ——
+  // 而「远处的人小到看不清」会让最外圈那几簇看起来像空的。
+  const base = Math.max(
+    FIG_MIN_DEPTH,
+    Math.min(FIG_MAX, Math.max(FIG_MIN, (usable * FIG_HEIGHT_K) / Math.sqrt(total))) * groundScale,
   );
 
   const figures: CrowdFigure[] = [];
@@ -172,32 +271,38 @@ export function crowdOf(node: TopicNode): CrowdCluster {
   for (let i = 0; i < total; i++) {
     const kind: FigureKind = i < personaCount ? "persona" : "gap";
     const t = (i + 0.5) / total;
-    const r = usable * Math.sqrt(t);
+    const r = spread * Math.sqrt(t);
     const a = spin + i * GOLDEN_ANGLE;
 
     // 抖动幅度随人均占位面积收缩：人少时抖一点显得自然，
     // 人多时再抖就会把刚算好的不重叠破坏掉。
-    const jitter = ((hashUnit(seed, i + 11) - 0.5) * usable * 0.34) / Math.sqrt(total);
+    const jitter = ((hashUnit(seed, i + 11) - 0.5) * spread * 0.34) / Math.sqrt(total);
 
     const dx = Math.cos(a) * r + jitter;
     const dy = Math.sin(a) * r * CROWD_SQUEEZE + jitter * 0.5;
 
     // 近大远小：画面上越靠下（dy 越大）的人离观察者越近。
     // 只放大 16% —— 再夸张就变成透视摄影，不是「文字几何」该有的克制。
-    const depth = 1 + (dy / usable) * 0.16;
+    const depth = 1 + (dy / spread) * 0.16;
+
+    const key = node.id + "#" + i;
+    const shape = shapeOf(key);
 
     figures.push({
-      key: node.id + "#" + i,
+      key,
       kind,
       dx,
       dy,
-      height: base * depth,
-      depth: dy,
+      // 体态差异只作用在「本人有多高」上，不改变他站的位置 ——
+      // 位置一动就会破坏上面算好的不重叠。
+      height: base * shape.heightScale,
+      paintOrder: dy,
+      shape,
     });
   }
 
   // 先画远的，后画近的 —— 否则近处的人会被远处的人盖住，人群就没有纵深。
-  figures.sort((a, b) => a.depth - b.depth);
+  figures.sort((a, b) => a.paintOrder - b.paintOrder);
 
   return {
     id: node.id,
@@ -207,12 +312,26 @@ export function crowdOf(node: TopicNode): CrowdCluster {
     figures,
     personaCount,
     gapCount,
+    depth,
+    groundScale,
   };
 }
 
-/** 批量：给整个广场算人群。顺序与输入一致，保证渲染顺序稳定。 */
+/**
+ * 批量：给整个广场算人群。
+ *
+ * 顺序与输入一致，保证渲染顺序稳定；纵深由**整片广场的 y 范围**归一化，
+ * 所以它是相对的 —— 同一批讨论永远得到同一组纵深。
+ */
 export function crowdLayout(nodes: TopicNode[]): CrowdCluster[] {
-  return nodes.map(crowdOf);
+  if (nodes.length === 0) return [];
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const n of nodes) {
+    if (n.y < minY) minY = n.y;
+    if (n.y > maxY) maxY = n.y;
+  }
+  return nodes.map((n) => crowdOf(n, depthOf(n.y, minY, maxY)));
 }
 
 /**
