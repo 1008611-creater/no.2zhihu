@@ -1,3 +1,5 @@
+import "server-only";
+
 // 知乎开放平台响应类型（依据 2026-09-14 实测响应形状定义）
 
 export interface ZhihuEnvelope<T> {

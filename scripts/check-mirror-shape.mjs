@@ -18,7 +18,7 @@
  */
 
 import { register } from "node:module";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
@@ -231,6 +231,34 @@ if (!mirrorPageSrc.includes("条真实知乎来源")) {
   if (/skills\.reduce\(\(a,\s*s\)\s*=>\s*a\s*\+\s*s\.sources\.length/.test(mirrorPageSrc)) {
     bad("镜像页仍存在未过滤的 skills.reduce(sources.length) 计数");
   } else ok("镜像页已无未过滤的 sources.length 计数");
+}
+
+/* ========================================================================== */
+/**
+ * ⑥ `lib/zhihu/` 每个文件首行必须 `import "server-only"`（AGENTS.md §2 明文规则）。
+ *
+ * 为什么值得一条守卫：2026-09-16 核查发现 `cache.ts` / `errors.ts` / `types.ts`
+ * 三个文件漏了这一行 —— 规则写在文档里、没人机械检查，就会一点点烂掉。
+ * 这三个文件当时都没有真的泄漏（只被 route handler 与 `import type` 引用），
+ * 但 `types.ts` 是被**客户端组件**（`FeedStream.tsx`）以 `import type` 引入的：
+ * 类型位置会被编译期擦除，所以加了也安全 —— 已用完整 `next build` 实测确认
+ * （客户端 bundle 里既无知乎域名也无密钥）。哪天有人把它改成**值引用**，
+ * server-only 会立刻在构建期报错，这正是我们要的护栏。
+ */
+const ZHIHU_DIR = join(here, "..", "lib", "zhihu");
+const zhihuFiles = readdirSync(ZHIHU_DIR).filter((f) => f.endsWith(".ts"));
+if (zhihuFiles.length < 5) {
+  bad("lib/zhihu 下只找到 " + zhihuFiles.length + " 个 ts 文件，守卫失效（目录被改？）");
+} else {
+  const missing = zhihuFiles.filter((f) => {
+    const first = readFileSync(join(ZHIHU_DIR, f), "utf8").split("\n")[0].trim();
+    return !/^import\s+["']server-only["'];?$/.test(first);
+  });
+  if (missing.length) {
+    bad("lib/zhihu 下这些文件首行缺 server-only：" + missing.join("、"));
+  } else {
+    ok("lib/zhihu 下 " + zhihuFiles.length + " 个文件首行都有 server-only");
+  }
 }
 
 /* ========================================================================== */
