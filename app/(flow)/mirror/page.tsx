@@ -13,10 +13,8 @@ import GapCard from "@/components/mirror/GapCard";
 import HandoffPanel from "@/components/mirror/HandoffPanel";
 import InviteDrawer, { type InviteOutcome } from "@/components/mirror/InviteDrawer";
 import { FLOW_STATES } from "@/components/kanshan/states";
-import { buildMesh } from "@/lib/domain/mesh";
 import { personaCandidates } from "@/lib/domain/router";
 import { splitSources } from "@/lib/domain/evidence";
-import MeshGraph from "@/components/mesh/MeshGraph";
 import { SHIFT } from "@/lib/motion/tokens";
 
 /**
@@ -61,8 +59,6 @@ export default function MirrorPage() {
     });
     return () => cancelAnimationFrame(id);
   }, [ready, mirror]);
-
-  const mesh = useMemo(() => (mirror ? buildMesh(mirror) : null), [mirror]);
 
   const presentHandles = useMemo(
     () => (mirror ? mirror.skills.map((s) => s.persona?.handle).filter((h): h is string => !!h) : []),
@@ -240,7 +236,7 @@ export default function MirrorPage() {
             <h2 className="no-tail">真人邀请已生成</h2>
             <p className="lede" style={{ marginTop: 12 }}>
               这个缺口 AI 补不了。进入补充页，用「最小填空」或「完整编辑」把这一段补完，
-              看山会把这一段接到 Human Mesh 上。
+              补完的内容会并进这一场的最终稿。
             </p>
             <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
               <Link className="btn btn-primary" href="/fill">进入真人补充页</Link>
@@ -254,22 +250,15 @@ export default function MirrorPage() {
         <HandoffPanel />
       </section>
 
-      {mesh && (
-        /* id 供 /fill 的「查看 Mesh 变化」深链过来 —— 见 fill/page.tsx 里那段说明：
-           本场的真人节点画在**这一张**图上，而 /me 那张是「我创作过什么」的创作轨迹，
-           不含本场真人。两者不是一张图。 */
-        <section className="section" id="mesh">
-          <div className="section-head">
-            <h2 className="no-tail">这场生成出来的关系</h2>
-            {/*
-              搬运入口统一收在「我的 Mesh」—— 搬运是收尾动作，不是作答流程的一步。
-              这里只留一条去路，不再把整个搬运面板塞进作答流程下方。
-            */}
-            <Link className="link mono" href="/mesh">去我的 Mesh 搬回知乎 →</Link>
-          </div>
-          <MeshGraph graph={mesh} height={380} />
-        </section>
-      )}
+      {/*
+        2026-09-17：这里原先是「这场生成出来的关系」—— 本场关系图，owner 判「一直没太做好」，
+        已整体下线。        留下的两个后遗症都在这条提交里一并收掉，否则文案会撒谎：
+          1. `/fill` 提交成功页那句「会多出节点和边」的承诺，和指向 `/mirror#mesh` 的深链
+             —— 删图之后没有任何一张图会因补一段真人而变化（`/me` 那张只看关键词共现）；
+          2. 看山流程第 8 步那句「关系图会跟着变」的 caption。
+        守卫见 `scripts/check-square-crowd.mjs` 的 ⑥。
+        搬运入口不在这里 —— 上面 `HandoffPanel` 就是，不需要借关系图再挂一条。
+      */}
 
       <InviteDrawer
         open={drawerOpen}
