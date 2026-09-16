@@ -53,6 +53,9 @@ docs/threads/
 | `scripts/pr-queue.mjs` | 在途 PR 有几个 | 提 PR 前 |
 | `scripts/verify-merge.mjs` | 合并会不会回退别人的内容 | 提 PR 前 |
 | 审计线程 | 改动对不对、有没有踩铁律 | 合并前 |
+| [backlog.md](../backlog.md) | **owner 要什么**、做完没有 | 长期（不是「谁在做」） |
+
+> ⚠️ **本目录不承载 owner 的长期要求** —— 它按设计「超 24 小时可删」。owner 提的要求一律记在 [`docs/backlog.md`](../backlog.md)。
 
 ## 有反馈回路（2026-09-15 新增）
 
