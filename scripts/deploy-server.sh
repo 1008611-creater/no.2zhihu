@@ -5,12 +5,15 @@
 #   bash deploy-server.sh --domain zhihu.cauai.fun            # 推荐：域名 + 自动 HTTPS 证书
 #   bash deploy-server.sh --domain zhihu.cauai.fun --no-ssl   # 走 Cloudflare 代理，源站不需要证书
 #   bash deploy-server.sh                                     # 纯 IP + 80 端口访问
-#   bash deploy-server.sh --update                            # 只更新代码并重启
+#   bash deploy-server.sh --update                            # 只更新代码并重启（内部走原子部署）
 #
 # 幂等：可以反复运行，不会重复安装，也不会覆盖已配置的密钥。
 #
 # 安全：--update 会在 $APP_DIR 里执行 git reset --hard，丢弃服务器上的本地改动。
 # 请勿在服务器上直接改代码，所有改动走 本地 -> GitHub -> 服务器。
+#
+# ⚠️ 部署不能打断在途会话：--update **不在这里构建**，而是转交
+# scripts/deploy-atomic.sh（构建到独立目录 → 原子切换）。原因见下方更新模式处的注释。
 
 set -euo pipefail
 
@@ -44,19 +47,37 @@ die()  { printf '\n[失败] %s\n' "$1" >&2; exit 1; }
 command -v apt-get >/dev/null 2>&1 || die "本脚本只支持 Ubuntu / Debian（apt 系）。其他系统请参考 docs/self-hosting.md 手动部署。"
 
 # ---------------- 更新模式 ----------------
+# ⚠️ 为什么这里**不再自己构建**，而是转交 scripts/deploy-atomic.sh：
+#   旧写法是「git reset --hard → npm run build（原地覆盖 .next）→ restart」。
+#   其中 `npm run build` 会**原地替换 .next/static**，在 1~3 分钟的构建窗口里，
+#   线上进程还活着、旧 HTML 已经发给浏览器了，但它引用的
+#   /_next/static/chunks/*.js 已经不在磁盘上 —— 用户点一下就 ChunkLoadError。
+#   修法是构建到独立目录再原子切换（rename），那件事在 deploy-atomic.sh 里。
+#   所以这里只做「确保脚本存在」然后委托，避免两处各有一份会走样的部署逻辑。
 if [ "$UPDATE_ONLY" -eq 1 ]; then
-  log "更新代码并重启"
+  log "更新代码并重启（原子部署）"
   [ -d "$APP_DIR/.git" ] || die "$APP_DIR 还不是 git 仓库，请先完整部署一次"
+
+  ATOMIC="$APP_DIR/scripts/deploy-atomic.sh"
+  if [ ! -f "$ATOMIC" ]; then
+    warn "$ATOMIC 不存在 —— 服务器上的代码可能太旧。"
+    warn "请先执行一次完整部署（去掉 --update）拉到含原子部署的版本。"
+    die "缺少 scripts/deploy-atomic.sh"
+  fi
+
+  # 先跟上最新代码，保证 deploy-atomic.sh 本身是最新的
   cd "$APP_DIR"
-  # 与首次部署保持一致：显式声明目录可信，避免 git 因「归属可疑」拒绝操作
   sudo -u "$RUN_USER" git config --global --add safe.directory "$APP_DIR" 2>/dev/null || true
   sudo -u "$RUN_USER" git fetch --all
   sudo -u "$RUN_USER" git reset --hard "origin/$BRANCH"
+  chown -R "$RUN_USER:$RUN_USER" "$APP_DIR"
+
+  # 依赖变化必须处理：原子部署只换产物目录，不会自动装新依赖
   sudo -u "$RUN_USER" npm install --no-audit --no-fund
-  sudo -u "$RUN_USER" npm run build
-  systemctl restart "$SERVICE_NAME"
-  ok "已更新并重启"
-  exit 0
+
+  log "转交 scripts/deploy-atomic.sh"
+  bash "$ATOMIC"
+  exit $?
 fi
 
 # ---------------- 0. 体检 ----------------

@@ -22,7 +22,8 @@
     "personas:distill": "node scripts/distill-personas.mjs",
     "personas:distill:dry": "node scripts/distill-personas.mjs --dry-run",
     "test:distill": "node scripts/test-distill.mjs",
-    "preflight": "node scripts/preflight.mjs"
+    "preflight": "node scripts/preflight.mjs",
+    "check:deploy": "node scripts/check-atomic-deploy.mjs"
   },
   "dependencies": {
     "@gsap/react": "^2.1.2",
