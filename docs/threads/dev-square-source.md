@@ -2,14 +2,18 @@
 
 - **工作区**：`E:\codex\_dev2`（clone；`node_modules` 是指向主工作区的 junction，
   删这个目录会连带删掉主工作区的 `node_modules`）
-- **分支**：`fix/attribution-leaks` @ 基线 `f5bb428`（main tip）
+- **分支**：`fix/zero-source-fallback` @ 基线 `280f86f`（修 issue #70）
 - **正在改**：
-  - `lib/server/persona.ts`（`toSource()` 不再把空作者写成「匿名用户」）
-  - `lib/domain/handoff.ts`（`collectSources()` 只收署名齐全的来源）
-  - `components/mesh/MineHandoffPanel.tsx`（复用 `collectSources()`，删掉自写的那份过滤）
-  - `scripts/check-mirror-shape.mjs`（§⑦ 守卫：署名不得伪造 + 搬运稿来源必须齐全）
+  - `lib/domain/library.ts`（`hydrateLibraryEntry()`：零来源时显式清空 `skill.sources`）
+  - `scripts/check-mirror-shape.mjs`（§⑧ 守卫：零来源不得回落到人格语料）
 - **状态**：进行中（等 PR 合并）
-- **最后更新**：2026-09-16 11:20
+- **最后更新**：2026-09-16 14:45
+- **备注**：接审计线程的 **issue #70**（P2，明确「交给开发线程」）。
+  `skillFromPersona()` 会把**人格蒸馏语料**塞进 `skill.sources`，
+  而 `hydrateLibraryEntry()` 只在回答有来源时覆盖它 → 「某位答主一篇都没检索到」时，
+  蒸馏语料留在 `skill.sources` 里，让同一个字段有两种含义（`mesh.ts:117/:273` 当它读本次证据）。
+  实测影响面：全库 22 场里**恰好 1 处**（`mirror-826745` / 贱贱 `5 → 0` 条），
+  且**全部 22 场的 MeshGraph（节点+边）逐场完全一致** —— 修复不改变任何渲染输出。
 - **备注**：#53 修了 `lib/server/mirror.ts` 的假署名与展示层口径，但**同一件事在仓库里有
   多处平行实现，当时只改了一处**。本轮补上剩下三处：
   ① `persona.ts` 有同一句 `?? "匿名用户"`（在线蒸馏走这条路径）；

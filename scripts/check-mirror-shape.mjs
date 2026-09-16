@@ -382,6 +382,108 @@ console.log("=".repeat(74));
 }
 
 /* ========================================================================== */
+/**
+ * ⑧ 零来源不得回落到人格语料（issue #70，2026-09-16）。
+ *
+ * `skillFromPersona()` 会把**人格蒸馏语料**放进 `skill.sources`，而
+ * `hydrateLibraryEntry()` 只在回答有来源时覆盖它 —— 于是「某位答主一篇都没检索到」
+ * 时，蒸馏语料会留在 `skill.sources` 里，让同一个字段在两种情形下含义不同。
+ * `mesh.ts:117/:273` 正是把它当**本次证据**读的（当前恰好没被影响，但下一个读者会踩）。
+ *
+ * 这里断言的是 `hydrateLibraryEntry()` 的**产物**，不是源码写法 ——
+ * 判据：任一 skill 若其对应回答侧来源为空，则它在产物里的 sources 必须为空。
+ */
+console.log("=".repeat(74));
+console.log("⑧ 零来源不得回落到人格语料（skill.sources 只有一种含义）");
+console.log("=".repeat(74));
+{
+  const { hydrateLibraryEntry } = await import("../lib/domain/library.ts");
+  const raw = JSON.parse(readFileSync(join(here, "..", "public", "square-library.json"), "utf8"));
+
+  // 造一个「某位答主有回答但零来源」的条目（照真实结构，persona.handle 用真名册里的）。
+  const personaHandle = "banfoxianren";
+  const probe = {
+    id: "probe-issue70",
+    title: "零来源回落检验",
+    sourceUrl: null,
+    builtAt: "2026-09-16T00:00:00Z",
+    topic: "测试",
+    routing: { summary: "测试", picked: [personaHandle], queries: [] },
+    skills: [
+      { id: `persona:${personaHandle}`, name: "半佛仙人", persona: { handle: personaHandle } },
+      { id: "sk-plain", name: "降级视角", kind: "analysis" },
+    ],
+    answers: [
+      // 这一条**有**来源 → sources 应该被回填
+      {
+        id: `ans-persona:${personaHandle}`,
+        skillId: `persona:${personaHandle}`,
+        skillName: "半佛仙人",
+        body: "正文",
+        round: 0,
+        sources: [{ title: "标题", author: "作者", url: "https://www.zhihu.com/question/1/answer/1", voteUp: 1, editTime: 0 }],
+      },
+      // 这一条**零**来源 → 不得回落到人格语料
+      {
+        id: "ans-sk-plain",
+        skillId: "sk-plain",
+        skillName: "降级视角",
+        body: "正文",
+        round: 0,
+        sources: [],
+      },
+    ],
+    gaps: [],
+    handoff: { status: "not-ready", note: "" },
+    contributions: [],
+  };
+
+  const hydrated = hydrateLibraryEntry(probe);
+  const byId = new Map(hydrated.skills.map((s) => [s.id, s]));
+
+  const withSrc = byId.get(`persona:${personaHandle}`);
+  const noSrc = byId.get("sk-plain");
+
+  truthy(!!withSrc && !!noSrc, "两条 skill 都还原出来了");
+  eq(withSrc.sources.length, 1, "有来源的回答 → skill.sources 被回填（1 条）");
+  eq(
+    noSrc.sources.length,
+    0,
+    "零来源的回答 → skill.sources 必须为空（不得回落到人格语料，issue #70）",
+  );
+
+  // 反证：这个探针**确实**会踩到旧行为 —— 人格语料非空，回落的话条数会 > 0。
+  const { PERSONA_BY_HANDLE } = await import("../lib/domain/personas/index.ts");
+  const corpus = PERSONA_BY_HANDLE.get(personaHandle)?.corpus?.sources?.length ?? 0;
+  truthy(
+    corpus > 0,
+    "对照：该人格语料非空（" + corpus + " 条）→ 若代码回落到 full，上面的断言必然失败（证明断言有效）",
+  );
+
+  // 全库复核：真实数据里每个 skill 的 sources 不得超过其回答侧来源数。
+  let offenders = 0;
+  let checked = 0;
+  for (const e of raw.entries ?? []) {
+    const h = hydrateLibraryEntry(e);
+    const want = new Map();
+    for (const a of e.answers ?? []) want.set(a.skillId, (a.sources ?? []).length);
+    for (const s of h.skills) {
+      checked++;
+      const have = s.sources.length;
+      const wantN = want.get(s.id) ?? 0;
+      if (have > wantN) {
+        offenders++;
+        if (offenders <= 3) {
+          bad("全库：" + e.id.slice(0, 14) + " / " + s.name + " 的 sources " + have + " 条 > 回答侧 " + wantN + " 条");
+        }
+      }
+    }
+  }
+  if (offenders === 0) ok("全库 " + (raw.entries ?? []).length + " 场 / " + checked + " 个 skill：sources 均不超过回答侧来源数");
+  else bad("全库共 " + offenders + " 个 skill 的 sources 多于回答侧来源数");
+}
+
+/* ========================================================================== */
 console.log("=".repeat(74));
 if (fail === 0) {
   console.log("全部通过 ✓");

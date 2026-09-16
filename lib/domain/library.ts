@@ -188,9 +188,15 @@ export function hydrateLibraryEntry(entry: LibraryEntry): MirrorQuestion {
       // `skillFromPersona` 的 confidence 来自 `corpus.sampleSize`（人格蒸馏质量），
       // 而这个页面问的是「本次回答覆盖了多少可核对证据」，两者不是一回事。
       const full = skillFromPersona(persona);
+      // ⚠️ 零来源时必须**显式清空**，不能留 `full` —— `skillFromPersona()` 会把
+      // **人格蒸馏语料**塞进 `skill.sources`（`lib/domain/skills.ts:32`），
+      // 那是「怎么造出这个人格」的语料，不是「本次回答检索到了什么」。
+      // 回落到 `full` 会让同一个字段在两种情形下含义不同（issue #70），
+      // 而 `mesh.ts:117` / `:273` 正是把它当**本次证据**读的。
+      // 本次一篇来源都没检索到，就是没有证据 —— 如实为空，别拿语料顶上。
       const withEvidence: Skill = sources.length
         ? { ...full, sources, confidence: confidenceOf(sources) }
-        : full;
+        : { ...full, sources: [], confidence: confidenceOf([]) };
       return s.accent ? { ...withEvidence, accent: s.accent } : withEvidence;
     }
     // 找不到人格定义（公共人物视角 / 降级视角）时，用条目自称的信息兜一个最小 Skill。
