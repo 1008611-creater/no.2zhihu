@@ -160,6 +160,14 @@ export default function Home() {
     async (handles: string[], qOverride?: string) => {
       const q = (qOverride ?? question).trim();
       if (q.length < MIN_QUESTION) return;
+      // 未选人不得开始（收敛清单原文）。UI 上按钮已禁用，这里再挡一层：
+      // 否则任何绕过按钮的调用（旧书签、脚本、后续新增入口）都会静默变成
+      // 「服务端自动推荐」——用户以为自己选了人，其实不是。
+      if (handles.length === 0) {
+        setError("先选至少 1 位答主，再让他们作答。");
+        setPhase("pick");
+        return;
+      }
 
       setError(null);
       setMirror(null);
@@ -282,13 +290,21 @@ export default function Home() {
             onKeyDown={(e) => {
               if ((e.metaKey || e.ctrlKey) && e.key === "Enter") goPick();
             }}
-            placeholder="输入一个你真正想问的问题，或粘贴知乎问题链接…"
+            placeholder="输入一个你真正想问的问题"
             rows={3}
             aria-label="你的问题"
           />
           <div className="composebar">
+            {/*
+              ⚠️ 这里原来写「支持知乎链接 · …」，但提问路径**从来没有**把链接解析成标题：
+              `personaCandidates(question)` 是拿问题文本直接做路由的，链接串只会被当成
+              一串无意义的字符。解析能力只存在于搬运（`/api/handoff` 拼编辑器深链）与
+              `/api/zhihu/question-answers`（按 url 取回答）两处，都不在首页这条路上。
+              收敛清单给的两条路是「真做解析」或「把提示改掉」，本轮明确不做新解析，
+              所以提示与这句话一并去掉 —— 界面上说的话必须与实际能力一致。
+            */}
             <span className="dim mono">
-              支持知乎链接 · 结果缓存 30 分钟 · 重复演示不重复消耗额度
+              结果缓存 30 分钟 · 重复演示不重复消耗额度
             </span>
             <button
               className="btn btn-primary"
@@ -332,20 +348,27 @@ export default function Home() {
             >
               <div style={{ marginRight: "auto" }}>
                 <div style={{ fontWeight: 700, fontSize: 13.5 }}>
-                  {selected.length > 0 ? `已选 ${selected.length} 位答主` : "未指定答主"}
+                  {selected.length > 0 ? `已选 ${selected.length} 位答主` : "还没选答主"}
                 </div>
                 <div className="dim" style={{ fontSize: 12.5 }}>
                   {selected.length > 0
                     ? "他们会各自取证据、各自作答；单次最多 4 位，控制额度消耗。"
-                    : "看山会按问题类型自动推荐 3 位答主。"}
+                    : "至少选 1 位答主才能开始 —— 点上面的卡片选人。"}
                 </div>
               </div>
+              {/*
+                收敛清单原文：「未选人时不能开始作答」。
+                改之前这里只挡 `running`，未选人时按钮**可点**，点下去会静默降级成
+                「让看山推荐并作答」（`run([])` → 服务端 handles 可选 → 自动推荐）——
+                界面上写着「让这些答主作答」，实际却不是用户选的那批人，属于言行不一。
+                现在未选人即禁用；默认进选人页时已预勾 3 位，所以「直接确认」的快捷仍在。
+              */}
               <button
                 className="btn btn-primary"
                 onClick={() => run(selected)}
-                disabled={running}
+                disabled={running || selected.length === 0}
               >
-                {running ? "看山正在召集…" : selected.length > 0 ? "让这些答主作答 →" : "让看山推荐并作答 →"}
+                {running ? "看山正在召集…" : "让这些答主作答 →"}
               </button>
             </div>
           </motion.section>
