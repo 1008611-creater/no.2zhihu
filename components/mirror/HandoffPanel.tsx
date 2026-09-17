@@ -8,7 +8,6 @@ import {
   toInviteText,
   toZhihuDraft,
 } from "@/lib/domain/handoff";
-import { matchRouteId } from "@/lib/domain/route-id";
 import { useMirror } from "@/lib/store/mirror-store";
 import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
 
@@ -27,7 +26,7 @@ import { DUR, EASE, SHIFT } from "@/lib/motion/tokens";
  *         且它**不以 `status === "human"` 为前置**（要邀请的正是还没补过的那位）
  *   · 3.4 界面上的长接口解释缩短成一句（完整版留在 `HANDOFF_NOTE` 与 docs/api-audit.md）
  */
-export function HandoffPanel({ inviteAnswerId }: { inviteAnswerId?: string } = {}) {
+export function HandoffPanel() {
   const { mirror, markHandoffOpenedFor } = useMirror();
   const [copied, setCopied] = useState(false);
   const [inviteCopied, setInviteCopied] = useState(false);
@@ -108,15 +107,20 @@ export function HandoffPanel({ inviteAnswerId }: { inviteAnswerId?: string } = {
    *
    * 选谁：优先「还没被真人补过」的第一位（信息增量最大）；
    * 都补过了就退回第一位 —— 让按钮始终可用，不指向空。
+   *
+   * ⚠️ 2026-09-17 审计修正：这里**曾经**有一个 `inviteAnswerId` 参数，用来「指名邀请
+   * 被点的那一位」，但全仓没有任何调用点传它（唯一调用点是 `<HandoffPanel />`），
+   * 所以它恒为 `undefined`、永远走下面的 fallback —— 一个**看着已接线、实际没接**的假能力。
+   * 已删除该参数，不再声称「按回答定位」。
+   *
+   * 为什么不是「把参数接上」就完事：缺口候选（`HumanCandidate`）与分身回答（`AnswerDraft`）
+   * **不是同一类对象**，id 也不同源（`cand-<hash>` vs `ans-<skillId>`）——
+   * 候选是「检索到的真人作者」，回答是「AI 分身写的稿」。要真正按人定位，
+   * 需要先定「邀请的是真人还是分身」这个产品口径（见 docs/backlog.md A3）。
+   * 在口径定下来之前，**留一个死参数比没有更糟**（读代码的人会以为它已经生效）。
    */
-  const copyInvite = async (answerId?: string) => {
-    /*
-     * 3.5：「邀请补充」点的是**具体某一位**，所以要能指名邀请。
-     * answerId 走 matchRouteId() —— useParams() 可能返回**百分号编码**串（本仓库既有坑），
-     * 直接比较会永远不命中。
-     */
+  const copyInvite = async () => {
     const target =
-      (answerId ? matchRouteId(mirror.answers, answerId, (a) => a.id) : null) ||
       mirror.answers.find((a) => a.status !== "human") ||
       mirror.answers[0];
     if (!target) {
@@ -164,7 +168,7 @@ export function HandoffPanel({ inviteAnswerId }: { inviteAnswerId?: string } = {
           {/* 3.2：邀请是「发给答主本人」，与「把正文搬运到知乎」是两件事，所以给两个按钮。
               这个按钮**不设 disabled** —— 要邀请的正是还没补过的那位答主（清单原文：
               「注意它不该以 status===human 为前置条件」）。 */}
-          <button className="btn btn-primary" onClick={() => copyInvite(inviteAnswerId)}>
+          <button className="btn btn-primary" onClick={() => copyInvite()}>
             {inviteCopied ? INVITE_COPIED_FEEDBACK : "复制邀请文案"}
           </button>
           <button className="btn" onClick={copy}>

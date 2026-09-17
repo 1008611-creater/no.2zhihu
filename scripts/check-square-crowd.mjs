@@ -28,6 +28,7 @@ const { excerptOf, metaOf, sourceFromLibrary, toBroadcastItem } = await import(
 );
 const { statsOf, hydrateLibraryEntry } = await import("../lib/domain/library.ts");
 const { splitSources, confidenceOf: confidenceOfOf } = await import("../lib/domain/evidence.ts");
+const { toInviteText } = await import("../lib/domain/handoff.ts");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, "..", "public", "square-library.json"), "utf8"));
@@ -728,11 +729,89 @@ console.log("=".repeat(74));
   }
 
   // ── 3.2 的入口也必须真的接上（别只声明能力）──
-  if (!/copyInvite/.test(panelSrc)) {
-    bad("HandoffPanel 里没有 copyInvite —— 邀请文案能力声明了却没有入口（P0-3.2）");
+  /*
+   * ⚠️ 这条断言原本只查「源码里提到过 copyInvite」—— 审计线程 2026-09-17 实测：
+   * 它拦不住「按钮调用了 copyInvite，但传进去的实参永远是 undefined」
+   * （当时 `inviteAnswerId` 就是个没人传的死参数，功能静默走 fallback）。
+   * **源码断言只看组件内部，看不见调用点。** 所以这里补两层：
+   *   ① 断言按钮真的在**调用**它（不是只出现在注释里）；
+   *   ② 断言 `copyInvite` 的签名里**没有**「只有调用点能提供、却没人提供」的可选参数。
+   */
+  const inviteBtnCall = /onClick=\{\(\) => copyInvite\(/.test(panelSrc);
+  const copyInviteSig = (panelSrc.match(/const copyInvite = async \(([^)]*)\)/) ?? [])[1] ?? "";
+  if (!inviteBtnCall) {
+    bad("HandoffPanel 里没有按钮真的调用 copyInvite —— 邀请文案能力声明了却没有入口（P0-3.2）");
+  } else if (/[A-Za-z]/.test(copyInviteSig)) {
+    bad(
+      "copyInvite 接受参数「" + copyInviteSig.trim() + "」—— 这类参数只有调用点能提供，" +
+      "而全仓唯一调用点是 <HandoffPanel />（不传任何 props）。" +
+      "若确实要按调用点定位，必须同时补一条「调用点传了它」的断言；否则应删掉该参数（P0-3.2/3.5）",
+    );
   } else {
-    ok("HandoffPanel 真的提供了「复制邀请文案」的入口（P0-3.2）");
+    ok("HandoffPanel 真的提供了「复制邀请文案」的入口，且不依赖任何调用点未提供的参数（P0-3.2）");
   }
+
+  // ── 3.5 的「按回答定位」不得以死参数的形式假装存在 ──
+  /*
+   * 判据：`inviteAnswerId` 这类「用于定位」的 props 若出现在组件签名里，
+   * 就必须在调用点出现。全仓只有 `<HandoffPanel />` 一个调用点，
+   * 所以直接查它有没有传参 —— 这比「源码里提到过」强得多。
+   *
+   * ⚠️ 必须用 `panelCode`（已剥掉注释）而不是 `panelSrc`：
+   * 本 PR 的注释里**合法地**写着「这里曾经有一个 inviteAnswerId 参数，已删除」——
+   * 用原文匹配会被自己的注释骗过（这正是 2026-09-17 审计发现的那类假断言）。
+   */
+  const passesInviteId = /<HandoffPanel[^>]*inviteAnswerId=/.test(mirrorSrc);
+  const declaresInviteId = /inviteAnswerId/.test(panelCode);
+  if (declaresInviteId && !passesInviteId) {
+    bad("HandoffPanel 声明了 inviteAnswerId，但 /mirror 的调用点没传 —— 这是个恒为 undefined 的假能力（P0-3.5）");
+  } else {
+    ok("没有「声明了却没人传」的定位参数（P0-3.5）");
+  }
+
+  // ── 行为层：邀请文案本身必须干净（会被用户直接发给答主）──
+  /*
+   * 为什么用行为层而不是正则：这段文字**会离开本站**（用户复制后粘贴到微信/知乎私信），
+   * 而全仓没有 markdown 渲染器 —— `**加粗**` 会原样发出去。
+   * 直接调函数、断言它的**返回值**，比在源码里找星号可靠（注释里合法地出现星号不会误报）。
+   */
+  const inviteFixture = {
+    id: "mirror-guard",
+    title: "测试问题：这件事该怎么看",
+    origin: "typed",
+    createdAt: 0,
+    routing: { mode: "auto", intent: "how", picks: [], summary: "", queries: [] },
+    skills: [],
+    answers: [
+      {
+        id: "ans-guard",
+        skillId: "s-guard",
+        skillName: "某位答主",
+        accent: "blue",
+        body: "这是一段用于自检的正文。",
+        evidence: [],
+        createdAt: 0,
+        status: "ai",
+        generatedBy: "retrieval",
+      },
+    ],
+    gaps: [],
+    handoff: { status: "not-ready", note: "" },
+    contributions: [],
+  };
+  const inviteText = toInviteText(inviteFixture, inviteFixture.answers[0]);
+  const mdHits = inviteText.match(/\*\*|^#{1,6}\s|^\s*[-*]\s|^>\s|`/gm) ?? [];
+  if (mdHits.length) {
+    bad(
+      "邀请文案里出现了 markdown 标记 " + JSON.stringify(mdHits.slice(0, 5)) +
+      " —— 没有渲染器，会被用户原样发给答主（P0-3.2）",
+    );
+  } else {
+    ok("邀请文案里没有 markdown 标记（这段文字会原样发给答主）");
+  }
+  // 反面：文案必须真的含四要素里的关键两样，否则「干净」没有意义
+  if (!inviteText.includes(inviteFixture.title)) bad("邀请文案没带问题标题（P0-3.2）");
+  else ok("邀请文案带上了问题标题（P0-3.2）");
 }
 
 console.log("\n" + "=".repeat(74));

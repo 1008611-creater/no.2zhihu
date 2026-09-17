@@ -153,7 +153,7 @@ export function toInviteText(mirror: MirrorQuestion, answer: AnswerDraft): strin
 
   parts.push(
     "",
-    "（这条消息由「二号知乎」生成，需要你**自己**发送 —— 本站没有知乎的私信或发布接口。）",
+    "（这条消息由「二号知乎」生成，需要你自己发送 —— 本站没有知乎的私信或发布接口。）",
   );
 
   return parts.join("\n");

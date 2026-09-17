@@ -34,10 +34,14 @@ export default function MirrorPage() {
   const { mirror, ready, appendInvite, appendReplies } = useMirror();
   const [step, setStep] = useState(FLOW_STATES.length);
   /*
-   * 3.5：记「被邀请的具体那位」而不只是 id —— 界面要显示他的名字，
-   * 搬运区域还要按他定位（「同一份当前回答的搬运区域」）。
+   * 3.5：记下「被邀请的那位」的名字 —— 邀请卡片要显示他。
+   *
+   * ⚠️ 2026-09-17 审计修正：这里原本存的是 `{ id, name }`，注释还写着
+   * 「搬运区域还要按他定位」—— 但那个 `id` **从没被读过**（`HandoffPanel` 的
+   * `inviteAnswerId` 参数没有任何调用点传值，已删）。只留名字，不留一个
+   * 看着有用、实际没人用的字段。
    */
-  const [invited, setInvited] = useState<{ id: string; name: string } | null>(null);
+  const [invited, setInvited] = useState<string | null>(null);
   const [drawerOpen, setDrawerOpen] = useInviteUrl();
   const [inviteNote, setInviteNote] = useState<string | null>(null);
 
@@ -207,8 +211,7 @@ export default function MirrorPage() {
               gap={g}
               index={i}
               onInvite={(gap) => {
-                const c = gap.candidates[0];
-                setInvited(c ? { id: c.id, name: c.name } : null);
+                setInvited(gap.candidates[0]?.name ?? null);
               }}
               /*
                * 「没有匹配到真人」时也要有一条真实的路可走。
@@ -242,16 +245,21 @@ export default function MirrorPage() {
             <p className="eyebrow">Human invite</p>
             <h2 className="no-tail">真人邀请已生成</h2>
             <p className="lede" style={{ marginTop: 12 }}>
-              {invited.name} 这个缺口 AI 补不了。先在下面的搬运区域**复制一段邀请文案**
+              {invited} 这个缺口 AI 补不了。先在下面的搬运区域复制一段邀请文案，
               发给他本人；他补完的那一段会并进这一场的最终稿。
             </p>
             <div style={{ marginTop: 16, display: "flex", gap: 10, flexWrap: "wrap" }}>
               {/*
-                3.5：「邀请补充」入口应进入**当前回答的搬运区域**。
-                所以主入口指向 #handoff，并把被邀请的这位传过去，
-                让搬运区域默认就准备好他的邀请文案。
-                /fill（真人补充页）保留为次要入口 —— 那是「真人当面补」的另一条路，
-                且已通过验收（见 #79），本清单没要求删。
+                3.5：「邀请补充」入口应进入**当前这一场**的搬运区域。
+                所以主入口指向 #handoff（搬运面板上的锚点），不再跳到 /fill ——
+                /fill 是「真人当面补」的另一条路，保留为次要入口（已通过验收，见 #79）。
+
+                ⚠️ 2026-09-17 审计修正：这里原先还写「并把被邀请的这位传过去，
+                让搬运区域默认就准备好他的邀请文案」—— 那句话**没有实现**：
+                `HandoffPanel` 的 `inviteAnswerId` 参数没有任何调用点传值（已删）。
+                原因是缺口候选（检索到的真人作者）与分身回答（AI 稿）不是同一类对象、
+                id 也不同源，要真正「按人定位」得先定产品口径（见 docs/backlog.md A3）。
+                在口径定下来之前，不留「看着已接线」的死参数。
               */}
               <a className="btn btn-primary" href="#handoff">去搬运区域复制邀请文案</a>
               <Link className="btn btn-ghost" href="/fill">我自己替他补充</Link>
@@ -267,7 +275,7 @@ export default function MirrorPage() {
 
       {/*
         2026-09-17：这里原先是「这场生成出来的关系」—— 本场关系图，owner 判「一直没太做好」，
-        已整体下线。        留下的两个后遗症都在这条提交里一并收掉，否则文案会撒谎：
+        已整体下线。留下的两个后遗症都在这条提交里一并收掉，否则文案会撒谎：
           1. `/fill` 提交成功页那句「会多出节点和边」的承诺，和指向 `/mirror#mesh` 的深链
              —— 删图之后没有任何一张图会因补一段真人而变化（`/me` 那张只看关键词共现）；
           2. 看山流程第 8 步那句「关系图会跟着变」的 caption。
