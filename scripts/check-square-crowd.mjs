@@ -28,6 +28,7 @@ const { excerptOf, metaOf, sourceFromLibrary, toBroadcastItem } = await import(
 );
 const { statsOf, hydrateLibraryEntry } = await import("../lib/domain/library.ts");
 const { splitSources, confidenceOf: confidenceOfOf } = await import("../lib/domain/evidence.ts");
+const { toInviteText } = await import("../lib/domain/handoff.ts");
 
 const here = dirname(fileURLToPath(import.meta.url));
 const raw = JSON.parse(readFileSync(join(here, "..", "public", "square-library.json"), "utf8"));
@@ -619,6 +620,198 @@ console.log("=".repeat(74));
   } else {
     ok("广场库加载有超时兜底（定时器回调确实把 loading 切成 error）");
   }
+}
+
+/* ========================================================================== */
+console.log("=".repeat(74));
+console.log("⑫ 真人邀请与搬运：不得记录无法验证的发布状态、邀请文案必须齐备");
+console.log("=".repeat(74));
+/**
+ * 为什么值得一条守卫（owner 收敛清单 P0-3，2026-09-16）：
+ *
+ * 这五条全部属于「**不报错、不白屏，只是被改回去**」的约束 ——
+ * 靠人眼评审发现不了，靠记忆守不住，所以用断言钉死：
+ *
+ *   3.1 删掉的「我已在知乎发布」按钮**看起来无害**，很容易被谁顺手加回来；
+ *       而它记录的是「用户到底发没发出去」—— 产品**无从得知**这件事。
+ *   3.2 邀请文案必须含四段：问题、答主名、该答主的 AI 草稿、那句 AI 声明。
+ *       少任何一段，邀请就失去意义（对方不知道在说什么 / 不知道那是草稿）。
+ *   3.3 反馈必须是「请自行发送」，**不能**写成「已发送」—— 我们没有这个能力。
+ *   3.4 界面上的长接口解释已被缩成一句；它很可能被谁「补全」回来。
+ *   3.5 入口必须指向搬运区域（与 §⑩ 同一类：闭环不能断一环）。
+ */
+{
+  const handoffSrc = readFileSync(join(here, "..", "lib", "domain", "handoff.ts"), "utf8");
+  const panelSrc = readFileSync(join(here, "..", "components", "mirror", "HandoffPanel.tsx"), "utf8");
+  const mineSrc = readFileSync(join(here, "..", "components", "mesh", "MineHandoffPanel.tsx"), "utf8");
+  const mirrorSrc = readFileSync(join(here, "..", "app", "(flow)", "mirror", "page.tsx"), "utf8");
+
+  /** 只看代码行（注释里允许出现「我们删掉了 XX」这类变更说明）。 */
+  const codeOnly = (src) =>
+    src
+      .split("\n")
+      .filter((ln) => {
+        const t = ln.trim();
+        return !t.startsWith("*") && !t.startsWith("//") && !t.startsWith("/*");
+      })
+      .join("\n");
+
+  // ── 3.1 不得再有「无法验证的发布状态」 ──
+  const panelCode = codeOnly(panelSrc);
+  const mineCode = codeOnly(mineSrc);
+  if (/我已在知乎发布|已标记为已发布/.test(panelCode + mineCode)) {
+    bad("又出现了「我已在知乎发布 / 已标记为已发布」按钮 —— 那是产品无从得知的状态（P0-3.1）");
+  } else {
+    ok("两处搬运面板都没有「我已在知乎发布」按钮（P0-3.1）");
+  }
+  if (/confirmHandoffFor\s*\(/.test(panelCode + mineCode)) {
+    bad("搬运面板又在调用 confirmHandoffFor —— 该状态的 UI 入口应已移除（P0-3.1）");
+  } else {
+    ok("搬运面板不再调用 confirmHandoffFor（P0-3.1）");
+  }
+
+  // ── 3.2 邀请文案必须含四段必备信息 ──
+  const inviteFn = handoffSrc.slice(handoffSrc.indexOf("export function toInviteText"));
+  const inviteBody = inviteFn.slice(0, 1400);
+  const need = [
+    [/mirror\.title/, "问题（mirror.title）"],
+    [/answer\.skillName/, "被邀请答主名称（answer.skillName）"],
+    [/answer\.body/, "该答主的 AI 草稿（answer.body）"],
+    [/INVITE_AI_DISCLAIMER/, "那句 AI 声明（INVITE_AI_DISCLAIMER）"],
+  ];
+  const missing = need.filter(([re]) => !re.test(inviteBody)).map(([, label]) => label);
+  if (missing.length) {
+    bad("邀请文案缺了必备信息：" + missing.join("、") + "（P0-3.2）");
+  } else {
+    ok("邀请文案含问题 / 答主名 / 该答主的 AI 草稿 / AI 声明（P0-3.2）");
+  }
+
+  // ── 3.2 的反面：不得以 status==="human" 为前置（清单原文明确要求）──
+  if (/status\s*===\s*["']human["'][^\n]*return null/.test(inviteBody)) {
+    bad('toInviteText 以 status==="human" 为前置 —— 要邀请的正是还没补过的那一位（P0-3.2）');
+  } else {
+    ok("toInviteText 不以真人状态为前置条件（P0-3.2 原文要求）");
+  }
+
+  // ── 3.3 反馈文案必须是「请自行发送」，且不得出现「已发送」 ──
+  const fb = (handoffSrc.match(/INVITE_COPIED_FEEDBACK\s*=\s*"([^"]+)"/) ?? [])[1] ?? "";
+  if (!fb.includes("请自行发送")) {
+    bad('INVITE_COPIED_FEEDBACK 不含「请自行发送」："' + fb + '"（P0-3.3）');
+  } else {
+    ok("邀请反馈为「" + fb + "」（P0-3.3）");
+  }
+  if (/邀请内容已发送|已发送给答主|邀请已送达/.test(panelCode + handoffSrc)) {
+    bad("出现了「已发送 / 已送达」这类假成功文案 —— 产品没有发送能力（P0-3.3）");
+  } else {
+    ok("没有「已发送 / 已送达」这类假成功文案（P0-3.3）");
+  }
+
+  // ── 3.4 界面用短口径，且短口径就是清单原文那一句 ──
+  const short = (handoffSrc.match(/HANDOFF_BOUNDARY_SHORT\s*=\s*\n?\s*"([^"]+)"/) ?? [])[1] ?? "";
+  if (short !== "本站不能替你在知乎发布。复制并编辑内容后，请由本人自行发布。") {
+    bad('HANDOFF_BOUNDARY_SHORT 与 owner 清单原文不一致："' + short + '"（P0-3.4）');
+  } else {
+    ok("短口径与清单原文逐字一致（P0-3.4）");
+  }
+  if (/54 个接口文档/.test(panelCode)) {
+    bad("搬运面板界面上又出现了那段「54 个接口文档」长解释（P0-3.4）");
+  } else {
+    ok("界面不再出现长接口解释（完整版保留在 HANDOFF_NOTE 与 docs/api-audit.md）");
+  }
+
+  // ── 3.5 入口必须指向搬运区域（#handoff 锚点要真实存在）──
+  if (!/href="#handoff"/.test(mirrorSrc)) {
+    bad("「邀请补充」的入口没有指向 #handoff 搬运区域（P0-3.5）");
+  } else if (!/id="handoff"/.test(panelSrc)) {
+    bad('搬运区域没有 id="handoff" 锚点 —— 入口指向了一个不存在的锚点（P0-3.5）');
+  } else {
+    ok("入口指向 #handoff，且搬运区域真的有该锚点（P0-3.5）");
+  }
+
+  // ── 3.2 的入口也必须真的接上（别只声明能力）──
+  /*
+   * ⚠️ 这条断言原本只查「源码里提到过 copyInvite」—— 审计线程 2026-09-17 实测：
+   * 它拦不住「按钮调用了 copyInvite，但传进去的实参永远是 undefined」
+   * （当时 `inviteAnswerId` 就是个没人传的死参数，功能静默走 fallback）。
+   * **源码断言只看组件内部，看不见调用点。** 所以这里补两层：
+   *   ① 断言按钮真的在**调用**它（不是只出现在注释里）；
+   *   ② 断言 `copyInvite` 的签名里**没有**「只有调用点能提供、却没人提供」的可选参数。
+   */
+  const inviteBtnCall = /onClick=\{\(\) => copyInvite\(/.test(panelSrc);
+  const copyInviteSig = (panelSrc.match(/const copyInvite = async \(([^)]*)\)/) ?? [])[1] ?? "";
+  if (!inviteBtnCall) {
+    bad("HandoffPanel 里没有按钮真的调用 copyInvite —— 邀请文案能力声明了却没有入口（P0-3.2）");
+  } else if (/[A-Za-z]/.test(copyInviteSig)) {
+    bad(
+      "copyInvite 接受参数「" + copyInviteSig.trim() + "」—— 这类参数只有调用点能提供，" +
+      "而全仓唯一调用点是 <HandoffPanel />（不传任何 props）。" +
+      "若确实要按调用点定位，必须同时补一条「调用点传了它」的断言；否则应删掉该参数（P0-3.2/3.5）",
+    );
+  } else {
+    ok("HandoffPanel 真的提供了「复制邀请文案」的入口，且不依赖任何调用点未提供的参数（P0-3.2）");
+  }
+
+  // ── 3.5 的「按回答定位」不得以死参数的形式假装存在 ──
+  /*
+   * 判据：`inviteAnswerId` 这类「用于定位」的 props 若出现在组件签名里，
+   * 就必须在调用点出现。全仓只有 `<HandoffPanel />` 一个调用点，
+   * 所以直接查它有没有传参 —— 这比「源码里提到过」强得多。
+   *
+   * ⚠️ 必须用 `panelCode`（已剥掉注释）而不是 `panelSrc`：
+   * 本 PR 的注释里**合法地**写着「这里曾经有一个 inviteAnswerId 参数，已删除」——
+   * 用原文匹配会被自己的注释骗过（这正是 2026-09-17 审计发现的那类假断言）。
+   */
+  const passesInviteId = /<HandoffPanel[^>]*inviteAnswerId=/.test(mirrorSrc);
+  const declaresInviteId = /inviteAnswerId/.test(panelCode);
+  if (declaresInviteId && !passesInviteId) {
+    bad("HandoffPanel 声明了 inviteAnswerId，但 /mirror 的调用点没传 —— 这是个恒为 undefined 的假能力（P0-3.5）");
+  } else {
+    ok("没有「声明了却没人传」的定位参数（P0-3.5）");
+  }
+
+  // ── 行为层：邀请文案本身必须干净（会被用户直接发给答主）──
+  /*
+   * 为什么用行为层而不是正则：这段文字**会离开本站**（用户复制后粘贴到微信/知乎私信），
+   * 而全仓没有 markdown 渲染器 —— `**加粗**` 会原样发出去。
+   * 直接调函数、断言它的**返回值**，比在源码里找星号可靠（注释里合法地出现星号不会误报）。
+   */
+  const inviteFixture = {
+    id: "mirror-guard",
+    title: "测试问题：这件事该怎么看",
+    origin: "typed",
+    createdAt: 0,
+    routing: { mode: "auto", intent: "how", picks: [], summary: "", queries: [] },
+    skills: [],
+    answers: [
+      {
+        id: "ans-guard",
+        skillId: "s-guard",
+        skillName: "某位答主",
+        accent: "blue",
+        body: "这是一段用于自检的正文。",
+        evidence: [],
+        createdAt: 0,
+        status: "ai",
+        generatedBy: "retrieval",
+      },
+    ],
+    gaps: [],
+    handoff: { status: "not-ready", note: "" },
+    contributions: [],
+  };
+  const inviteText = toInviteText(inviteFixture, inviteFixture.answers[0]);
+  const mdHits = inviteText.match(/\*\*|^#{1,6}\s|^\s*[-*]\s|^>\s|`/gm) ?? [];
+  if (mdHits.length) {
+    bad(
+      "邀请文案里出现了 markdown 标记 " + JSON.stringify(mdHits.slice(0, 5)) +
+      " —— 没有渲染器，会被用户原样发给答主（P0-3.2）",
+    );
+  } else {
+    ok("邀请文案里没有 markdown 标记（这段文字会原样发给答主）");
+  }
+  // 反面：文案必须真的含四要素里的关键两样，否则「干净」没有意义
+  if (!inviteText.includes(inviteFixture.title)) bad("邀请文案没带问题标题（P0-3.2）");
+  else ok("邀请文案带上了问题标题（P0-3.2）");
 }
 
 console.log("\n" + "=".repeat(74));
