@@ -289,6 +289,104 @@ if (!titleColor || !whoColor) {
   }
 }
 
+/* ---------------------- ③ 发光物件 ---------------------- */
+
+head("③ 话题中心的发光物件必须真的「亮」（owner 的原话：像奇珍异宝一样发光）");
+
+{
+  /**
+   * 带 alpha 的解析 + 合成。
+   *
+   * 为什么必须合成：`.sq-relic-body` 原来写的是 `rgba(255,214,178,0.22)` ——
+   * 只比 RGB 不看 alpha，会算出「暖白色」，看起来完全正常；
+   * 但 22% 叠在近黑地面上实际是 rgb(66,55,48)，**和背景几乎同亮度**。
+   * 「读代码看不出、看数字才看得见」的坑，就在这个 alpha 上。
+   */
+  function parseRGBA(s) {
+    if (!s) return null;
+    const t = s.trim();
+    let m = /^#([0-9a-f]{6})$/i.exec(t);
+    if (m) {
+      const h = m[1];
+      return [+parseInt(h.slice(0, 2), 16), +parseInt(h.slice(2, 4), 16), +parseInt(h.slice(4, 6), 16), 1];
+    }
+    m = /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)(?:\s*,\s*([\d.]+))?\s*\)/i.exec(t);
+    if (m) return [+m[1], +m[2], +m[3], m[4] === undefined ? 1 : +m[4]];
+    return null;
+  }
+  const over = (fg, bg) => fg.slice(0, 3).map((v, i) => v * fg[3] + bg[i] * (1 - fg[3]));
+
+  const bodyRaw = declOf(".sq-relic-body", "fill");
+  const lineRaw = declOf(".sq-relic-line", "stroke");
+  const detailRaw = declOf(".sq-relic-detail", "stroke");
+  const svgW = declOf(".sq-relic-svg", "width");
+
+  const bodyRGBA = parseRGBA(bodyRaw);
+  const lineRGBA = parseRGBA(lineRaw);
+
+  if (!bodyRGBA) {
+    fail("读不到 .sq-relic-body 的 fill（写法变了？）");
+  } else {
+    const bodyOnPage = over(bodyRGBA, pageBg);
+    const rBody = ratio(bodyOnPage, pageBg);
+    console.log("  物件本体 raw = " + bodyRaw + "  alpha=" + bodyRGBA[3]);
+    console.log("    合成到页面底 = rgb(" + bodyOnPage.map((v) => Math.round(v)).join(",") + ")");
+    console.log("    物件本体 / 页面底 = " + rBody.toFixed(2) + ":1");
+    console.log("    svg 占物件框 = " + svgW + "（屏幕上物件本体约 " +
+      (74 * 0.4).toFixed(0) + "px 量级）");
+
+    // 4.5：与正文同级。它不是装饰，是「这场在聊什么」的唯一图形线索 ——
+    // 人看不清物件，整场讨论就只剩标题可读。
+    if (rBody >= 4.5) pass("物件本体对比度 " + rBody.toFixed(2) + " ≥ 4.5（真的在发光）");
+    else
+      fail(
+        "物件本体对比度只有 " + rBody.toFixed(2) + "（< 4.5）—— 它和地面几乎同亮度，" +
+          "owner 要的「像奇珍异宝一样发光」在屏幕上根本不成立。" +
+          "多半是 fill 的 alpha 太低（实测 0.22 时只有 1.72:1）。",
+      );
+
+    // 本体必须**亮于**页面底（是「发光的东西」，不是「地上的洞」）
+    const lb = lum(...bodyOnPage);
+    const lp = lum(...pageBg);
+    if (lb > lp) pass("物件本体亮于页面底（" + lb.toFixed(3) + " > " + lp.toFixed(3) + "）");
+    else fail("物件本体不比页面底亮 —— 读起来是个坑，不是发光的东西");
+  }
+
+  const lBody = bodyRGBA ? lum(...over(bodyRGBA, pageBg)) : 0;
+  const lPage = lum(...pageBg);
+
+  // 内部细节线（钟的指针 / 药瓶分隔 / 楼的窗）：压在实心亮本体上 → 必须**深于**本体
+  if (!detailRaw) {
+    fail("读不到 .sq-relic-detail 的 stroke");
+  } else {
+    const lDetail = lum(...over(parseRGBA(detailRaw), pageBg));
+    console.log("  内部细节线 raw = " + detailRaw + "  亮度 " + lDetail.toFixed(3));
+    if (lDetail < lBody) pass("内部细节线深于本体（" + lDetail.toFixed(3) + " < " + lBody.toFixed(3) + "）");
+    else
+      fail(
+        "内部细节线亮度 " + lDetail.toFixed(3) + " ≥ 本体 " + lBody.toFixed(3) +
+          " —— 本体是实心亮色时，浅色线会完全融进去（指针 / 分隔 / 窗格等于没画）",
+      );
+  }
+
+  // 外部轮廓线（杯柄 / 蒸汽 / 镜腿 / 底座）：压在近黑的地面上 → 必须**亮于**页面底
+  if (!lineRGBA) {
+    fail("读不到 .sq-relic-line 的 stroke");
+  } else {
+    const lLine = lum(...over(lineRGBA, pageBg));
+    console.log("  外部轮廓线 raw = " + lineRaw + "  亮度 " + lLine.toFixed(3));
+    if (lLine > lPage * 4) {
+      pass("外部轮廓线明显亮于页面底（" + lLine.toFixed(3) + " vs " + lPage.toFixed(3) + "）");
+    } else {
+      fail(
+        "外部轮廓线亮度 " + lLine.toFixed(3) + " 不够亮（页面底 " + lPage.toFixed(3) +
+          "）—— 杯柄 / 蒸汽 / 镜腿压在近黑地面上会看不见。" +
+          "这两类线**不能共用一个类名**：内部线要深、外部线要亮。",
+      );
+    }
+  }
+}
+
 console.log("");
 console.log("=".repeat(74));
 console.log(problems === 0 ? "  全部通过（0 处问题）" : "  " + problems + " 处问题");

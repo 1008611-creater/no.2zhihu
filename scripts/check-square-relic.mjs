@@ -195,6 +195,72 @@ head("⑥ 可复现（同一输入永远同一结果）");
   else ok("空广场看山没有目标（不造一个假目标）");
 }
 
+head("⑦ 物件的光晕与本体：分列人群两侧，且必须同尺寸（渲染顺序的隐式契约）");
+
+{
+  /**
+   * 为什么必须守这一条：光晕与本体被拆成两次渲染（见 TopicRelic 的 `part`），
+   * 两者是**同一个绝对定位的 div**，只有尺寸完全一致才会重合。
+   * 尺寸一错，本体与光晕会错位 —— 看起来像两件东西，而这件事
+   * 在截图里很像是「美术没调好」，不会有人想到是两处传参不一致。
+   *
+   * 顺序也是契约：光晕必须在人群 svg **之前**（人站在光里），
+   * 本体必须在**之后**（物件不被挡住）。写反了在代码上完全合法。
+   */
+  const src = readFileSync(join(here, "..", "components", "square", "CrowdCluster.tsx"), "utf8");
+
+  const auraIdx = src.indexOf('part="aura"');
+  const bodyIdx = src.indexOf('part="body"');
+  const svgIdx = src.indexOf('className="sq-crowd"');
+
+  if (auraIdx < 0 || bodyIdx < 0) {
+    bad("找不到 part=\"aura\" / part=\"body\" —— 物件又变回单次渲染了？");
+  } else if (svgIdx < 0) {
+    bad("找不到人群 svg（className=\"sq-crowd\"）");
+  } else {
+    ok("光晕与本体分两次渲染");
+    if (auraIdx < svgIdx && svgIdx < bodyIdx) {
+      ok("顺序正确：光晕 → 人群 svg → 物件本体");
+    } else {
+      bad(
+        "渲染顺序不对（aura@" + auraIdx + " svg@" + svgIdx + " body@" + bodyIdx + "）—— " +
+          "光晕必须在人群之前（人站在光里），本体必须在人群之后（物件不被挡住）",
+      );
+    }
+  }
+
+  // 两处的 size 表达式必须逐字相同
+  const grab = (marker) => {
+    const i = src.indexOf(marker);
+    if (i < 0) return null;
+    const seg = src.slice(i, i + 400);
+    const m = /size=\{([^}]+)\}/.exec(seg);
+    return m ? m[1].trim() : null;
+  };
+  const auraSize = grab('part="aura"');
+  const bodySize = grab('part="body"');
+  if (!auraSize || !bodySize) {
+    bad("读不到两处的 size（写法变了？）");
+  } else if (auraSize === bodySize) {
+    ok("两处 size 完全一致：" + auraSize);
+  } else {
+    bad("两处 size 不一致（光晕 " + auraSize + " vs 本体 " + bodySize + "）—— 本体与光晕会错位，看起来像两件东西");
+  }
+
+  // 内外两种线不能混用：TopicRelic 里必须同时存在 sq-relic-line 与 sq-relic-detail
+  const relicSrc = readFileSync(join(here, "..", "components", "square", "TopicRelic.tsx"), "utf8");
+  const nLine = (relicSrc.match(/sq-relic-line/g) ?? []).length;
+  const nDetail = (relicSrc.match(/sq-relic-detail/g) ?? []).length;
+  if (nLine > 0 && nDetail > 0) {
+    ok("内部线（sq-relic-detail ×" + nDetail + "）与外部线（sq-relic-line ×" + nLine + "）分开使用");
+  } else {
+    bad(
+      "内部线与外部线没有分开（detail×" + nDetail + " line×" + nLine + "）—— " +
+        "本体是实心亮色时，同一个颜色不可能既压在暗底上看得见、又压在亮本体上看得见",
+    );
+  }
+}
+
 console.log("\n" + "=".repeat(74));
 console.log(fail === 0 ? "全部通过（0 处问题）" : "发现 " + fail + " 处问题");
 console.log("=".repeat(74));
