@@ -1227,7 +1227,16 @@ body.sq-locked {
 
 /* ------------------------------ 光与尘埃 ------------------------------ */
 
-/* 场地：一整块被照亮的圆形地面 —— 整个画面的**对比基准**。
+/* 场地：一整块地面 —— **只负责「地面」，不负责打光**。
+ *
+ * ⚠️ 2026-09-16 修正：上一版场地是整个画面的对比基准兼主光源，
+ * 因为当时「全广场只有一盏灯」。那套设计的后果是：离灯最远的那十几簇，
+ * 几十条影子互相平行地甩向同一个方向，读起来像一片被风吹倒的草。
+ *
+ * 现在**每个话题自己发光**（它中心立着一件属于该话题的物件，见 TopicRelic），
+ * 人围着它站、影子从物件向外辐射 —— 每一簇的光影自己就闭合了。
+ * 场地因此降淡到 0.20，只保证人脚下不是纯黑的虚空。
+ * 原注释（关于「有影子必须有光」）依然成立，只是那个「光」现在在簇里。
  *
  * ⚠️ 这是本轮最要紧的一处修改：
  *
@@ -1246,12 +1255,14 @@ body.sq-locked {
 .sq-field {
   position: absolute;
   border-radius: 50%;
+  /* 0.50 → 0.20：光已经移进每一簇（那件发光的物件），场地不再承担打光，
+     只负责「脚下不是纯黑虚空」。上一版它是主光源，因为当时全广场只有一盏灯。 */
   background: radial-gradient(
     circle at center,
-    rgba(112, 134, 194, 0.50) 0%,
-    rgba(88, 108, 160, 0.42) 28%,
-    rgba(58, 72, 112, 0.27) 52%,
-    rgba(26, 32, 52, 0.10) 72%,
+    rgba(112, 134, 194, 0.20) 0%,
+    rgba(88, 108, 160, 0.15) 30%,
+    rgba(58, 72, 112, 0.09) 54%,
+    rgba(26, 32, 52, 0.04) 72%,
     rgba(0, 0, 0, 0) 88%
   );
 }
@@ -1376,9 +1387,18 @@ body.sq-locked {
   left: 50%;
   transform: translateX(-50%);
   margin-bottom: 12px;
-  display: flex;
-  align-items: flex-start;
-  gap: 6px;
+  /* ⚠️ 为什么是 grid 不是 flex（2026-09-16 实测修正）：
+     原来是 `display:flex`，而 `.sq-crowd-who` 是它的**直接子元素** ——
+     在 flex 容器里，`display:block` 的子元素一样会变成 flex item **横着排**，
+     于是「答主名」被塞到标题右边，再被 max-width 挤成一条窄柱，
+     实测截图里「半佛仙人 · 贱贱」断成「半 / 佛仙人 · 贱 / 贱」，看着像渲染坏了。
+     设计意图（见 .sq-crowd-who 的注释）是名字在标题**下面一行**。
+     grid 把行列写死，就不会再被 flex 的排布规则意外改掉。 */
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 6px;
+  row-gap: 0;
   width: max-content;
   /* 12em ≈ 156px。簇间距约 215px，留出这个宽度之后相邻两簇的标题才不会撞上；
      再窄一点长标题就要折成三行，反而更挤。 */
@@ -1392,9 +1412,13 @@ body.sq-locked {
 .sq-crowd-label .sq-cluster-dot {
   /* 圆点对齐标题第一行的视觉中线（不是行框顶） */
   margin-top: 5px;
+  grid-column: 1;
+  grid-row: 1;
 }
 
 .sq-crowd-title {
+  grid-column: 2;
+  grid-row: 1;
   line-height: 1.4;
   color: var(--text-100);
 }
@@ -1610,4 +1634,395 @@ body.sq-locked {
   .sq-broadcast {
     display: none;
   }
+}
+
+/* ==================== 话题中心那件发光的东西 ==================== */
+
+/* 一个话题的中心立着一件属于它的物件（房子 / 镜片 / 咖啡杯 / 钟…），
+   人围着它站 ——「像围着一颗奇珍异宝」。
+
+   三件事被它同时解决：
+     ① 一眼看出这场在聊什么（见 relic.ts 的关键词表）
+     ② **影子有了来源**：光就在物件上，人朝外投影，每簇自洽
+     ③ 有了「点下去」的理由
+
+   光晕全部用 radial-gradient 的透明衰减做 —— 设计系统禁止 box-shadow / blur。 */
+
+.sq-relic {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+}
+
+/* 内圈：贴着物件的暖光，亮度由 --sq-relic-power（热度）决定 */
+.sq-relic-halo {
+  position: absolute;
+  inset: -26%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 196, 150, 0.30) 0%,
+    rgba(255, 150, 90, 0.16) 38%,
+    rgba(255, 130, 70, 0) 72%
+  );
+  opacity: var(--sq-relic-power, 0.6);
+  animation: sq-relic-breathe 4.2s ease-in-out infinite;
+}
+
+/* 外圈：铺得更大更淡，负责「照亮了周围那块地」——
+   这是影子的**物理依据**：没有它，影子看起来是凭空出现的。 */
+.sq-relic-halo-outer {
+  position: absolute;
+  inset: -120%;
+  border-radius: 50%;
+  background: radial-gradient(
+    circle at center,
+    rgba(255, 190, 140, 0.13) 0%,
+    rgba(255, 160, 100, 0.07) 42%,
+    rgba(255, 140, 80, 0) 74%
+  );
+  opacity: var(--sq-relic-power, 0.6);
+}
+
+@keyframes sq-relic-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.07); }
+}
+
+.sq-relic-svg {
+  position: relative;
+  width: 62%;
+  height: 62%;
+  overflow: visible;
+}
+
+/* 物件本体：暖白描边 + 半透明填充。
+   不填满色 —— 填满会读成一个色块；留出内里才像「一件东西」。 */
+.sq-relic-body {
+  fill: rgba(255, 214, 178, 0.22);
+  stroke: #ffcfa8;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* 物件内部的「挖空」（门 / 方孔）—— 用底色把它抠出来 */
+.sq-relic-hole {
+  fill: rgba(7, 8, 15, 0.86);
+  stroke: none;
+}
+
+/* 细线（指针 / 镜腿 / 屏幕内容）*/
+.sq-relic-line {
+  fill: none;
+  stroke: #ffcfa8;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+}
+
+/* 一点高光，慢慢扫过 ——「奇珍异宝」的那口活气。
+   只有一圈，不做循环烟花。 */
+.sq-relic-spark {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #fff3e2;
+  opacity: 0;
+  animation: sq-relic-spark 5.6s ease-in-out infinite;
+}
+
+@keyframes sq-relic-spark {
+  0%, 72%  { opacity: 0; transform: translate(-14px, -6px) scale(0.6); }
+  80%      { opacity: 0.95; }
+  92%      { opacity: 0.5; transform: translate(12px, -18px) scale(1); }
+  100%     { opacity: 0; transform: translate(16px, -22px) scale(0.7); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-relic-halo { animation: none; }
+  .sq-relic-spark { display: none; }
+}
+
+/* 悬停整簇时物件更亮一点 —— 反馈要落在「这件东西」上，而不是只落在人上 */
+.sq-crowd-node-hover .sq-relic-halo,
+.sq-crowd-node-hover .sq-relic-halo-outer {
+  opacity: calc(var(--sq-relic-power, 0.6) * 1.35);
+}
+.sq-crowd-node-focused .sq-relic-halo,
+.sq-crowd-node-focused .sq-relic-halo-outer {
+  opacity: calc(var(--sq-relic-power, 0.6) * 1.6);
+}
+
+/* ==================== 人物的小动作 ==================== */
+
+/* 「能自主运动、有小动作、跟真人一样」。
+   全部只动 transform / opacity（GSAP 官方性能规范）——
+   100 多个人形各动一下，动 layout 属性会掉帧。
+
+   ⚠️ 关键：**62% 的人只是静立**（见 dialogue.ts 的权重表）。
+   人人都点头挥手就不像人群，像机器人展。真实人群是
+   「绝大多数人站着，少数几个人在说话」。 */
+
+.sq-act {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  animation-timing-function: ease-in-out;
+  animation-iteration-count: infinite;
+  animation-duration: 5s;
+}
+
+/* 静立：几乎看不出的起伏。这是「活着」的底色，不是动作。 */
+.sq-act-breeze {
+  animation-name: sq-g-breeze;
+}
+
+@keyframes sq-g-breeze {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-1.1px); }
+}
+
+/* 转头：整簇内极小幅横向位移 + 轻微倾斜 —— 读起来像「他在看旁边的人」 */
+.sq-act-turn {
+  animation-name: sq-g-turn;
+  transform-origin: 50% 100%;
+}
+
+@keyframes sq-g-turn {
+  0%, 66%, 100% { transform: translateX(0) rotate(0deg); }
+  74%           { transform: translateX(1.6px) rotate(3.2deg); }
+  86%           { transform: translateX(1.6px) rotate(3.2deg); }
+}
+
+/* 点头 */
+.sq-act-nod {
+  animation-name: sq-g-nod;
+}
+
+@keyframes sq-g-nod {
+  0%, 58%, 100% { transform: translateY(0) scaleY(1); }
+  64%           { transform: translateY(0.9px) scaleY(0.965); }
+  70%           { transform: translateY(0) scaleY(1); }
+  76%           { transform: translateY(0.9px) scaleY(0.965); }
+}
+
+/* 凑近听：稍微前倾、贴近中心那件东西 */
+.sq-act-lean-in {
+  animation-name: sq-g-lean;
+}
+
+@keyframes sq-g-lean {
+  0%, 70%, 100% { transform: scale(1) translateY(0); }
+  82%           { transform: scale(1.045) translateY(-0.8px); }
+}
+
+/* 挠头：抬起一只手的位置（上半身轻微侧倾 + 一点上提）。
+   不做真的手臂 —— 在 50px 高的剪影上画手臂会糊成一团。 */
+.sq-act-scratch {
+  animation-name: sq-g-scratch;
+  transform-origin: 50% 100%;
+}
+
+@keyframes sq-g-scratch {
+  0%, 54%, 100% { transform: rotate(0deg) translateY(0); }
+  60%           { transform: rotate(-5deg) translateY(-0.6px); }
+  68%           { transform: rotate(-3deg) translateY(0); }
+  76%           { transform: rotate(-5deg) translateY(-0.6px); }
+}
+
+/* 向同伴招呼：抬手（整簇上提一下）+ 轻微左右摆 */
+.sq-act-wave {
+  animation-name: sq-g-wave;
+  transform-origin: 50% 100%;
+}
+
+@keyframes sq-g-wave {
+  0%, 62%, 100% { transform: rotate(0deg) translateY(0); }
+  68%           { transform: rotate(6deg) translateY(-1.4px); }
+  76%           { transform: rotate(-4deg) translateY(-1px); }
+  84%           { transform: rotate(5deg) translateY(-1.2px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-act { animation: none; }
+}
+
+/* ==================== 真名 ==================== */
+
+/* 每个在场分身来自库里已有的 `skills[].name` —— 一个字都不是我们编的。 */
+.sq-crowd-who {
+  /* 独占第二行，对齐标题左沿（grid 的第 2 列） */
+  grid-column: 2;
+  grid-row: 2;
+  margin-top: 3px;
+  font-size: 10.5px;
+  line-height: 1.35;
+  letter-spacing: 0.01em;
+  /* ⚠️ 这里原来是 `var(--text-600)` —— 而调色板只定义了 100/300/500/700。
+     变量不存在时 CSS **不报错**，只是让这条声明失效、颜色退化成继承值：
+     22 条姓名条一直在用**和标题一样亮**的主文本色渲染，设计意图（轻一档）从未生效，
+     而且下面那条悬停高亮用的 --text-400 同样不存在 —— **悬停等于没有任何反馈**。
+     现在改用真实存在的 500（暗）与 100（亮）。由 `check-square-css.mjs` ① 守着。 */
+  color: var(--text-500);
+  /* 名字比标题轻一档：标题是「问题」，名字是「谁来了」。
+     两者同权重会让浮标读起来很长很吵。 */
+  opacity: 0.9;
+}
+
+.sq-crowd-node-hover .sq-crowd-who,
+.sq-crowd-node-focused .sq-crowd-who {
+  color: var(--text-100);
+  opacity: 1;
+}
+
+/* ==================== 中心的刘看山 ==================== */
+
+/* 看山**贴在 .sq-world 里**（跟着广场一起平移缩放），尺寸用缩放倒数补偿 ——
+   否则缩小时他会缩成一个点，放大时他会盖住半个广场。 */
+
+.sq-kanshan-host {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+  /* transform 由内联给（含位置 + 反向缩放） */
+  transition: transform var(--dur-slow) var(--ease-out);
+}
+
+.sq-kanshan-host .kanshan {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform: translate(-50%, -50%);
+}
+
+/* 看山脚下的一圈柔光 —— 让他「站在地上」，而不是浮在画布上。
+   单层径向渐变，不用 blur（设计系统禁止）。 */
+.sq-kanshan-beacon {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 320px;
+  height: 150px;
+  margin-left: -160px;
+  margin-top: -26px;
+  border-radius: 50%;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(190, 214, 255, 0.16) 0%,
+    rgba(160, 188, 235, 0.08) 44%,
+    rgba(0, 0, 0, 0) 74%
+  );
+  animation: sq-kanshan-beacon 6.5s ease-in-out infinite;
+}
+
+@keyframes sq-kanshan-beacon {
+  0%, 100% { opacity: 0.75; transform: scale(1); }
+  50%      { opacity: 1;    transform: scale(1.05); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sq-kanshan-host { transition: none; }
+  .sq-kanshan-beacon { animation: none; }
+}
+
+/* ==================== 对话气泡 ==================== */
+
+/* 气泡层：覆盖整个广场，但**不吃事件**（下面的画布要能继续拖动/点击）。 */
+.sq-speech-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  /* 在详情面板之下（详情是 aside，后挂的），但在画布之上 */
+  z-index: 3;
+  overflow: hidden;
+}
+
+/* 一条气泡。
+ *
+ * 宽度上限 22em ≈ 300px：中文约 19 字/行。再宽会横跨两个簇、
+ * 读起来不知道是谁在说；再窄则 30 字的句子要折三行，气泡变成一块砖。
+ *
+ * ⚠️ 底色为什么从 #14182a 提到 #2a3252（2026-09-16 实测修正）：
+ *    「气泡太小、容易被忽略」一直被当成**尺寸**问题，其实不是。
+ *    实测（check-square-css.mjs ②）：#14182a 对页面底 #0a0a0b 只有 **1.13:1**，
+ *    对场地中心的亮区更低 —— 它是一块**和地面几乎同亮度**的深色板，
+ *    字号从 13 放到 24 也一样看不出来。
+ *    提到 #2a3252 之后是 **1.58:1**，再配一条 3.06:1 的亮边框与一圈投影，
+ *    气泡才真正从地面上「浮」起来。缩放与字号仍不能解决亮度相同的问题。 */
+.sq-bubble {
+  position: absolute;
+  /* 以簇中心为轴向两边长 */
+  transform: translateX(-50%);
+  max-width: 22em;
+  width: max-content;
+  padding: 9px 13px 10px;
+  border-radius: 11px;
+  /* 不透明底色 —— 半透明会让人形透过来，字就糊了 */
+  background: #2a3252;
+  border: 1px solid #4d5c8f;
+  /* 投影不是为了装饰：它是「这块板浮在地面之上」的深度线索，
+     在深色地面上，光靠底色差仍然会被读成一片更深的阴影。 */
+  box-shadow:
+    0 8px 22px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(130, 160, 255, 0.08);
+  text-align: left;
+  animation: sq-bubble-in 260ms var(--ease-out) both;
+}
+
+/* 入场：轻微上浮 + 淡入。幅度刻意小 —— 气泡是「有人开口了」，
+   不是「一个弹窗蹦出来了」。 */
+@keyframes sq-bubble-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(5px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 不做入场动画，但**气泡照常出现** —— 它是内容，不是装饰。
+     隐藏它就等于删掉「有人在讨论」这件事。 */
+  .sq-bubble { animation: none; }
+}
+
+.sq-bubble-text {
+  display: block;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #eef2ff;
+  /* 中文标点的悬挂会让行尾更整齐（专业排版细节，代价一行） */
+  hanging-punctuation: allow-end;
+}
+
+/* 署名：比正文小一档、暗两档。
+   为什么放**下面**而不是上面：气泡读起来的顺序是「先看话、再确认谁说的」,
+   署名在上会先占掉注意力。 */
+.sq-bubble-who {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  line-height: 1.3;
+  color: #b9c9ee;
+  letter-spacing: 0.01em;
+}
+
+/* 小尾巴：指向下方的人群。
+   用旋转 45° 的方块做出一个三角，比 border 技巧更好控制颜色一致性。 */
+.sq-bubble-tail {
+  position: absolute;
+  left: 50%;
+  bottom: -4px;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  /* 必须与 .sq-bubble 的 background / border 同步 —— 小尾巴颜色不一致
+     会露出「这是拼出来的」的接缝。改上面那两条时别忘了这里。 */
+  background: #2a3252;
+  border-right: 1px solid #4d5c8f;
+  border-bottom: 1px solid #4d5c8f;
+  transform: rotate(45deg);
 }

@@ -7,6 +7,7 @@ import SquareCanvas from "@/components/square/SquareCanvas";
 import SquareStrip from "@/components/square/SquareStrip";
 import { useMirror } from "@/lib/store/mirror-store";
 import { crowdLayout } from "@/lib/domain/crowd";
+import { speechOf, type Speech } from "@/lib/domain/speech";
 import { hydrateLibraryEntry, statsOf } from "@/lib/domain/library";
 import {
   sourceFromLibrary,
@@ -230,6 +231,30 @@ export default function SquareField() {
   }, []);
 
   /**
+   * 取某一场讨论的回答列表 —— **会话优先，库兜底**。
+   *
+   * ## 为什么要单独抽出来（这是一个已经踩过的坑）
+   *
+   * `library` 在加载完成前是 `null`（`lib.status === "ready" ? entries : null`），
+   * 而 `history` 来自 localStorage、**同步就可用**。所以「先会话后库」
+   * 不只是优先级问题，还是「首屏有没有数据」的问题。
+   *
+   * 原先这个取法散在两处：`avatarSource` 写了一遍、`previewOf` 又内联了一遍。
+   * 我加对话气泡时写了第三遍、**只查了库** —— 结果首屏真名出得来、
+   * 气泡一个都没有（`library` 还是 null）。
+   *
+   * 抽成一个函数，三处走同一条路。**平行实现迟早会漂移，这次漂了。**
+   */
+  const answersOf = useCallback(
+    (id: string): ReadonlyArray<{ skillName?: string; body?: string }> => {
+      const local = history.find((m) => m.id === id);
+      if (local?.answers?.length) return local.answers;
+      return (library ?? []).find((e) => e.id === id)?.answers ?? [];
+    },
+    [history, library],
+  );
+
+  /**
    * 每场讨论的参与答主 handle 列表（取前 3 个做头像）。
    *
    * 为什么先查会话、再查库：同一个 id 可能同时在两边（库是构建时快照，
@@ -259,15 +284,12 @@ export default function SquareField() {
   /** 一句回答预览：取该场第一条非空回答的前 64 字（详情面板用）。 */
   const previewOf = useCallback(
     (id: string): string | undefined => {
-      const local = history.find((m) => m.id === id);
-      const body =
-        local?.answers.find((a) => a.body?.trim())?.body ??
-        (library ?? []).find((e) => e.id === id)?.answers.find((a) => a.body?.trim())?.body;
+      const body = answersOf(id).find((a) => a.body?.trim())?.body;
       if (!body) return undefined;
       const clean = body.replace(/\s+/g, " ").trim();
       return clean.length > 64 ? clean.slice(0, 64) + "…" : clean;
     },
-    [history, library],
+    [answersOf],
   );
 
   const layout: SquareLayout = useMemo(() => {
@@ -281,6 +303,63 @@ export default function SquareField() {
 
   /** 人群几何。与 layout.nodes 顺序一一对应，画布按索引取用。 */
   const clusters = useMemo(() => crowdLayout(layout.nodes), [layout.nodes]);
+
+  /**
+   * 每个话题的「对话安排」—— **全部是答主原话的摘录**。
+   *
+   * ## 为什么不在这里编台词
+   *
+   * 半佛仙人没说过的话，不能由我们替他写在广场上（本项目的诚实性铁律）。
+   * 好在数据完全支持不编：66 条真实回答里每一条都有可以直接摘出来当
+   * 「一句话」的句子（实测中位 27 字、67% 在 34 字以内），
+   * 而且这些话本身就极有辨识度 ——「这事我劝你别想太多，先算个账。」
+   *
+   * ## 人形怎么对上答主（这里有个隐式契约）
+   *
+   * `crowd.ts` 给人形的 key 是 `node.id + "#" + i`，而 `i` 与
+   * `node.avatarHandles` 同序；`avatarHandles[i]` 又严格等于
+   * `answers[i].skillName`（`_diag-speaker-map.mjs` 实测 22/22 场一致）。
+   *
+   * ⚠️ 这条契约**不是类型保证的**，改动 `avatarSource` 就可能失效，
+   * 而失效的后果是**把话安到错的人头上**（等于伪造署名）。
+   * 所以这里不直接信索引：从 key 取出 i → 拿到名字 →
+   * 再用 `skillName` 反查那条回答。**双保险**。
+   * 另外 `check-square-relic.mjs` 有一条断言专门守这个契约。
+   */
+  const speeches = useMemo(() => {
+    const map = new Map<string, { lines: Speech[]; cycle: number; phase: number }>();
+    for (let i = 0; i < layout.nodes.length; i++) {
+      const node = layout.nodes[i];
+      const cluster = clusters[i];
+      if (!cluster) continue;
+      // ⚠️ 必须走 answersOf（会话优先、库兜底）——
+      //    只查 library 的话首屏一个气泡都不会有（踩过）。
+      const answers = answersOf(node.id);
+      if (answers.length === 0) continue;
+
+      const speakers: Array<{ figureKey: string; speaker: string; body: string }> = [];
+      for (const f of cluster.figures) {
+        if (f.kind !== "persona") continue;
+        // key = node.id#i → 取 i → 拿名字
+        const hash = f.key.lastIndexOf("#");
+        const idx = hash >= 0 ? Number(f.key.slice(hash + 1)) : NaN;
+        if (!Number.isInteger(idx)) continue;
+        const name = node.avatarNames[idx];
+        if (!name) continue;
+        // 双保险：再用署名反查回答（真正的出处）
+        const ans = answers.find(
+          (a) => a.skillName === name && String(a.body ?? "").trim().length > 0,
+        );
+        if (!ans) continue;
+        speakers.push({ figureKey: f.key, speaker: name, body: String(ans.body) });
+      }
+
+      const s = speechOf(node.id, speakers);
+      // 一句话都摘不出来的簇不安排对话 —— 宁可少一个气泡，也不给他编一句
+      if (s.lines.length > 0) map.set(node.id, s);
+    }
+    return map;
+  }, [layout.nodes, clusters, answersOf]);
 
   /** 右栏条目。 */
   const broadcast = useMemo(() => toBroadcastItems(items), [items]);
@@ -443,6 +522,7 @@ export default function SquareField() {
           <div className="sq-plaza">
             <SquareCanvas
               layout={layout}
+              speeches={speeches}
               clusters={clusters}
               focusedId={focusedId}
               onFocus={(n) => setFocusedId(n?.id ?? null)}
