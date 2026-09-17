@@ -5,7 +5,10 @@ import { AnimatePresence, motion } from "motion/react";
 import { useReducedMotion } from "@/lib/motion/useReducedMotion";
 import CrowdCluster from "@/components/square/CrowdCluster";
 import { crowdSummary, type CrowdCluster as CrowdClusterData } from "@/lib/domain/crowd";
-import { lightReach, lightSourceOf } from "@/lib/domain/light";
+import { hottestId } from "@/lib/domain/light";
+import { Kanshan } from "@/components/kanshan/Kanshan";
+import SpeechLayer from "./SpeechLayer";
+import type { Speech } from "@/lib/domain/speech";
 import type { SquareLayout, SquareScope, TopicNode, Viewport } from "@/lib/domain/square-layout";
 import { SCOPE_LABELS, clampViewport, focusViewport, homeViewport, zoomAt } from "@/lib/domain/square-layout";
 
@@ -42,8 +45,26 @@ import { SCOPE_LABELS, clampViewport, focusViewport, homeViewport, zoomAt } from
  * 两边唯一的共同点是「点进去是同一场讨论」—— 那走的是同一个 id。
  */
 
+/**
+ * 看山的显示尺寸（屏幕像素）。
+ *
+ * 200 → 150：中央那簇的屏幕直径约 294px，200 会占掉 68% 并压住它的标题；
+ * 150 占 51%，读起来是「他站在人群中间」，而不是「他盖住了这场讨论」。
+ */
+const KANSHAN_SIZE = 150;
+/**
+ * 纵向偏移（世界像素）：让他站在人群脚边。
+ *
+ * 中央簇盘的屏幕半径约 147px，标题在簇盘**上沿之上**。
+ * 不偏移的话，他身体的上半正好顶到标题那一条带子上。
+ * +40（世界）= 屏幕约 37px，足够让标题露出来，又还在簇内。
+ */
+const KANSHAN_LIFT = 40;
+
 export interface SquareCanvasProps {
   layout: SquareLayout;
+  /** 每个话题的对话安排（从真实回答里摘出来的原话，见 speech.ts） */
+  speeches: Map<string, { lines: Speech[]; cycle: number; phase: number }>;
   /** 与 layout.nodes 一一对应的人群（由 SquareField 统一算，避免两处重复计算） */
   clusters: CrowdClusterData[];
   /** 当前聚焦的节点 id；null = 广场常态 */
@@ -68,6 +89,7 @@ const HINT_KEY = "sq-drag-hint-v1";
 
 export default function SquareCanvas({
   layout,
+  speeches,
   clusters,
   focusedId,
   onFocus,
@@ -353,10 +375,33 @@ export default function SquareCanvas({
    * 这是整个广场唯一一个能被记住的动作：点开另一场讨论的瞬间，
    * 光移过去、上百条影子同时转向。
    */
-  const light = useMemo(() => lightSourceOf(layout.nodes, focusedId), [layout.nodes, focusedId]);
+  const hottest = useMemo(() => hottestId(layout.nodes), [layout.nodes]);
+
+  /**
+   * 看山此刻在干什么。
+   *
+   * 优先级：聚焦的那一簇有事 → 悬停的那一簇 → 否则盯最热的那一场。
+   * 这不是装饰性动画：**他的状态跟着用户的动作走**，
+   * 所以读起来是「他在干活」，而不是「有个东西在循环播 GIF」。
+   */
+  const kanshanState = useMemo(() => {
+    if (focusedId) {
+      const n = layout.nodes.find((x) => x.id === focusedId);
+      if (n && n.openGapCount > 0) return "gap" as const;
+      return "routing" as const;
+    }
+    if (hovered) return "greeting" as const;
+    return "idle" as const;
+  }, [focusedId, hovered, layout.nodes]);
+
+  /** 看山看的方向：悬停的簇 → 聚焦的簇 → 最热的那一场。 */
+  const kanshanTarget = useMemo(() => {
+    const id = hovered ?? focusedId ?? hottest;
+    return layout.nodes.find((n) => n.id === id) ?? null;
+  }, [hovered, focusedId, hottest, layout.nodes]);
 
   /** 光源到最远簇的距离 —— 把影长归一化，免得极端布局把影子拉成一条线。 */
-  const reach = useMemo(() => (light ? lightReach(layout.nodes, light) : 1), [layout.nodes, light]);
+
 
   const scopeLabel = SCOPE_LABELS.find((s) => s.key === scope)?.label ?? "";
 
@@ -409,10 +454,16 @@ export default function SquareCanvas({
               <circle cx="6.7" cy="3.7" r="3.05" />
               <path d="M1.9 20 L2.5 12.4 A3.6 3.5 0 0 1 10.1 11.9 L10.4 20 Z" />
             </symbol>
-            {/* 抱手：肩线放平（不再用弧），下摆外扩 —— 站姿更「沉」。 */}
+            {/* 抱手：肩线放平（不再用弧），下摆外扩 —— 站姿更「沉」。
+                ⚠️ 肩线原来在 y=12.9，而头顶圆的底在 7.05 —— **间隙 5.85，
+                占身高的 29%**，画出来是一个黑圆浮在一个梯形体上方，读起来
+                像「头掉下来了」，实测截图里三分之一的人形都是这个样子
+                （`fold` 是三种姿态之一）。现在肩线提到 7.8，与另两个姿态
+                的接法一致（stand 间隙 3%、turn 8%、fold 现在 4%）。
+                由 `check-square-figure.mjs` ① 逐条守着，改这条 path 会被拦。 */}
             <symbol id="sq-fig-fold" viewBox="0 0 12 20">
               <circle cx="6" cy="3.9" r="3.15" />
-              <path d="M1 20 L2.7 12.9 L9.3 12.9 L11 20 Z" />
+              <path d="M1 20 L2.3 7.8 L9.7 7.8 L11 20 Z" />
             </symbol>
 
             {/* 地灯的渐变。
@@ -447,16 +498,14 @@ export default function SquareCanvas({
               ⚠️ 这一块**是必须的**：上一版没有它，光池和影子都直接画在近黑的
               页面底色上，实测截图里**一条影子都看不见** —— 黑色影子画在黑色
               地面上等于隐身。**有影子必须有光，有光必须有能接住光的表面。** */}
+          {/* 场地：只负责「地面」这一件事 —— **不再承担打光**。
+              光已经移进每一簇（那件发光的物件，见 TopicRelic），
+              所以这里降到很淡：作用只是让人脚下不是纯黑的虚空。
+              （上一版它是主光源，因为当时全广场只有一盏灯 —— 那会导致
+              离灯最远的那十几簇影子平行甩向同一方向，像被风吹倒的草。） */}
           <span
             className="sq-field"
             style={{
-              // ⚠️ 必须**按包围盒中心**定位，不能按左上角偏移。
-              // 世界坐标里包围盒围绕原点对称（minX≈-1200 / maxX≈+1200），
-              // 按左上角算会让整块场地偏到右下一大块，屏幕中心只蹭到它最亮的边缘 ——
-              // 实测「地面没有亮度」就是这么翻的车。
-              //
-              // 1.5 倍而不是 2.24：取太大时径向渐变整块落在屏幕外，
-              // 可见区域全落在最亮那一段，地面变成一片没有过渡的平色。
               left: (bounds.minX + bounds.maxX) / 2 - (bounds.maxX - bounds.minX) * 0.75,
               top: (bounds.minY + bounds.maxY) / 2 - (bounds.maxY - bounds.minY) * 0.75,
               width: (bounds.maxX - bounds.minX) * 1.5,
@@ -470,65 +519,6 @@ export default function SquareCanvas({
 
               为什么光柱要「脉动」而不是常亮：常亮读起来像贴图，脉动读起来像
               有光源在呼吸。这是 silk-design 的 ray-pulse 手法，幅度刻意很小。 */}
-          {light && (
-            <div
-              className="sq-light"
-              style={{ transform: `translate(${light.x}px, ${light.y}px)` }}
-              aria-hidden="true"
-            >
-              <span className="sq-light-pool" />
-              <svg className="sq-light-rays" viewBox="-200 -250 400 250" focusable="false">
-                {/* ⚠️ 渐变必须定义在光柱**自己的坐标系**里。
-                    上一版沿用外层世界的坐标（x1=300 y1=292…），
-                    在 viewBox="-200 -250 400 250" 里那个区间整块落在画布之外 ——
-                    填充退化成平色，8 根光柱糊成一个灰三角。
-                    现在改到本坐标系：从光源 (0,0) 向上到 (0,-250)。 */}
-                <defs>
-                  <linearGradient
-                    id="sqRayGrad"
-                    gradientUnits="userSpaceOnUse"
-                    x1="0"
-                    y1="0"
-                    x2="0"
-                    y2="-250"
-                  >
-                    <stop offset="0" stopColor="#e6ecff" stopOpacity="0.30" />
-                    <stop offset="0.45" stopColor="#dbe4f8" stopOpacity="0.09" />
-                    <stop offset="1" stopColor="#dbe4f8" stopOpacity="0" />
-                  </linearGradient>
-                </defs>
-                {[-124, -62, 0, 62, 124].map((x, i) => (
-                  <path
-                    key={x}
-                    className="sq-ray"
-                    d={`M0 0 L${x - 13} -250 L${x + 13} -250 Z`}
-                    style={reduced ? undefined : { animationDelay: `-${(i * 0.55).toFixed(2)}s` }}
-                  />
-                ))}
-              </svg>
-              <span className="sq-light-core" />
-              {!reduced &&
-                [
-                  [-38, -30, 0],
-                  [26, -14, -1.3],
-                  [-12, -58, -2.6],
-                  [44, -74, -3.9],
-                  [-52, -96, -5.2],
-                  [8, -112, -6.4],
-                ].map(([x, y, d]) => (
-                  <span
-                    key={d}
-                    className="sq-dust"
-                    style={{
-                      transform: `translate(${x}px, ${y}px)`,
-                      animationDelay: `${d}s`,
-                      width: 2.2,
-                      height: 2.2,
-                    }}
-                  />
-                ))}
-            </div>
-          )}
 
           {layout.nodes.map((n, i) => {
             const c = clusters[i];
@@ -538,8 +528,6 @@ export default function SquareCanvas({
                 key={n.id}
                 node={n}
                 cluster={c}
-                light={light}
-                reach={reach}
                 focused={focusedId === n.id}
                 dimmed={!!focusedId && focusedId !== n.id}
                 hovered={hovered === n.id}
@@ -549,6 +537,43 @@ export default function SquareCanvas({
               />
             );
           })}
+
+          {/* **广场中心站着刘看山**（官方素材，见 components/kanshan/）。
+              他一直在动，而且**动得有理由** —— 状态跟着你在做什么走：
+              你在看哪一簇，他就看向哪一簇；那一簇有缺口，他就摆出「缺人」的样子。
+
+              size 用缩放倒数补偿：贴在 .sq-world 里会跟着画布一起缩放，
+              直接给固定像素的话缩小视野时他会变成一个点。
+
+              ⚠️ **为什么他必须排在这一簇之后（2026-09-16 实测修正）**：
+              原先他排在人群之前，于是中央那簇的**发光物件、人形、影子全部盖在他身上** ——
+              实测截图里他的脸被那个橙色「环」物件的菱形框穿过，下半身埋在人堆里，
+              读起来是「一堆东西糊在广场正中」，既看不出是刘看山，也看不出那场在聊什么。
+              最热那一场就钉在世界原点，他就站在这儿，两者必然同址；
+              能决定的只有**谁在前面**。他是主持人、站在人群前面，所以放最后面渲染。 */}
+          <div
+            className="sq-kanshan-host"
+            style={{
+              // ⚠️ 这里**只做平移，不做居中** —— 居中是 `.kanshan` 自己的
+              //    `translate(-50%,-50%)` 负责的。两个地方各扣一半的话，
+              //    看山会整体偏掉半个身位（第一版就是这么翻的车：
+              //    实测它偏到左上，正好压住中央那簇的标题）。
+              //
+              // 位置**固定在广场中心**（世界原点 —— 布局层把最热那场钉在这里），
+              // 不跟鼠标走。owner 原话是「**广场的中心**站着一个刘看山」；
+              // 「他在关注谁」由 state 表达（idle / routing / gap），位置不动。
+              //
+              // 纵向偏移 KANSHAN_LIFT：让他站在人群脚边而不是压住上方标题
+              // （标题在簇盘上方，簇盘上沿离中心约一个簇半径）。
+              transform: `translate(0px, ${KANSHAN_LIFT}px) scale(${(
+                1 / Math.max(viewport.scale, 0.4)
+              ).toFixed(3)})`,
+            }}
+            aria-hidden="true"
+          >
+            <Kanshan state={kanshanState} size={KANSHAN_SIZE} />
+            {!reduced && <span className="sq-kanshan-beacon" />}
+          </div>
         </div>
 
         {/* 广场标题。概念图上是两行：大字「虚拟广场」+ 一句副题。
@@ -601,6 +626,18 @@ export default function SquareCanvas({
           )}
         </AnimatePresence>
       </div>
+
+      {/* ---------------- 对话气泡 ----------------
+          在 world **之外**、独立成层（见 SpeechLayer 的文件头说明：
+          气泡必须固定在屏幕坐标里，否则一缩放就读不了）。
+
+          ⚠️ 气泡里的每个字都是答主原话的摘录，不是我们编的。 */}
+      <SpeechLayer
+        layout={layout}
+        speeches={speeches}
+        view={viewport}
+        focusedId={focusedId}
+      />
 
       {/* ---------------- 原地展开的详情 ---------------- */}
       <AnimatePresence>

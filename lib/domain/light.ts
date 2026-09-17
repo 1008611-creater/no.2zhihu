@@ -7,8 +7,13 @@
  * 它们都是几何，不是美术：
  *
  *   ① **纵深**：远处的场子比近处小、也比近处暗（大气透视）
- *   ② **光**：全广场只有一盏灯，落在当前最热（或被聚焦）的那一场上
- *   ③ **影**：每个人朝背离光源的方向在地上甩出一条影子
+ *   ② **光**：**每个话题自己发光** —— 它中间立着一件属于该话题的物件
+ *      （见 `relic.ts`），人群围着它站。这是 2026-09-16 的关键修正：
+ *      原先设计是「全广场一盏灯」，于是离灯远的那十几簇，
+ *      所有人的影子互相平行地甩向同一个方向 —— 实测截图里读起来像
+ *      「被风吹倒的草」，不像投影。改成每簇自发光之后，
+ *      **每一簇的光影自己就自洽了**，不需要任何解释。
+ *   ③ **影**：每个人朝背离**本簇光源**的方向在地上甩出一条影子
  *
  * 这三件事一旦成立，「人站在地上」这件事就不需要解释 —— 眼睛自己会信。
  * 而它们全是**由坐标算出来的**，所以同一份数据永远得到同一个画面，
@@ -28,12 +33,14 @@ export interface Point {
   y: number;
 }
 
-/** 广场上唯一的那一盏灯。 */
+/** 一个光源。现在是**每簇一个**（就在那件发光物件的位置）。 */
 export interface LightSource {
-  /** 哪一场在发光（话题 id） */
+  /** "cluster" = 该簇自己的物件；其余值是历史用法，保留兼容 */
   id: string;
   x: number;
   y: number;
+  /** 光晕强度 0..1（由热度决定）。只影响渲染亮度，不影响影子几何。 */
+  intensity?: number;
 }
 
 export interface Shadow {
@@ -88,32 +95,52 @@ export function groundOpacityAt(depth: number): number {
 /* ------------------------------ 光源 ------------------------------ */
 
 /**
- * 选光源：**优先被聚焦的那一场**，否则全场最热的那一场。
+ * 一个话题的光源 —— **就在它自己的中心**。
  *
- * 为什么「聚焦时把光挪过去」：这是整个广场唯一一个能被记住的动作 ——
- * 点下另一场讨论的瞬间，光移过去、上百条影子同时转向。
- * 而它同时还是**有用的**：光在哪，视线就在哪。
+ * ## 为什么不是「全广场一盏灯」（2026-09-16 修正）
+ *
+ * 上一版用 `lightSourceOf(nodes, focusedId)` 选出一盏共享的灯，落在最热那一场。
+ * 几何上是成立的，观感上不成立：离灯最远的那十几簇，几十条影子互相平行地
+ * 甩向同一个方向，读起来像一片被风吹倒的草。
+ *
+ * 真实世界里，一堆人围着某样东西看的时候，**光就来自那样东西**。
+ * 所以现在每簇用自己中心当光源，影子从物件向外辐射 ——
+ * 每一簇的光影自己闭合，不需要任何解释。
+ *
+ * @param x/y       话题中心（簇心，也是那件发光物件的位置）
+ * @param intensity 光晕强度 0..1（由热度决定，见 `relic.ts`）——
+ *                  只影响渲染层亮度，不影响影子方向（方向仍是纯几何）
  */
-export function lightSourceOf(
-  nodes: Array<Pick<TopicNode, "id" | "x" | "y" | "size">>,
-  focusedId: string | null,
-): LightSource | null {
-  if (nodes.length === 0) return null;
-  const focused = focusedId ? nodes.find((n) => n.id === focusedId) : undefined;
-  if (focused) return { id: focused.id, x: focused.x, y: focused.y };
-  let best = nodes[0];
-  for (const n of nodes) if (n.size > best.size) best = n;
-  return { id: best.id, x: best.x, y: best.y };
+export function lightOfCluster(x: number, y: number, intensity: number): LightSource {
+  return { id: "cluster", x, y, intensity };
 }
 
-/** 光源到最远那一簇的距离 —— 用来把影长归一化，免得极端布局把影子拉成一条线。 */
-export function lightReach(nodes: Array<Pick<TopicNode, "x" | "y">>, light: LightSource): number {
-  let max = 1;
-  for (const n of nodes) {
-    const d = Math.hypot(n.x - light.x, n.y - light.y);
-    if (d > max) max = d;
-  }
-  return max;
+/**
+ * 全广场最热的那个话题 id。
+ *
+ * 不再用于光源，但有一个正当用途 —— **看山（主持人）的注视目标**：
+ * 他该多看几眼最热那一场。这是一个跨簇的全局判断，与「每簇自发光」不冲突。
+ */
+export function hottestId(nodes: Array<Pick<TopicNode, "id" | "size">>): string | null {
+  if (nodes.length === 0) return null;
+  let best = nodes[0];
+  for (const n of nodes) if (n.size > best.size) best = n;
+  return best.id;
+}
+
+/**
+ * 影长的归一化尺度 —— 从「光源到最远簇的距离」改成**簇自己的半径**。
+ *
+ * 为什么必须改：上一版用全广场的范围做归一化。现在每簇自发光，
+ * 若仍用广场范围，簇内那几十像素的距离会被归一化成接近 0，
+ * 结果**全场影子长度几乎一样** ——「近处影子长、远处影子短」
+ * 这个唯一能表达纵深的东西就没了。
+ *
+ * 现在用簇半径：人站得离物件越远（在簇的外圈），影子越长。
+ * 这也更符合真实的「点光源 + 地面」——物距决定影长。
+ */
+export function lightReach(radius: number): number {
+  return Math.max(radius, 1);
 }
 
 /* ------------------------------ 影子 ------------------------------ */
