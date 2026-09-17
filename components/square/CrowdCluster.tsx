@@ -148,11 +148,15 @@ function CrowdClusterImpl({
         <span className="sq-crowd-ground" />
         {focused && <span className={"sq-crowd-ring r-" + node.theme.accent} />}
 
-        {/* **话题中心那件发光的东西**。
-            放在人群底座之下、人形之上 —— DOM 顺序上先于 svg，
-            所以光晕会被后面的人形压住一层，人因而「站在光里」而不是「浮在光上」。
-            尺寸取簇直径的 30%（`RELIC_RADIUS_RATIO` 的两倍，含光晕余量）。 */}
+        {/* **话题中心那件发光的东西 · 光晕部分**。
+            光晕留在人**后面** —— 人因而「站在光里」而不是「浮在光上」。
+            尺寸取簇直径的 34%（含光晕余量）。
+
+            ⚠️ 光晕与本体被拆成两次渲染（见 TopicRelic 的 `part` 注释）：
+            整块放在人后时，物件本体被人挡掉大半，读不出是什么东西；
+            整块放到人前又会把光晕铺在人脸上。所以这里只放光晕。 */}
         <TopicRelic
+          part="aura"
           relic={relic}
           title={node.title}
           size={d * 0.34}
@@ -266,6 +270,24 @@ function CrowdClusterImpl({
               );
             })}
         </svg>
+
+        {/* **话题中心那件发光的东西 · 物件本体**。
+            排在人**之后** —— 它是「人围着的奇珍异宝」，必须看得见，
+            不能只从两个人的缝里露出一小块。
+            实测：挪到人前之前，「小城市开一家咖啡店」那簇的咖啡杯被挡掉大半，
+            一眼看不出在聊什么；挪过来之后轮廓完整。
+
+            尺寸与光晕那一次**必须完全一致**（同一个 `d * 0.34`），
+            否则本体与光晕会错位 —— 看起来像两件东西。 */}
+        <TopicRelic
+          part="body"
+          relic={relic}
+          title={node.title}
+          size={d * 0.34}
+          focused={focused}
+          hovered={hovered}
+          reduced={reduced}
+        />
       </div>
 
       {/* 浮标标题：问题标题是视觉主体，所以放在簇的上方而不是塞进圆里。

@@ -1695,17 +1695,34 @@ body.sq-locked {
 
 .sq-relic-svg {
   position: relative;
-  width: 62%;
-  height: 62%;
+  /* 62% → 74%：物件在屏幕上只有 40–70px，62% 时本体实际约 27px，
+     细节全糊在一起。放大到 74% 之后轮廓才读得出来。 */
+  width: 74%;
+  height: 74%;
   overflow: visible;
 }
 
-/* 物件本体：暖白描边 + 半透明填充。
-   不填满色 —— 填满会读成一个色块；留出内里才像「一件东西」。 */
+/* 物件本体：**实心暖白**。
+ *
+ * ⚠️ 2026-09-17 实测修正 —— 这条是「物件看不见」的真凶。
+ *
+ * 原来是 `fill: rgba(255,214,178,0.22)` + `stroke: #ffcfa8; stroke-width: 1.6`。
+ * 两层问题叠在一起：
+ *   ① 22% 透明度的暖色叠在近黑的地面上，算出来只有 **1.72:1** 对比度
+ *      —— 基本等于背景（实测见 `check-square-css.mjs` ③）。
+ *   ② 1.6 的 stroke-width 落在 40 单位的 viewBox 里，缩到 27px 之后
+ *      实际线宽 **约 1.08px** —— 一根发丝。
+ * 结果：owner 明确要的「人围着就好像这个话题是一件奇珍异宝一样，发光」，
+ * 在截图里只是**一圈几乎看不见的橙色细线**。
+ *
+ * 现在改成实心暖白（对页面底 16:1）。「发光」这件事由外面那两层光晕负责，
+ * 物件本身只需要**亮**——亮的东西才像在自己发光。
+ * 注意：**不再新增光晕层**，设计系统禁止发光与阴影堆叠，已有的两层够了。
+ */
 .sq-relic-body {
-  fill: rgba(255, 214, 178, 0.22);
-  stroke: #ffcfa8;
-  stroke-width: 1.6;
+  fill: #ffe6c8;
+  stroke: rgba(255, 255, 255, 0.85);
+  stroke-width: 1.2;
   stroke-linejoin: round;
   stroke-linecap: round;
 }
@@ -1716,11 +1733,23 @@ body.sq-locked {
   stroke: none;
 }
 
-/* 细线（指针 / 镜腿 / 屏幕内容）*/
+/* 物件**外面**的线（杯柄 / 蒸汽 / 镜腿 / 底座）。
+   它们压在近黑的地面上 → 必须是亮色。 */
 .sq-relic-line {
   fill: none;
-  stroke: #ffcfa8;
-  stroke-width: 1.6;
+  stroke: #ffd9b8;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+/* 物件**内部**的线（钟的指针 / 药瓶分隔 / 楼的窗 / 屏幕内容）。
+   它们压在实心暖白的本体上 → 必须是深色，像在发光的白瓷上刻的线。
+   ⚠️ 与 `.sq-relic-line` 分开是必须的：本体改成实心亮色之后，
+   同一个颜色不可能同时满足「压在暗底上要亮」和「压在亮本体上要深」。 */
+.sq-relic-detail {
+  fill: none;
+  stroke: rgba(96, 52, 18, 0.8);
+  stroke-width: 1.8;
   stroke-linecap: round;
 }
 
